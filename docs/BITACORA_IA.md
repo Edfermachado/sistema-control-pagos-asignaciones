@@ -34,3 +34,18 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * `docs/DECISIONES_TECNICAS_DEFENSA.md`: Documento de estudio técnico y justificación arquitectónica.
   * `docs/BITACORA_IA.md`: Este registro de trazabilidad de uso de IA.
   * `README.md`: Documentación principal del repositorio.
+
+
+---
+
+### Interacción #3 — Definición de Reglas de Negocio (`RN-*`) y Guardrails para Agentes de IA del Equipo
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Creemos reglas de negocios en base a los requerimientos ya que todos trabajaremos usando agentes e IA, así nadie se sale de los marcos, definamos eso"*
+* **Invariantes de negocio acordadas por el equipo:**
+  1. **Multiplicidad de asignaciones (`RN-CAT-04`):** Un beneficiario puede tener asignaciones activas en distintos proyectos simultáneamente, pero no duplicadas/solapadas en el mismo proyecto.
+  2. **Base de cálculo de prorrateo (`RN-CAUS-01`):** Se utilizan los días calendario reales e inclusivos del período (`fecha_fin - fecha_inicio + 1`).
+  3. **Vigencia de proyectos (`RN-CAT-02`):** Se bloquean nuevas causaciones fuera del rango `[start_date, end_date]` del proyecto, pero se permite liquidar/pagar deudas que ya fueron causadas válidamente antes del vencimiento.
+  4. **Tope estricto en Cajas Chicas (`RN-CAJA-02`):** Prohibido el saldo negativo; ningún vale puede aprobarse ni desembolsarse por encima del saldo disponible actual de la caja chica.
+* **Artefactos generados:**
+  * `docs/REGLAS_DE_NEGOCIO.md`: Catálogo formal codificado (`RN-GLOB`, `RN-SEG`, `RN-CAT`, `RN-CAUS`, `RN-PAG`, `RN-CAJA`, `RN-AUD`).
+  * `.agent/rules/reglas-proyecto.md` y `AGENTS.md`: Reglas automáticas de espacio de trabajo para que cualquier agente de IA usado por los 4 integrantes respete el mismo marco arquitectónico y actualice esta bitácora.
