@@ -1,0 +1,473 @@
+// Esquema Relacional Oficial — Sistema de Control de Pagos y Asignaciones (USD)
+// Universidad de Carabobo - Escuela de Computación (Sistemas de Información)
+// Cumple estrictamente las invariantes RN-GLOB, RN-SEG, RN-CAT, RN-CAUS, RN-PAG, RN-CAJA y RN-AUD.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS DEL DOMINIO (Cumple CC-04: Cero Strings Mágicos)
+// ============================================================================
+
+enum UserRole {
+  ADMIN     // Administrador del Sistema: Usuarios, parámetros y catálogos. No toca dinero.
+  GENERADOR // Coordinador General: Proyectos, beneficiarios, asignaciones, causación y solicitudes.
+  RECEPTOR  // Gerente de Administración: Aprueba/rechaza solicitudes, registra pagos y aprueba cajas chicas.
+}
+
+enum ProjectArea {
+  FISICA
+  QUIMICA
+  BIOLOGIA
+}
+
+enum ProjectScope {
+  INTERNO
+  EXTERNO
+}
+
+enum ProjectStatus {
+  ACTIVO
+  INACTIVO
+  CERRADO
+}
+
+enum Periodicity {
+  SEMANAL
+  QUINCENAL
+  MENSUAL
+}
+
+enum AccrualBatchStatus {
+  GENERADO
+  ANULADO
+}
+
+enum AccrualStatus {
+  PENDIENTE
+  PARCIAL
+  PAGADO
+  ANULADO
+}
+
+enum PaymentRequestStatus {
+  CREADA
+  ENVIADA
+  APROBADA
+  RECHAZADA
+  ENTREGADA
+  CERRADA
+  ANULADA
+}
+
+enum PaymentStatus {
+  VALIDO
+  ANULADO
+}
+
+enum AnnulledEntityType {
+  ACCRUAL_BATCH
+  ACCRUAL
+  PAYMENT_REQUEST
+  PAYMENT
+  PETTY_CASH_VOUCHER
+}
+
+enum PettyCashStatus {
+  ACTIVA
+  CERRADA
+}
+
+enum PettyCashPeriodStatus {
+  SOLICITADO
+  ABIERTO
+  CERRADO
+}
+
+enum PettyCashVoucherStatus {
+  SOLICITADO
+  APROBADO
+  RECHAZADO
+  DESEMBOLSADO
+  RENDIDO
+  ANULADO
+}
+
+// ============================================================================
+// 1. GESTIÓN DE USUARIOS, PARÁMETROS Y CATÁLOGOS (RF 2.1 / RN-SEG / RN-CAT)
+// ============================================================================
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique @db.VarChar(150)
+  fullName     String   @map("full_name") @db.VarChar(150)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  role         UserRole
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relaciones de trazabilidad
+  generatedBatches    AccrualBatch[]     @relation("BatchGenerator")
+  createdRequests     PaymentRequest[]   @relation("RequestCreator")
+  reviewedRequests    PaymentRequest[]   @relation("RequestReviewer")
+  deliveredPayments   Payment[]          @relation("PaymentDeliverer")
+  annulments          Annulment[]        @relation("AnnulmentAuthor")
+  openedPettyPeriods  PettyCashPeriod[]  @relation("PeriodOpener")
+  approvedPettyPeriod PettyCashPeriod[]  @relation("PeriodApprover")
+  closedPettyPeriods  PettyCashPeriod[]  @relation("PeriodCloser")
+  requestedVouchers   PettyCashVoucher[] @relation("VoucherRequester")
+  approvedVouchers    PettyCashVoucher[] @relation("VoucherApprover")
+  disbursedVouchers   PettyCashVoucher[] @relation("VoucherDisburser")
+  updatedParameters   SystemParameter[]
+  auditLogs           AuditLog[]
+
+  @@map("users")
+}
+
+/// RN-SEG-01: Los beneficiarios (personal que cobra) NO tienen usuario en el sistema.
+model Beneficiary {
+  id        String   @id @default(uuid()) @db.Uuid
+  dni       String   @unique @db.VarChar(30)
+  fullName  String   @map("full_name") @db.VarChar(150)
+  email     String?  @db.VarChar(150)
+  phone     String?  @db.VarChar(40)
+  bankInfo  String?  @map("bank_info") @db.Text
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  assignments Assignment[]
+  accruals    Accrual[]
+  payments    Payment[]
+
+  @@map("beneficiaries")
+}
+
+model Project {
+  id        String        @id @default(uuid()) @db.Uuid
+  code      String        @unique @db.VarChar(40)
+  name      String        @db.VarChar(200)
+  area      ProjectArea
+  scope     ProjectScope
+  startDate DateTime      @map("start_date") @db.Date
+  endDate   DateTime      @map("end_date") @db.Date
+  status    ProjectStatus @default(ACTIVO)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  assignments     Assignment[]
+  accrualBatches  AccrualBatch[]
+  accruals        Accrual[]
+  paymentRequests PaymentRequest[]
+  pettyCashes     PettyCash[]
+
+  @@map("projects")
+}
+
+model PaymentGroup {
+  id          String      @id @default(uuid()) @db.Uuid
+  name        String      @unique @db.VarChar(100)
+  periodicity Periodicity
+  cutoffRules String      @map("cutoff_rules") @db.VarChar(255)
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  assignments    Assignment[]
+  accrualBatches AccrualBatch[]
+
+  @@map("payment_groups")
+}
+
+/// Cruce entre Beneficiario, Proyecto y Grupo de Pago con monto específico por período en USD.
+model Assignment {
+  id              String       @id @default(uuid()) @db.Uuid
+  beneficiaryId   String       @map("beneficiary_id") @db.Uuid
+  projectId       String       @map("project_id") @db.Uuid
+  paymentGroupId  String       @map("payment_group_id") @db.Uuid
+  amountPerPeriod Decimal      @map("amount_per_period") @db.Decimal(12, 2)
+  startDate       DateTime     @map("start_date") @db.Date
+  endDate         DateTime?    @map("end_date") @db.Date
+  isActive        Boolean      @default(true) @map("is_active")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  beneficiary  Beneficiary  @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  paymentGroup PaymentGroup @relation(fields: [paymentGroupId], references: [id], onDelete: Restrict)
+  accruals     Accrual[]
+
+  @@index([projectId, paymentGroupId, isActive])
+  @@index([beneficiaryId, projectId])
+  @@map("assignments")
+}
+
+// ============================================================================
+// 2. MOTOR DE CAUSACIÓN Y PRORRATEO (RF 2.2 / RN-CAUS)
+// ============================================================================
+
+model AccrualBatch {
+  id             String             @id @default(uuid()) @db.Uuid
+  code           String             @unique @db.VarChar(50)
+  projectId      String             @map("project_id") @db.Uuid
+  paymentGroupId String             @map("payment_group_id") @db.Uuid
+  periodStart    DateTime           @map("period_start") @db.Date
+  periodEnd      DateTime           @map("period_end") @db.Date
+  totalDays      Int                @map("total_days")
+  totalAmount    Decimal            @map("total_amount") @db.Decimal(12, 2)
+  status         AccrualBatchStatus @default(GENERADO)
+  generatedById  String             @map("generated_by_id") @db.Uuid
+  createdAt      DateTime           @default(now()) @map("created_at")
+
+  project      Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  paymentGroup PaymentGroup @relation(fields: [paymentGroupId], references: [id], onDelete: Restrict)
+  generatedBy  User         @relation("BatchGenerator", fields: [generatedById], references: [id], onDelete: Restrict)
+  accruals     Accrual[]
+
+  @@index([projectId, periodStart, periodEnd])
+  @@map("accrual_batches")
+}
+
+/// Registro financiero inmutable de causación individual prorrateada (RN-GLOB-03, RN-CAUS-03).
+model Accrual {
+  id              String        @id @default(uuid()) @db.Uuid
+  batchId         String        @map("batch_id") @db.Uuid
+  assignmentId    String        @map("assignment_id") @db.Uuid
+  beneficiaryId   String        @map("beneficiary_id") @db.Uuid
+  projectId       String        @map("project_id") @db.Uuid
+  periodStart     DateTime      @map("period_start") @db.Date
+  periodEnd       DateTime      @map("period_end") @db.Date
+  activeDays      Int           @map("active_days")
+  totalPeriodDays Int           @map("total_period_days")
+  proratedAmount  Decimal       @map("prorated_amount") @db.Decimal(12, 2)
+  paidAmount      Decimal       @default(0.00) @map("paid_amount") @db.Decimal(12, 2)
+  balanceDue      Decimal       @map("balance_due") @db.Decimal(12, 2)
+  status          AccrualStatus @default(PENDIENTE)
+  createdAt       DateTime      @default(now()) @map("created_at")
+
+  batch               AccrualBatch         @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  assignment          Assignment           @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  beneficiary         Beneficiary          @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  project             Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  paymentRequestItems PaymentRequestItem[]
+  paymentAllocations  PaymentAllocation[]
+
+  // Índice compuesto crucial para el algoritmo FIFO (RN-PAG-02)
+  @@index([beneficiaryId, status, periodStart, createdAt])
+  @@map("accruals")
+}
+
+// ============================================================================
+// 3. CICLO DE SOLICITUDES, PAGOS FIFO E INMUTABILIDAD (RF 2.3 / RN-PAG)
+// ============================================================================
+
+model PaymentRequest {
+  id              String               @id @default(uuid()) @db.Uuid
+  code            String               @unique @db.VarChar(50)
+  projectId       String               @map("project_id") @db.Uuid
+  createdById     String               @map("created_by_id") @db.Uuid
+  reviewedById    String?              @map("reviewed_by_id") @db.Uuid
+  totalAmount     Decimal              @map("total_amount") @db.Decimal(12, 2)
+  paidAmount      Decimal              @default(0.00) @map("paid_amount") @db.Decimal(12, 2)
+  status          PaymentRequestStatus @default(CREADA)
+  rejectionReason String?              @map("rejection_reason") @db.Text
+  sentAt          DateTime?            @map("sent_at")
+  reviewedAt      DateTime?            @map("reviewed_at")
+  closedAt        DateTime?            @map("closed_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+
+  project    Project              @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  createdBy  User                 @relation("RequestCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reviewedBy User?                @relation("RequestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  items      PaymentRequestItem[]
+  payments   Payment[]
+
+  @@index([projectId, status])
+  @@map("payment_requests")
+}
+
+model PaymentRequestItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  paymentRequestId String   @map("payment_request_id") @db.Uuid
+  accrualId        String   @map("accrual_id") @db.Uuid
+  requestedAmount  Decimal  @map("requested_amount") @db.Decimal(12, 2)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  paymentRequest PaymentRequest @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+  accrual        Accrual        @relation(fields: [accrualId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentRequestId, accrualId])
+  @@map("payment_request_items")
+}
+
+/// Registro inmutable de entrega de fondos y recibo individual (RN-GLOB-03, RN-PAG-02).
+model Payment {
+  id               String        @id @default(uuid()) @db.Uuid
+  receiptCode      String        @unique @map("receipt_code") @db.VarChar(50)
+  paymentRequestId String        @map("payment_request_id") @db.Uuid
+  beneficiaryId    String        @map("beneficiary_id") @db.Uuid
+  deliveredById    String        @map("delivered_by_id") @db.Uuid
+  amount           Decimal       @db.Decimal(12, 2)
+  paymentDate      DateTime      @map("payment_date") @db.Date
+  reference        String?       @db.VarChar(120)
+  notes            String?       @db.Text
+  status           PaymentStatus @default(VALIDO)
+  createdAt        DateTime      @default(now()) @map("created_at")
+
+  paymentRequest PaymentRequest      @relation(fields: [paymentRequestId], references: [id], onDelete: Restrict)
+  beneficiary    Beneficiary         @relation(fields: [beneficiaryId], references: [id], onDelete: Restrict)
+  deliveredBy    User                @relation("PaymentDeliverer", fields: [deliveredById], references: [id], onDelete: Restrict)
+  allocations    PaymentAllocation[]
+
+  @@index([beneficiaryId, paymentDate])
+  @@map("payments")
+}
+
+/// Tabla puente que registra cómo se distribuyó cada dólar de un pago según la cola FIFO (RN-PAG-02).
+model PaymentAllocation {
+  id              String   @id @default(uuid()) @db.Uuid
+  paymentId       String   @map("payment_id") @db.Uuid
+  accrualId       String   @map("accrual_id") @db.Uuid
+  allocatedAmount Decimal  @map("allocated_amount") @db.Decimal(12, 2)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  accrual Accrual @relation(fields: [accrualId], references: [id], onDelete: Restrict)
+
+  @@index([paymentId])
+  @@index([accrualId])
+  @@map("payment_allocations")
+}
+
+/// Registro de Anulaciones Justificadas para corregir errores sin borrar datos (RN-GLOB-04).
+model Annulment {
+  id           String             @id @default(uuid()) @db.Uuid
+  entityType   AnnulledEntityType @map("entity_type")
+  entityId     String             @map("entity_id") @db.Uuid
+  reason       String             @db.Text
+  annulledById String             @map("annulled_by_id") @db.Uuid
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  annulledBy User @relation("AnnulmentAuthor", fields: [annulledById], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId])
+  @@map("annulments")
+}
+
+// ============================================================================
+// 4. CONTROL DE CAJAS CHICAS CON ARRASTRE DE SALDO (RF 2.4 / RN-CAJA)
+// ============================================================================
+
+model PettyCash {
+  id               String          @id @default(uuid()) @db.Uuid
+  code             String          @unique @db.VarChar(40)
+  name             String          @db.VarChar(150)
+  projectId        String          @map("project_id") @db.Uuid
+  authorizedAmount Decimal         @map("authorized_amount") @db.Decimal(12, 2)
+  status           PettyCashStatus @default(ACTIVA)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  project Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  periods PettyCashPeriod[]
+
+  @@map("petty_cashes")
+}
+
+model PettyCashPeriod {
+  id                   String                @id @default(uuid()) @db.Uuid
+  pettyCashId          String                @map("petty_cash_id") @db.Uuid
+  yearMonth            String                @map("year_month") @db.VarChar(7) // Formato 'YYYY-MM'
+  carryoverBalance     Decimal               @default(0.00) @map("carryover_balance") @db.Decimal(12, 2)
+  initialReplenishment Decimal               @default(0.00) @map("initial_replenishment") @db.Decimal(12, 2)
+  availableBalance     Decimal               @map("available_balance") @db.Decimal(12, 2)
+  closingBalance       Decimal?              @map("closing_balance") @db.Decimal(12, 2)
+  status               PettyCashPeriodStatus @default(SOLICITADO)
+  openedById           String                @map("opened_by_id") @db.Uuid
+  approvedById         String?               @map("approved_by_id") @db.Uuid
+  closedById           String?               @map("closed_by_id") @db.Uuid
+  openedAt             DateTime?             @map("opened_at")
+  closedAt             DateTime?             @map("closed_at")
+  createdAt            DateTime              @default(now()) @map("created_at")
+
+  pettyCash  PettyCash          @relation(fields: [pettyCashId], references: [id], onDelete: Restrict)
+  openedBy   User               @relation("PeriodOpener", fields: [openedById], references: [id], onDelete: Restrict)
+  approvedBy User?              @relation("PeriodApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  closedBy   User?              @relation("PeriodCloser", fields: [closedById], references: [id], onDelete: Restrict)
+  vouchers   PettyCashVoucher[]
+
+  @@unique([pettyCashId, yearMonth])
+  @@map("petty_cash_periods")
+}
+
+model PettyCashVoucher {
+  id               String                 @id @default(uuid()) @db.Uuid
+  code             String                 @unique @db.VarChar(50)
+  periodId         String                 @map("period_id") @db.Uuid
+  requestedById    String                 @map("requested_by_id") @db.Uuid
+  approvedById     String?                @map("approved_by_id") @db.Uuid
+  disbursedById    String?                @map("disbursed_by_id") @db.Uuid
+  beneficiaryName  String                 @map("beneficiary_name") @db.VarChar(150)
+  concept          String                 @db.Text
+  requestedAmount  Decimal                @map("requested_amount") @db.Decimal(12, 2)
+  disbursedAmount  Decimal?               @map("disbursed_amount") @db.Decimal(12, 2)
+  settledAmount    Decimal?               @map("settled_amount") @db.Decimal(12, 2)
+  returnedAmount   Decimal?               @map("returned_amount") @db.Decimal(12, 2)
+  invoiceReference String?                @map("invoice_reference") @db.VarChar(120)
+  attachmentUrl    String?                @map("attachment_url") @db.VarChar(500)
+  status           PettyCashVoucherStatus @default(SOLICITADO)
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  period      PettyCashPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  requestedBy User            @relation("VoucherRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  approvedBy  User?           @relation("VoucherApprover", fields: [approvedById], references: [id], onDelete: Restrict)
+  disbursedBy User?           @relation("VoucherDisburser", fields: [disbursedById], references: [id], onDelete: Restrict)
+
+  @@index([periodId, status])
+  @@map("petty_cash_vouchers")
+}
+
+// ============================================================================
+// 5. PARÁMETROS DEL SISTEMA Y AUDITORÍA INMUTABLE (RF 2.5 / RN-AUD)
+// ============================================================================
+
+model SystemParameter {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique @db.VarChar(80)
+  value       String   @db.Text
+  description String   @db.VarChar(255)
+  updatedById String?  @map("updated_by_id") @db.Uuid
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy User? @relation(fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@map("system_parameters")
+}
+
+/// Bitácora Append-Only que registra quién, cuándo y qué cambió en la BD (RN-AUD-03).
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  userRole  UserRole? @map("user_role")
+  action    String   @db.VarChar(60)
+  tableName String   @map("table_name") @db.VarChar(80)
+  recordId  String   @map("record_id") @db.VarChar(80)
+  oldValues Json?    @map("old_values") @db.JsonB
+  newValues Json?    @map("new_values") @db.JsonB
+  ipAddress String?  @map("ip_address") @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([tableName, recordId])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}

@@ -63,3 +63,22 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 * **Artefactos generados/modificados:**
   * `docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md`
   * `.agent/rules/reglas-proyecto.md`, `AGENTS.md` y `README.md`
+
+
+---
+
+### Interacción #5 — Ejecución de Etapa 0: Infraestructura Docker, Esquema Relacional y Módulos Fundacionales con Unit Tests 1:1
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Vamos con la etapa 0"*
+* **Artefactos y módulos implementados:**
+  1. **Orquestación de Contenedores:** `docker-compose.yml` y `.env.example` configurados para levantar `postgres:16-alpine`, `backend` (NestJS) y `frontend` (React + Vite con Nginx).
+  2. **Esquema de Base de Datos Relacional (`backend/prisma/schema.prisma` y `database/01_init_schema.sql`):**
+     * 17 tablas relacionales normalizadas con claves foráneas `ON DELETE RESTRICT` e importes monetarios en `NUMERIC(12, 2)` (`RN-GLOB-02`).
+     * Separación física entre `users` y `beneficiaries` (`RN-SEG-01`).
+     * Soporte nativo para lotes de causación (`accrual_batches`), causaciones individuales (`accruals`), solicitudes de pago (`payment_requests`), entregas de fondos (`payments`), tabla puente FIFO (`payment_allocations`), anulaciones justificadas (`annulments`), cajas chicas con arrastre mensual (`petty_cashes`, `petty_cash_periods`, `petty_cash_vouchers`) y bitácora inmutable (`audit_logs`).
+  3. **Backend Modular (`/backend` - NestJS) con Unit Tests 1:1 (`TEST-01`):**
+     * `common/constants/domain.enums.ts`: Enums tipados y constantes sin valores mágicos (`CC-04`).
+     * `common/domain/money.helper.ts` y `money.helper.spec.ts`: Funciones puras `toUsdDecimal`, `assertPositiveUsdAmount` y `validateAnnulmentReason` usando `Decimal.js`, probadas con patrón AAA (Happy Path, Edge Case y Violación `RN-GLOB`).
+     * `modules/health/health.service.ts` y `health.service.spec.ts`: Verificación de salud del servidor y conexión PostgreSQL con pruebas unitarias aisladas mediante mocks.
+  4. **Frontend SPA (`/frontend` - React + Vite + TypeScript) con Unit Tests 1:1 (`TEST-01`):**
+     * `src/utils/currency.util.ts` y `currency.util.spec.ts`: Formateador visual en USD (`formatUsdCurrency`) con su suite de pruebas en Vitest.
