@@ -6,9 +6,10 @@ description: Reglas obligatorias de arquitectura, negocio y bitácora IA para el
 
 Cualquier agente de IA (Antigravity, Claude, Cursor, Copilot, etc.) que asista a cualquiera de los 4 integrantes del equipo en este repositorio **DEBE cumplir estrictamente** las siguientes directrices sin excepción:
 
-## 1. Fuente de Verdad del Dominio
-Antes de crear o modificar modelos de base de datos, servicios de backend o pantallas de frontend, lee y respeta las invariantes definidas en:
+## 1. Fuente de Verdad del Dominio y Calidad de Código
+Antes de crear o modificar modelos de base de datos, servicios de backend o pantallas de frontend, lee y respeta las invariantes y estándares definidos en:
 - `docs/REGLAS_DE_NEGOCIO.md`
+- `docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md`
 - `docs/DECISIONES_TECNICAS_DEFENSA.md`
 
 ## 2. Stack y Separación de Capas (Inquebrantable)
@@ -30,7 +31,17 @@ Antes de crear o modificar modelos de base de datos, servicios de backend o pant
 6. **Caja Chica sin saldo negativo (`RN-CAJA-02` a `04`):** Ningún vale puede aprobarse o desembolsarse si supera el saldo disponible actual de la caja chica. Al cerrar el mes, el saldo final se arrastra como saldo inicial del mes siguiente.
 7. **Auditoría Obligatoria (`RN-AUD-03`):** Todo cambio en base de datos debe registrar quién (`userId`, `role`), cuándo (`createdAt`) y qué cambió (`oldValues`, `newValues` en JSONB) en `AuditLog`.
 
-## 4. Registro Obligatorio en Bitácora de IA (Entregable #5)
+## 4. Clean Code y Unit Test Obligatorio por Función (`CC-*` y `TEST-01`)
+- **Prohibido usar `any` (`CC-01`):** Todo el código TypeScript debe tener tipado estático estricto, DTOs validados e interfaces explícitas.
+- **Responsabilidad Única y Funciones Pequeñas (`CC-02` y `CC-03`):** Funciones de máximo ~30 líneas. Extrae la matemática financiera (prorrateo, cola FIFO, saldos de caja chica) en funciones puras deterministas separadas del acceso a base de datos.
+- **Cero Strings/Números Mágicos (`CC-04`) y Guard Clauses (`CC-06`):** Usa `enum` o constantes con nombre semántico y retorno temprano en validaciones referenciando el código de regla (`[RN-...]`).
+- **Unit Test 1:1 por cada Función (`TEST-01`):** Por CADA función de servicio (`*.service.ts`) o función de dominio (`*.calculator.ts` / `*.helper.ts`) que crees o modifiques, **DEBES escribir y ejecutar su prueba unitaria en su archivo `*.spec.ts`** usando el patrón **AAA (Arrange, Act, Assert)** y cubriendo al menos:
+  1. Caso Feliz (Happy Path).
+  2. Caso Borde (Edge Case).
+  3. Caso de Error / Violación de regla `RN-*`.
+  - **No des por terminada ninguna tarea de código sin ejecutar los tests unitarios y verificar que pasen en verde.**
+
+## 5. Registro Obligatorio en Bitácora de IA (Entregable #5)
 Por exigencia académica de la asignatura Sistemas de Información (UC):
 - Cada vez que un integrante utilice la IA para implementar una funcionalidad o módulo relevante, el agente **DEBE agregar una entrada resumida** al final de `docs/BITACORA_IA.md` indicando:
   1. El prompt o requerimiento solicitado por el estudiante.

@@ -90,6 +90,7 @@ docker compose up --build
 ## 6. Documentación Adicional para Evaluación
 
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)
+* 🧪 [Estándares de Desarrollo, Clean Code y Unit Testing 1:1](./docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md)
 * 📄 [Guía de Decisiones Técnicas y Sustentación para la Defensa](./docs/DECISIONES_TECNICAS_DEFENSA.md)
 * 🤖 [Bitácora de Indicaciones y Uso de IA (Entregable #5)](./docs/BITACORA_IA.md)
 * 🛡️ [Reglas Automáticas para Agentes de IA del Equipo](./.agent/rules/reglas-proyecto.md)

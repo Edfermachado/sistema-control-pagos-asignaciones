@@ -49,3 +49,17 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 * **Artefactos generados:**
   * `docs/REGLAS_DE_NEGOCIO.md`: Catálogo formal codificado (`RN-GLOB`, `RN-SEG`, `RN-CAT`, `RN-CAUS`, `RN-PAG`, `RN-CAJA`, `RN-AUD`).
   * `.agent/rules/reglas-proyecto.md` y `AGENTS.md`: Reglas automáticas de espacio de trabajo para que cualquier agente de IA usado por los 4 integrantes respete el mismo marco arquitectónico y actualice esta bitácora.
+
+
+---
+
+### Interacción #4 — Definición de Estándares de Desarrollo, Clean Code y Pruebas Unitarias 1:1
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Ahora vamos a definir reglas de desarrollo, como crear unitest por cada función, y siga patrones de clean code"*
+* **Estándares de ingeniería y pruebas establecidos:**
+  1. **Clean Code (`CC-01` a `CC-06`):** Prohibición total de `any` en TypeScript; Principio de Responsabilidad Única (funciones de máx. 25–35 líneas); separación de algoritmos matemáticos en **funciones puras deterministas** desacopladas de I/O; prohibición de números/strings mágicos usando `Enums` tipados; lenguaje ubicuo consistente y uso de *Guard Clauses* referenciando el código de regla (`[RN-...]`).
+  2. **Unit Testing 1:1 por Función (`TEST-01`):** Ninguna función de servicio o calculadora de dominio se da por terminada sin su archivo `*.spec.ts` estructurado con el patrón **AAA (Arrange, Act, Assert)** y probando como mínimo 3 escenarios: *Happy Path*, *Edge Case* y *Violación de regla `RN-*`*.
+  3. **Integración en Guardrails de Agentes:** Se actualizaron `.agent/rules/reglas-proyecto.md` y `AGENTS.md` para obligar a los agentes de IA del equipo a escribir y ejecutar las pruebas unitarias de cada función antes de dar por completada cualquier tarea.
+* **Artefactos generados/modificados:**
+  * `docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md`
+  * `.agent/rules/reglas-proyecto.md`, `AGENTS.md` y `README.md`
