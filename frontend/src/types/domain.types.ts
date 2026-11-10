@@ -27,6 +27,23 @@ export enum Periodicity {
   MENSUAL = 'MENSUAL',
 }
 
+export enum AccrualStatus {
+  PENDIENTE = 'PENDIENTE',
+  PARCIAL = 'PARCIAL',
+  PAGADO = 'PAGADO',
+  ANULADO = 'ANULADO',
+}
+
+export enum PaymentRequestStatus {
+  CREADA = 'CREADA',
+  ENVIADA = 'ENVIADA',
+  APROBADA = 'APROBADA',
+  RECHAZADA = 'RECHAZADA',
+  ENTREGADA = 'ENTREGADA',
+  CERRADA = 'CERRADA',
+  ANULADA = 'ANULADA',
+}
+
 export interface CatalogProject {
   id: string;
   code: string;
@@ -58,6 +75,19 @@ export interface CatalogAssignment {
   amountPerPeriod: number;
   startDate: string;
   endDate: string;
+}
+
+export interface AccrualLedgerRow {
+  id: string;
+  periodLabel: string;
+  beneficiaryName: string;
+  projectCode: string;
+  activeDays: number;
+  totalPeriodDays: number;
+  proratedAmount: number;
+  paidAmount: number;
+  balanceDue: number;
+  status: AccrualStatus;
 }
 
 export interface AuditLogEntry {

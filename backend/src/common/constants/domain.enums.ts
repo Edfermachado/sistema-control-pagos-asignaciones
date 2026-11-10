@@ -53,6 +53,22 @@ export enum PaymentRequestStatus {
   ANULADA = 'ANULADA',
 }
 
+export enum PaymentStatus {
+  VALIDO = 'VALIDO',
+  ANULADO = 'ANULADO',
+}
+
+export enum PettyCashStatus {
+  ACTIVA = 'ACTIVA',
+  CERRADA = 'CERRADA',
+}
+
+export enum PettyCashPeriodStatus {
+  SOLICITADO = 'SOLICITADO',
+  ABIERTO = 'ABIERTO',
+  CERRADO = 'CERRADO',
+}
+
 export enum PettyCashVoucherStatus {
   SOLICITADO = 'SOLICITADO',
   APROBADO = 'APROBADO',

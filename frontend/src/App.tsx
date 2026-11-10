@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FinancialEnginePanel } from './components/FinancialEnginePanel';
 import {
   AuditLogEntry,
   CatalogAssignment,
@@ -84,10 +85,10 @@ const INITIAL_ASSIGNMENTS: CatalogAssignment[] = [
     beneficiaryDni: 'V-22987654',
     projectCode: 'QUI-2026-02',
     projectArea: ProjectArea.QUIMICA,
-    paymentGroupName: 'Mensual Laboratorios',
-    periodicity: Periodicity.MENSUAL,
-    amountPerPeriod: 780.0,
-    startDate: '2026-02-01',
+    paymentGroupName: 'Quincenal Laboratorios',
+    periodicity: Periodicity.QUINCENAL,
+    amountPerPeriod: 450.0,
+    startDate: '2026-11-11',
     endDate: '2026-11-30',
   },
 ];
@@ -95,21 +96,21 @@ const INITIAL_ASSIGNMENTS: CatalogAssignment[] = [
 const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
   {
     id: 'log-101',
-    userRole: UserRole.ADMIN,
-    action: 'CREATE_PAYMENT_GROUP',
-    tableName: 'payment_groups',
-    recordId: 'pg-quincenal',
-    timestamp: '2026-11-09 16:00:00 UTC',
-    summary: 'Creación de grupo Quincenal Investigadores (Cortes 15 y último)',
+    userRole: UserRole.GENERADOR,
+    action: 'GENERATE_ACCRUAL_BATCH',
+    tableName: 'accrual_batches',
+    recordId: 'LOTE-FIS-10',
+    timestamp: '2026-11-09 18:10:00 UTC',
+    summary: 'Lote causado por proyecto FIS-2026-01 con prorrateo exacto en USD',
   },
   {
     id: 'log-102',
-    userRole: UserRole.GENERADOR,
-    action: 'CREATE_ASSIGNMENT',
-    tableName: 'assignments',
-    recordId: 'a-1',
-    timestamp: '2026-11-09 17:15:00 UTC',
-    summary: 'Asignación V-18456789 en FIS-2026-01 por $450.00 USD / Quincenal',
+    userRole: UserRole.RECEPTOR,
+    action: 'REGISTER_FIFO_PAYMENT',
+    tableName: 'payments',
+    recordId: 'REC-2026-001',
+    timestamp: '2026-11-09 19:30:00 UTC',
+    summary: 'Pago parcial $600.00 aplicado vía FIFO: $450 a Q1 (PAGADO) y $150 a Q2 (PARCIAL)',
   },
 ];
 
@@ -124,14 +125,14 @@ export function App(): React.ReactElement {
       : INITIAL_PROJECTS.filter((p) => p.area === areaFilter);
 
   return (
-    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '1.5rem', maxWidth: '1100px', margin: '0 auto', color: '#0f172a' }}>
+    <main style={{ fontFamily: 'system-ui, sans-serif', padding: '1.5rem', maxWidth: '1120px', margin: '0 auto', color: '#0f172a' }}>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #cbd5e1', paddingBottom: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.5rem' }}>
             Sistema de Control de Pagos y Asignaciones (USD)
           </h1>
           <p style={{ margin: '0.25rem 0 0', color: '#475569', fontSize: '0.9rem' }}>
-            Etapa 1: Gestión de Catálogos, Segregación de Roles (RN-SEG-02) y Auditoría (RN-AUD-03)
+            Etapa 2 Completada: Catálogos, Prorrateo Exacto, Solicitudes, Pagos FIFO e Inmutabilidad
           </p>
         </div>
 
@@ -155,21 +156,13 @@ export function App(): React.ReactElement {
         </div>
       </header>
 
-      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem', marginBottom: '1.5rem' }}>
-        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: permissions.canManageUsersAndParams ? '#dcfce7' : '#f1f5f9', border: '1px solid #cbd5e1' }}>
-          <strong>Gestión Usuarios y Grupos Pago:</strong> {permissions.canManageUsersAndParams ? 'Habilitado (ADMIN)' : 'Solo lectura / Bloqueado'}
-        </div>
-        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: permissions.canManageProjectsAndAssignments ? '#dcfce7' : '#f1f5f9', border: '1px solid #cbd5e1' }}>
-          <strong>Proyectos, Beneficiarios y Asignaciones:</strong> {permissions.canManageProjectsAndAssignments ? 'CRUD Activo (GENERADOR)' : 'Modo Consulta'}
-        </div>
-        <div style={{ padding: '0.75rem', borderRadius: '0.5rem', backgroundColor: permissions.canApproveAndDeliverFunds ? '#dcfce7' : '#f1f5f9', border: '1px solid #cbd5e1' }}>
-          <strong>Aprobación y Pagos FIFO:</strong> {permissions.canApproveAndDeliverFunds ? 'Autorizado (RECEPTOR)' : 'Bloqueado (RN-SEG-02)'}
-        </div>
-      </section>
+      <FinancialEnginePanel />
 
       <section style={{ marginBottom: '1.5rem', backgroundColor: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.15rem' }}>Catálogo de Proyectos Científicos (RN-CAT-01)</h2>
+          <h2 style={{ margin: 0, fontSize: '1.15rem' }}>
+            Catálogo de Proyectos ({INITIAL_BENEFICIARIES.length} Beneficiarios sin Usuario - RN-SEG-01)
+          </h2>
           <select value={areaFilter} onChange={(e) => setAreaFilter(e.target.value)} style={{ padding: '0.35rem' }}>
             <option value="ALL">Todas las Áreas (Física, Química, Biología)</option>
             <option value={ProjectArea.FISICA}>Física</option>
@@ -185,7 +178,6 @@ export function App(): React.ReactElement {
               <th style={{ padding: '0.5rem' }}>Área</th>
               <th style={{ padding: '0.5rem' }}>Ámbito</th>
               <th style={{ padding: '0.5rem' }}>Vigencia</th>
-              <th style={{ padding: '0.5rem' }}>Estado</th>
             </tr>
           </thead>
           <tbody>
@@ -196,7 +188,6 @@ export function App(): React.ReactElement {
                 <td style={{ padding: '0.5rem' }}>{p.area}</td>
                 <td style={{ padding: '0.5rem' }}>{p.scope}</td>
                 <td style={{ padding: '0.5rem' }}>{p.startDate} a {p.endDate}</td>
-                <td style={{ padding: '0.5rem' }}>{p.status}</td>
               </tr>
             ))}
           </tbody>
@@ -204,34 +195,12 @@ export function App(): React.ReactElement {
       </section>
 
       <section style={{ marginBottom: '1.5rem', backgroundColor: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
-        <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.15rem' }}>
-          Asignaciones Activas: Persona × Proyecto × Grupo de Pago (RN-CAT-04 / RN-SEG-01)
-        </h2>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#475569' }}>
-          Nota RN-SEG-01: Los {INITIAL_BENEFICIARIES.length} beneficiarios registrados cobran asignaciones en USD pero NO poseen usuario en el sistema.
-        </p>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left', borderBottom: '2px solid #cbd5e1' }}>
-              <th style={{ padding: '0.5rem' }}>Beneficiario (Sin Usuario)</th>
-              <th style={{ padding: '0.5rem' }}>Proyecto</th>
-              <th style={{ padding: '0.5rem' }}>Grupo de Pago</th>
-              <th style={{ padding: '0.5rem' }}>Monto por Período (USD)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {INITIAL_ASSIGNMENTS.map((a) => (
-              <tr key={a.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                <td style={{ padding: '0.5rem' }}>{a.beneficiaryName} ({a.beneficiaryDni})</td>
-                <td style={{ padding: '0.5rem' }}>{a.projectCode} ({a.projectArea})</td>
-                <td style={{ padding: '0.5rem' }}>{a.paymentGroupName} ({a.periodicity})</td>
-                <td style={{ padding: '0.5rem', fontWeight: 700, color: '#047857' }}>
-                  {formatUsdCurrency(a.amountPerPeriod)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>Asignaciones Base en USD (RN-CAT-04)</h2>
+        {INITIAL_ASSIGNMENTS.map((a) => (
+          <div key={a.id} style={{ padding: '0.45rem 0', borderBottom: '1px solid #f1f5f9', fontSize: '0.88rem' }}>
+            <strong>{a.beneficiaryName}</strong> ({a.beneficiaryDni}) → Proyecto <code>{a.projectCode}</code> · {a.paymentGroupName} · <strong>{formatUsdCurrency(a.amountPerPeriod)}</strong> ({a.startDate} a {a.endDate})
+          </div>
+        ))}
       </section>
 
       {permissions.canViewAuditLog && (

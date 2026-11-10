@@ -108,3 +108,26 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   8. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
      * **Backend:** 14 suites pasadas (`90/90 unit tests` en verde con patrón AAA) + `nest build` exitoso.
      * **Frontend:** 2 suites pasadas (`9/9 unit tests` en verde con Vitest) + `vite build` exitoso.
+
+
+---
+
+### Interacción #7 — Ejecución de Etapa 2: Motor de Causación Prorrateada, Solicitudes de Pago, Cola FIFO y Anulaciones Justificadas con Unit Tests 1:1
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Continua con la etapa 2"*
+* **Módulos, Reglas de Negocio (`RN-*`) y Clean Code (`CC-*` / `TEST-01`) implementados:**
+  1. **Motor de Causación y Prorrateo (`backend/src/modules/accruals` — `RN-CAUS-01` a `04`):**
+     * Funciones puras `calculateTotalCalendarDays` y `calculateProratedAccrual` (`proration.calculator.ts`) que calculan los días calendario reales inclusivos $(\text{fin} - \text{inicio}) + 1$ y la intersección exacta de días activos frente a la vigencia de la asignación y del proyecto usando `Decimal.js` (`ROUND_HALF_UP`).
+     * `AccrualsService`: Previsualización (`previewAccrualBatch`) y generación transaccional de lotes (`generateAccrualBatch`) con bloqueo de duplicidad en el mismo período y creación de registros `Accrual` inmutables.
+  2. **Ciclo de Solicitudes de Pago (`backend/src/modules/payment-requests` — `RN-PAG-01`):**
+     * Máquina de estados pura `assertValidPaymentRequestTransition` y `assertPaymentRequestCanBeClosed` (`payment-request-state.machine.ts`) que hace cumplir el grafo dirigido `CREADA -> ENVIADA -> APROBADA | RECHAZADA -> ENTREGADA -> CERRADA`.
+     * Segregación de funciones: `GENERADOR` crea y envía; `RECEPTOR` aprueba/rechaza y cierra cuando la deuda llega a `$0.00`.
+  3. **Motor de Pagos Parciales con Prelación FIFO (`backend/src/modules/payments` — `RN-PAG-02`):**
+     * Funciones puras `sortAccrualsForFifo` y `allocatePaymentFifo` (`fifo-allocator.calculator.ts`) que ordenan las deudas pendientes por antigüedad (`periodStart ASC, createdAt ASC, id ASC`), prohíben sobrepagos y abonan cada dólar desde la deuda más antigua hasta agotar el pago, dejando trazabilidad en `payment_allocations`.
+  4. **Inmutabilidad Financiera y Anulaciones Justificadas (`backend/src/modules/annulments` — `RN-GLOB-03`, `RN-GLOB-04`, `RN-PAG-03`):**
+     * Calculadora pura `calculateAccrualStateAfterPaymentReversal` (`annulment-reversal.calculator.ts`) y servicio transaccional `AnnulmentsService` (`annulPayment` y `annulUnpaidAccrual`) que corrigen errores exigiendo motivo obligatorio ($\ge 10$ caracteres) y revirtiendo matemáticamente los abonos FIFO sin borrar registros físicos.
+  5. **Frontend React + Vite (`frontend/src/utils/financial-status.util.ts`, `FinancialEnginePanel.tsx`):**
+     * Utilidades de estados financieros con pruebas unitarias en Vitest y panel demostrativo del motor de prorrateo y cola FIFO.
+  6. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
+     * **Backend (Jest):** 22 suites pasadas (`144/144 unit tests` en verde) + `nest build` exitoso.
+     * **Frontend (Vitest):** 3 suites pasadas (`15/15 unit tests` en verde) + `vite build` exitoso.
