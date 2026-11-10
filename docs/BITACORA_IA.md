@@ -131,3 +131,26 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   6. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
      * **Backend (Jest):** 22 suites pasadas (`144/144 unit tests` en verde) + `nest build` exitoso.
      * **Frontend (Vitest):** 3 suites pasadas (`15/15 unit tests` en verde) + `vite build` exitoso.
+
+
+---
+
+### Interacción #8 — Ejecución de Etapa 3: Control de Cajas Chicas con Flujo Segregado y Arrastre de Saldo, Consultas Clave y Generación de Reportes PDF con Unit Tests 1:1
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Sí"* (confirmación para avanzar a la Etapa 3: Cajas Chicas, Consultas Clave y Reportes PDF).
+* **Módulos, Reglas de Negocio (`RN-*`) y Clean Code (`CC-*` / `TEST-01`) implementados:**
+  1. **Control de Cajas Chicas por Proyecto (`backend/src/modules/petty-cash` — `RN-CAJA-01` a `04`):**
+     * Calculadora pura `petty-cash-balance.calculator.ts` (`assertValidYearMonth`, `calculateOpeningAvailableBalance`, `calculateBalanceAfterVoucherDisbursement`, `calculateBalanceAfterVoucherSettlement`, `assertPeriodCanBeClosed`).
+     * Cumple **Regla de Tope Estricto (`RN-CAJA-02`):** Prohibición de saldo negativo; rechaza vales cuyo monto supere el `availableBalance`.
+     * Cumple **Flujo Segregado (`RN-SEG-02`):** `GENERADOR` solicita apertura/vales y rinde con comprobante (`settleVoucher`); `RECEPTOR` aprueba apertura, desembolsa vales y cierra el período mensual congelando el `closingBalance` como `carryoverBalance` (arrastre automático de saldo al mes siguiente — `RN-CAJA-04`).
+  2. **Consultas Clave y Generador PDF 1.4 Nativo (`backend/src/modules/reports` — `RN-AUD-01`, `RN-AUD-02`):**
+     * `pdf-document.builder.ts`: Constructor puro de documentos binarios `%PDF-1.4` con tabla `xref` exacta sin librerías externas vulnerables.
+     * `ReportsService`:
+       * `getExecutiveSummaryAndDebts`: Responde cuánto se ha causado, cuánto se ha pagado y cuánto se le adeuda a cada persona por proyecto.
+       * `generateIndividualReceiptPdf`: Emite el PDF del Recibo Individual con desglose de períodos cubiertos por **FIFO** y marca de agua si fue anulado.
+       * `generateConsolidatedRequestPdf`: Emite el PDF de la Solicitud Consolidada de Pago agrupada por proyecto.
+  3. **Frontend React + Vite (`frontend/src/utils/petty-cash.util.ts`, `PettyCashAndReportsPanel.tsx`):**
+     * Utilidades de validación y porcentaje de ejecución de caja chica en cliente con pruebas unitarias en Vitest y panel visual de cajas chicas y reportes.
+  4. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
+     * **Backend (Jest):** 26 suites pasadas (`183/183 unit tests` en verde) + `nest build` exitoso.
+     * **Frontend (Vitest):** 4 suites pasadas (`21/21 unit tests` en verde) + `vite build` exitoso.

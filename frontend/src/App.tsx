@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FinancialEnginePanel } from './components/FinancialEnginePanel';
+import { PettyCashAndReportsPanel } from './components/PettyCashAndReportsPanel';
 import {
   AuditLogEntry,
   CatalogAssignment,
@@ -157,6 +158,7 @@ export function App(): React.ReactElement {
       </header>
 
       <FinancialEnginePanel />
+      <PettyCashAndReportsPanel />
 
       <section style={{ marginBottom: '1.5rem', backgroundColor: '#ffffff', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
