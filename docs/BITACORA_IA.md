@@ -82,3 +82,29 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
      * `modules/health/health.service.ts` y `health.service.spec.ts`: Verificación de salud del servidor y conexión PostgreSQL con pruebas unitarias aisladas mediante mocks.
   4. **Frontend SPA (`/frontend` - React + Vite + TypeScript) con Unit Tests 1:1 (`TEST-01`):**
      * `src/utils/currency.util.ts` y `currency.util.spec.ts`: Formateador visual en USD (`formatUsdCurrency`) con su suite de pruebas en Vitest.
+
+
+---
+
+### Interacción #6 — Ejecución de Etapa 1: Autenticación JWT, Segregación de Roles (RBAC), Auditoría Inmutable y Gestión de Catálogos con Unit Tests 1:1
+* **Indicaciones suministradas a la IA (Prompt):**
+  > *"Continua con la etapa 1"*
+* **Módulos, Reglas de Negocio (`RN-*`) y Clean Code (`CC-*` / `TEST-01`) implementados:**
+  1. **Criptografía y Autenticación JWT (`backend/src/common/security/crypto.helper.ts`, `auth.service.ts`):**
+     * Hash de contraseñas con sal aleatoria usando `node:crypto` (`scryptSync` + `timingSafeEqual`) y firma/verificación de tokens JWT HS256 sin dependencias externas vulnerables.
+     * Guardias `JwtAuthGuard` y `RolesGuard` que aplican estrictamente la matriz de Segregación de Funciones (`RN-SEG-02`), devolviendo `403 Forbidden` ante cualquier intento de cruce de funciones.
+  2. **Módulo de Auditoría Inmutable (`backend/src/modules/audit/audit.service.ts` — `RN-AUD-03`):**
+     * Servicio global *Append-Only* (`recordLog` y `findAllLogs`) que registra `userId`, `userRole`, `action`, `tableName`, `recordId`, `oldValues` y `newValues` en JSONB, con soporte para transacciones Prisma (`tx`).
+  3. **Módulo de Usuarios (`backend/src/modules/users/users.service.ts` — `RN-SEG-02`):**
+     * Exclusivo para `ADMIN`. Creación de usuarios con rol tipado, listado seguro sin exponer `passwordHash` y activación/desactivación con bloqueo de auto-desactivación del Administrador en sesión.
+  4. **Módulo de Beneficiarios (`backend/src/modules/beneficiaries/beneficiaries.service.ts` — `RN-SEG-01`):**
+     * Gestión del personal de Física, Química y Biología en tabla independiente (`beneficiaries`) sin usuario ni credenciales de sistema, validando unicidad de DNI/Cédula.
+  5. **Módulo de Proyectos y Vigencia (`backend/src/modules/projects/projects.service.ts` y `project-validity.helper.ts` — `RN-CAT-01`, `RN-CAT-02`):**
+     * Funciones puras `assertValidProjectDateRange` y `assertProjectAllowsNewAccruals` que validan áreas científicas (`FISICA`, `QUIMICA`, `BIOLOGIA`), ámbitos (`INTERNO`, `EXTERNO`) y bloqueo de nuevas causaciones fuera del rango de vigencia.
+  6. **Módulos de Grupos de Pago y Asignaciones (`payment-groups.service.ts`, `assignments.service.ts` y `assignment-overlap.helper.ts` — `RN-CAT-03`, `RN-CAT-04`):**
+     * Función pura `assertValidAssignmentWindowAndNoOverlap` que permite a un beneficiario trabajar en varios proyectos simultáneamente pero impide asignaciones solapadas en fechas dentro del mismo proyecto.
+  7. **Frontend React + Vite (`frontend/src/utils/rbac.util.ts`, `App.tsx`):**
+     * Matriz de permisos en cliente (`getRolePermissions`, `getRoleDisplayLabel`) y vista interactiva de catálogos y bitácora de auditoría por rol.
+  8. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
+     * **Backend:** 14 suites pasadas (`90/90 unit tests` en verde con patrón AAA) + `nest build` exitoso.
+     * **Frontend:** 2 suites pasadas (`9/9 unit tests` en verde con Vitest) + `vite build` exitoso.
