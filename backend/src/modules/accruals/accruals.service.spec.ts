@@ -278,4 +278,21 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
       expect(callArg.where.status.in).not.toContain(AccrualStatus.ANULADO);
     });
   });
+
+  describe('findAllAccruals', () => {
+    it('debe listar el libro mayor de causaciones con beneficiario, proyecto y lote (Happy Path)', async () => {
+      // Arrange
+      prismaMock.accrual.findMany.mockResolvedValueOnce([{ id: 'acc-1' }]);
+
+      // Act
+      const result = await service.findAllAccruals();
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(prismaMock.accrual.findMany).toHaveBeenCalledWith({
+        include: { beneficiary: true, project: true, batch: true },
+        orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }],
+      });
+    });
+  });
 });

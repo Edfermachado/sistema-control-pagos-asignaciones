@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   Patch,
   Post,
@@ -26,6 +27,12 @@ import { PettyCashService } from './petty-cash.service';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class PettyCashController {
   constructor(private readonly pettyCashService: PettyCashService) {}
+
+  @Get()
+  @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
+  async findAll() {
+    return this.pettyCashService.findAllPettyCashes();
+  }
 
   @Post()
   @Roles(UserRole.GENERADOR)

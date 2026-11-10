@@ -232,4 +232,18 @@ export class AccrualsService {
       orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
   }
+
+  /**
+   * Lista todas las causaciones del libro mayor con relaciones a beneficiario, proyecto y lote.
+   */
+  async findAllAccruals() {
+    return this.prisma.accrual.findMany({
+      include: {
+        beneficiary: true,
+        project: true,
+        batch: true,
+      },
+      orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
 }

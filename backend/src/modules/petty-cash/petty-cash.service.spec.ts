@@ -16,7 +16,7 @@ import { PettyCashService } from './petty-cash.service';
 describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre de Saldo)', () => {
   let service: PettyCashService;
   let prismaMock: {
-    pettyCash: { findUnique: jest.Mock; create: jest.Mock };
+    pettyCash: { findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock };
     pettyCashPeriod: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -48,7 +48,7 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
 
   beforeEach(() => {
     prismaMock = {
-      pettyCash: { findUnique: jest.fn(), create: jest.fn() },
+      pettyCash: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
       pettyCashPeriod: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
@@ -289,6 +289,20 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       await expect(
         service.closeMonthlyPeriod('per-1', receptorActor),
       ).rejects.toThrow('[RN-CAJA-04]');
+    });
+  });
+
+  describe('findAllPettyCashes', () => {
+    it('debe consultar las cajas chicas incluyendo proyecto, períodos y vales (Happy Path)', async () => {
+      // Arrange
+      prismaMock.pettyCash.findMany.mockResolvedValueOnce([{ id: 'pc-1', code: 'CC-FIS-01' }]);
+
+      // Act
+      const list = await service.findAllPettyCashes();
+
+      // Assert
+      expect(list).toHaveLength(1);
+      expect(prismaMock.pettyCash.findMany).toHaveBeenCalledTimes(1);
     });
   });
 });

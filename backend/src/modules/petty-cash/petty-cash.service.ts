@@ -442,4 +442,24 @@ export class PettyCashService {
 
     return closed;
   }
+
+  /**
+   * Lista todas las cajas chicas con su proyecto, períodos mensuales y vales asociados (RN-CAJA-01 a 04).
+   */
+  async findAllPettyCashes() {
+    return this.prisma.pettyCash.findMany({
+      include: {
+        project: true,
+        periods: {
+          orderBy: { yearMonth: 'desc' },
+          include: {
+            vouchers: {
+              orderBy: { createdAt: 'desc' },
+            },
+          },
+        },
+      },
+      orderBy: { code: 'asc' },
+    });
+  }
 }

@@ -37,6 +37,12 @@ export class AccrualsController {
     return this.accrualsService.generateAccrualBatch(dto, actor);
   }
 
+  @Get()
+  @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
+  async findAll() {
+    return this.accrualsService.findAllAccruals();
+  }
+
   @Get('beneficiary/:beneficiaryId/pending')
   @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
   async findPendingByBeneficiary(@Param('beneficiaryId') beneficiaryId: string) {

@@ -171,3 +171,22 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   3. **Verificación Final de Pruebas Unitarias 1:1 (`TEST-01`):**
      * **Backend (Jest):** 27 suites pasadas (`186/186 unit tests` en verde) + `nest build` exitoso.
      * **Frontend (Vitest):** 4 suites pasadas (`21/21 unit tests` en verde) + `vite build` exitoso.
+
+---
+
+### Interacción #10 — Ejecución de Etapa 5: Interfaz UI/UX Interactiva Full-Stack e Integración Cliente-Servidor (FACYT - UC)
+* **Fecha:** Noviembre 2026
+* **Herramienta / Modelo:** Antigravity Agent
+* **Indicación (Prompt) del Usuario:**
+  > *"Naturalmente, solo tenemos las funciones falta un plan de UI/UX ¿no? para que sea completamente utilizable y la facultad es en Facyt, corrige el readme"* / *"Sí"*
+* **Resultado Generado y Validado por el Equipo:**
+  1. **Cliente HTTP Tipado y Pruebas Unitarias (`frontend/src/utils/api-client.util.ts` + `.spec.ts`):**
+     * Creación de `buildAuthHeaders`, `extractApiErrorMessage`, `apiRequest` y `downloadAuthenticatedPdf` con pruebas unitarias en Vitest siguiendo patrón AAA.
+  2. **Workspaces Interactivos por Rol (`App.tsx`, `CatalogsAndAssignmentsWorkspace.tsx`, `FinancialEnginePanel.tsx`, `PettyCashAndReportsPanel.tsx`, `UsersAndAuditWorkspace.tsx`):**
+     * **Autenticación JWT Real (`/api/auth/login`):** Selector rápido de 1 clic para cambiar entre `GENERADOR`, `RECEPTOR` y `ADMIN` con login real contra el backend, además de formulario de login manual.
+     * **5 Pestañas Operativas:** (1) Dashboard Ejecutivo y Estado de Cuenta por Persona, (2) CRUD de Proyectos, Grupos de Pago, Beneficiarios y Asignaciones en USD, (3) Previsualización/Ejecución de Lotes de Causación Prorrateada, Solicitudes de Pago, Ejecución de Pagos FIFO, Anulaciones Justificadas y Descarga de PDFs, (4) Cajas Chicas con Apertura Mensual, Arrastre de Saldo, Emisión/Desembolso/Rendición de Vales con Factura y Cierre Mensual, (5) Gestión de Usuarios (`ADMIN`) y Visor Forense Inmutable `audit_log`.
+  3. **Endpoints de Listado Completo en Backend (`GET /api/accruals` y `GET /api/petty-cashes`):**
+     * Ampliación de `AccrualsService.findAllAccruals` y `PettyCashService.findAllPettyCashes` con sus respectivas pruebas unitarias en `accruals.service.spec.ts` y `petty-cash.service.spec.ts`.
+  4. **Verificación Integral de Pruebas Unitarias 1:1 (`TEST-01`):**
+     * **Backend (Jest):** 27 suites pasadas (`188/188 unit tests` en verde) + `nest build` exitoso.
+     * **Frontend (Vitest):** 5 suites pasadas (`25/25 unit tests` en verde) + `vite build` exitoso.

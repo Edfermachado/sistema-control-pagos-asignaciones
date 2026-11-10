@@ -17,6 +17,8 @@ export enum ProjectScope {
 
 export enum ProjectStatus {
   ACTIVO = 'ACTIVO',
+  SUSPENDIDO = 'SUSPENDIDO',
+  FINALIZADO = 'FINALIZADO',
   INACTIVO = 'INACTIVO',
   CERRADO = 'CERRADO',
 }
