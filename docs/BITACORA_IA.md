@@ -154,3 +154,20 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   4. **Verificación de Pruebas Unitarias 1:1 (`TEST-01`):**
      * **Backend (Jest):** 26 suites pasadas (`183/183 unit tests` en verde) + `nest build` exitoso.
      * **Frontend (Vitest):** 4 suites pasadas (`21/21 unit tests` en verde) + `vite build` exitoso.
+
+---
+
+### Interacción #9 — Ejecución de Etapa 4: Scripts de Semilla (`Seed`), Documentación Final (`README.md`) y Verificación Integral
+* **Fecha:** Noviembre 2026
+* **Herramienta / Modelo:** Antigravity Agent
+* **Indicación (Prompt) del Usuario:**
+  > *"Sí"* (Confirmación para iniciar la Etapa 4 final).
+* **Resultado Generado y Validado por el Equipo:**
+  1. **Fábrica Determinista de Semilla y Scripts SQL/Prisma (`backend/src/common/seed/seed-data.factory.ts`, `backend/prisma/seed.ts`, `database/02_seed_data.sql`):**
+     * Creación de `buildDefaultSeedDataset` con su prueba unitaria `seed-data.factory.spec.ts` para verificar que los datos iniciales cumplan invariantes de negocio (`RN-SEG-01`, `RN-CAT-01`, `RN-GLOB-01`).
+     * Script SQL idempotente (`ON CONFLICT DO NOTHING`) montado en `docker-compose.yml` (`/docker-entrypoint-initdb.d/02_seed_data.sql`) y script `prisma/seed.ts` con usuarios de los 3 roles (`admin@uc.edu.ve`, `coordinador@uc.edu.ve`, `gerente@uc.edu.ve`), proyectos de Física, Química y Biología, grupos de pago, beneficiarios sin cuenta de usuario, asignaciones, causación prorrateada, solicitud con pago parcial FIFO y caja chica con arrastre de saldo.
+  2. **Documentación Final de Despliegue (`README.md`):**
+     * Actualización con instrucciones paso a paso (Docker y manual), tabla de credenciales de prueba por rol y resumen completo de endpoints REST.
+  3. **Verificación Final de Pruebas Unitarias 1:1 (`TEST-01`):**
+     * **Backend (Jest):** 27 suites pasadas (`186/186 unit tests` en verde) + `nest build` exitoso.
+     * **Frontend (Vitest):** 4 suites pasadas (`21/21 unit tests` en verde) + `vite build` exitoso.

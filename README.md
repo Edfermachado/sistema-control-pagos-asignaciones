@@ -76,18 +76,75 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 ### Ejecución con Docker (Simulación de Producción)
 ```bash
 # 1. Clonar el repositorio
-git clone <URL_DEL_REPOSITORIO>
-cd proyecto_final
+git clone https://github.com/Edfermachado/sistema-control-pagos-asignaciones.git
+cd sistema-control-pagos-asignaciones
 
-# 2. Levantar la infraestructura completa (Base de Datos + Backend + Frontend)
+# 2. Copiar archivo de variables de entorno
+cp .env.example .env
+
+# 3. Levantar la infraestructura completa (PostgreSQL 16 + DDL + Seed + Backend NestJS + Frontend React)
 docker compose up --build
 ```
+* **Frontend Web (SPA):** `http://localhost:5173`
+* **Backend API REST:** `http://localhost:3000/api`
+* **Health Check:** `http://localhost:3000/api/health`
 
-*(Las credenciales de prueba para cada uno de los 3 roles y los comandos detallados de migración/seed se actualizarán conforme avance la implementación de la Etapa 0 y Etapa 1).*
+### Ejecución Manual en Entorno Local (Desarrollo y Pruebas Unitarias)
+```bash
+# 1. Instalar dependencias y generar cliente Prisma en Backend
+npm --prefix backend install
+npm --prefix backend run prisma:generate
+
+# 2. Ejecutar las 27 suites de Pruebas Unitarias 1:1 en Backend (186 tests con patrón AAA)
+npm --prefix backend test -- --runInBand
+
+# 3. Poblar datos iniciales de prueba (Seed programático con Prisma)
+npm --prefix backend run prisma:seed
+
+# 4. Instalar dependencias y ejecutar las 4 suites de Pruebas Unitarias en Frontend (21 tests en Vitest)
+npm --prefix frontend install
+npm --prefix frontend test
+
+# 5. Compilar ambos proyectos para producción
+npm --prefix backend run build
+npm --prefix frontend run build
+```
 
 ---
 
-## 6. Documentación Adicional para Evaluación
+## 6. Credenciales de Prueba Pre-cargadas (`Seed`)
+
+El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/prisma/seed.ts`) cargan automáticamente los tres roles segregados (**`RN-SEG-01`** a **`RN-SEG-04`**):
+
+| Rol en el Sistema | Correo Electrónico | Contraseña | Responsabilidad Principal |
+| :--- | :--- | :--- | :--- |
+| **`ADMIN`** (Administrador) | `admin@uc.edu.ve` | `PasswordUC2026!` | Gestión de usuarios, parámetros globales y auditoría (`audit_log`). No opera dinero. |
+| **`GENERADOR`** (Coordinador General) | `coordinador@uc.edu.ve` | `PasswordUC2026!` | Proyectos, beneficiarios, asignaciones, motor de causación por lote, solicitudes de pago y rendición de vales de caja chica. |
+| **`RECEPTOR`** (Gerente de Administración) | `gerente@uc.edu.ve` | `PasswordUC2026!` | Aprobación/rechazo de solicitudes, entrega de fondos con prelación FIFO, anulaciones justificadas y autorización/cierre de cajas chicas. |
+
+> **Nota de Regla de Negocio (`RN-SEG-01`):** Los **Beneficiarios** (profesores, investigadores, técnicos de laboratorio y asistentes) están registrados exclusivamente en la tabla `beneficiaries` y **no poseen credenciales de acceso** al sistema.
+
+---
+
+## 7. Resumen de Endpoints REST Principales (`/api`)
+
+* **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`
+* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit`
+* **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `GET/POST /api/payment-groups`, `GET/POST /api/beneficiaries`, `GET/POST /api/assignments`
+* **Motor Financiero (`GENERADOR` / `RECEPTOR`):**
+  * `POST /api/accruals/generate-batch`, `GET /api/accruals/pending/:beneficiaryId`
+  * `POST /api/payment-requests`, `PATCH /api/payment-requests/:id/submit`, `PATCH /api/payment-requests/:id/review`
+  * `POST /api/payments/execute-fifo`
+  * `POST /api/annulments/payment`, `POST /api/annulments/payment-request`
+* **Cajas Chicas y Reportes PDF (`GENERADOR` / `RECEPTOR`):**
+  * `POST /api/petty-cash`, `POST /api/petty-cash/periods/request`, `PATCH /api/petty-cash/periods/:id/approve`, `POST /api/petty-cash/periods/:id/close`
+  * `POST /api/petty-cash/vouchers/request`, `PATCH /api/petty-cash/vouchers/:id/approve`, `PATCH /api/petty-cash/vouchers/:id/settle`
+  * `GET /api/reports/queries/pending-payments`, `GET /api/reports/queries/active-requests`, `GET /api/reports/queries/paid-history`, `GET /api/reports/queries/petty-cash-summary`
+  * `GET /api/reports/pdf/receipt/:paymentId`, `GET /api/reports/pdf/consolidated-request/:requestId`
+
+---
+
+## 8. Documentación Adicional para Evaluación
 
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)
 * 🧪 [Estándares de Desarrollo, Clean Code y Unit Testing 1:1](./docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md)
