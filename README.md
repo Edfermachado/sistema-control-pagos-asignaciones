@@ -1,6 +1,6 @@
 # Sistema de Control de Pagos y Asignaciones (USD)
 
-**Universidad de Carabobo — Facultad Experimental de Ciencias y Tecnología (FACES / Facyt)**  
+**Universidad de Carabobo — Facultad Experimental de Ciencias y Tecnología (FACYT)**  
 **Escuela de Computación — Asignatura: Sistemas de Información**
 
 Sistema cliente-servidor con arquitectura modular en capas para la gestión, causación prorrateada, solicitudes de pago con prelación FIFO, control de cajas chicas y auditoría forense de asignaciones en dólares (USD) para proyectos de investigación en **Física, Química y Biología**.
@@ -128,19 +128,18 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 
 ## 7. Resumen de Endpoints REST Principales (`/api`)
 
-* **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`
-* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit`
-* **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `GET/POST /api/payment-groups`, `GET/POST /api/beneficiaries`, `GET/POST /api/assignments`
+* **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`, `GET /api/auth/me`
+* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`
+* **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `PATCH /api/projects/:id/status`, `GET/POST /api/payment-groups`, `GET/POST /api/beneficiaries`, `PATCH /api/beneficiaries/:id`, `GET/POST /api/assignments`, `PATCH /api/assignments/:id/deactivate`
 * **Motor Financiero (`GENERADOR` / `RECEPTOR`):**
-  * `POST /api/accruals/generate-batch`, `GET /api/accruals/pending/:beneficiaryId`
-  * `POST /api/payment-requests`, `PATCH /api/payment-requests/:id/submit`, `PATCH /api/payment-requests/:id/review`
-  * `POST /api/payments/execute-fifo`
-  * `POST /api/annulments/payment`, `POST /api/annulments/payment-request`
+  * `POST /api/accruals/batches/preview`, `POST /api/accruals/batches`, `GET /api/accruals/beneficiary/:beneficiaryId/pending`
+  * `GET/POST /api/payment-requests`, `PATCH /api/payment-requests/:id/send`, `PATCH /api/payment-requests/:id/review`, `PATCH /api/payment-requests/:id/close`
+  * `GET/POST /api/payments`
+  * `POST /api/annulments/payments/:paymentId`, `POST /api/annulments/accruals/:accrualId`, `GET /api/annulments`
 * **Cajas Chicas y Reportes PDF (`GENERADOR` / `RECEPTOR`):**
-  * `POST /api/petty-cash`, `POST /api/petty-cash/periods/request`, `PATCH /api/petty-cash/periods/:id/approve`, `POST /api/petty-cash/periods/:id/close`
-  * `POST /api/petty-cash/vouchers/request`, `PATCH /api/petty-cash/vouchers/:id/approve`, `PATCH /api/petty-cash/vouchers/:id/settle`
-  * `GET /api/reports/queries/pending-payments`, `GET /api/reports/queries/active-requests`, `GET /api/reports/queries/paid-history`, `GET /api/reports/queries/petty-cash-summary`
-  * `GET /api/reports/pdf/receipt/:paymentId`, `GET /api/reports/pdf/consolidated-request/:requestId`
+  * `POST /api/petty-cashes`, `POST /api/petty-cashes/:pettyCashId/periods`, `PATCH /api/petty-cashes/periods/:periodId/approve`, `PATCH /api/petty-cashes/periods/:periodId/close`
+  * `POST /api/petty-cashes/periods/:periodId/vouchers`, `PATCH /api/petty-cashes/vouchers/:voucherId/disburse`, `PATCH /api/petty-cashes/vouchers/:voucherId/settle`
+  * `GET /api/reports/summary`, `GET /api/reports/payments/:paymentId/pdf`, `GET /api/reports/payment-requests/:paymentRequestId/pdf`
 
 ---
 
