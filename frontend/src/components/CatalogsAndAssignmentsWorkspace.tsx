@@ -17,7 +17,6 @@ export interface LiveProject {
   scope: ProjectScope;
   startDate: string;
   endDate: string;
-  budget: string | number;
   status: ProjectStatus;
 }
 
@@ -25,7 +24,7 @@ export interface LivePaymentGroup {
   id: string;
   name: string;
   periodicity: Periodicity;
-  description?: string | null;
+  cutoffRules: string;
   isActive: boolean;
 }
 
@@ -33,10 +32,9 @@ export interface LiveBeneficiary {
   id: string;
   dni: string;
   fullName: string;
-  roleTitle?: string;
   email?: string | null;
   phone?: string | null;
-  bankReference?: string | null;
+  bankInfo?: string | null;
   isActive: boolean;
 }
 
@@ -75,8 +73,9 @@ export function CatalogsAndAssignmentsWorkspace({
   onRefresh,
   onNotify,
 }: CatalogsProps): React.ReactElement {
-  const canEditCatalogs =
-    activeRole === UserRole.ADMIN || activeRole === UserRole.GENERADOR;
+  const canManageProjects = activeRole === UserRole.GENERADOR;
+  const canManagePaymentGroups = activeRole === UserRole.ADMIN;
+  const canManageBeneficiaries = activeRole === UserRole.GENERADOR;
   const canEditAssignments = activeRole === UserRole.GENERADOR;
 
   // Estado formulario Proyecto
@@ -86,19 +85,19 @@ export function CatalogsAndAssignmentsWorkspace({
   const [projScope, setProjScope] = useState<ProjectScope>(ProjectScope.INTERNO);
   const [projStart, setProjStart] = useState('2026-01-01');
   const [projEnd, setProjEnd] = useState('2026-12-31');
-  const [projBudget, setProjBudget] = useState('18000.00');
 
   // Estado formulario Grupo de Pago
   const [pgName, setPgName] = useState('Semanal Asistentes Laboratorio');
   const [pgPeriodicity, setPgPeriodicity] = useState<Periodicity>(
     Periodicity.SEMANAL,
   );
-  const [pgDesc, setPgDesc] = useState('Ciclo de 7 días calendario');
+  const [pgCutoffRules, setPgCutoffRules] = useState(
+    'Ciclo de 7 días calendario',
+  );
 
   // Estado formulario Beneficiario (RN-SEG-01: sin usuario)
   const [benDni, setBenDni] = useState('V-24111222');
   const [benName, setBenName] = useState('Lic. Gabriela Rojas');
-  const [benTitle, setBenTitle] = useState('Investigadora Asociada Biología');
   const [benEmail] = useState('grojas@uc.edu.ve');
   const [benBank, setBenBank] = useState('Zelle / Cuenta USD #9921');
 
@@ -123,7 +122,6 @@ export function CatalogsAndAssignmentsWorkspace({
           scope: projScope,
           startDate: projStart,
           endDate: projEnd,
-          budget: projBudget,
         },
       });
       onNotify('success', `Proyecto '${projCode}' creado correctamente.`);
@@ -159,7 +157,7 @@ export function CatalogsAndAssignmentsWorkspace({
         body: {
           name: pgName,
           periodicity: pgPeriodicity,
-          description: pgDesc,
+          cutoffRules: pgCutoffRules,
         },
       });
       onNotify('success', `Grupo de pago '${pgName}' registrado.`);
@@ -178,9 +176,8 @@ export function CatalogsAndAssignmentsWorkspace({
         body: {
           dni: benDni,
           fullName: benName,
-          roleTitle: benTitle,
           email: benEmail,
-          bankReference: benBank,
+          bankInfo: benBank,
         },
       });
       onNotify(
@@ -251,7 +248,7 @@ export function CatalogsAndAssignmentsWorkspace({
           1. Proyectos de Investigación FACYT (Física, Química y Biología — RN-CAT-01 / RN-CAT-02)
         </h2>
 
-        {canEditCatalogs && (
+        {canManageProjects && (
           <form onSubmit={handleCreateProject} style={formGridStyle}>
             <input
               value={projCode}
@@ -298,15 +295,6 @@ export function CatalogsAndAssignmentsWorkspace({
               required
               style={inputStyle}
             />
-            <input
-              type="number"
-              step="0.01"
-              value={projBudget}
-              onChange={(e) => setProjBudget(e.target.value)}
-              placeholder="Presupuesto USD"
-              required
-              style={inputStyle}
-            />
             <button type="submit" style={primaryButtonStyle}>
               + Crear Proyecto
             </button>
@@ -321,9 +309,8 @@ export function CatalogsAndAssignmentsWorkspace({
               <th style={thStyle}>Área</th>
               <th style={thStyle}>Ámbito</th>
               <th style={thStyle}>Vigencia</th>
-              <th style={thStyle}>Presupuesto</th>
               <th style={thStyle}>Estado</th>
-              {canEditCatalogs && <th style={thStyle}>Acciones</th>}
+              {canManageProjects && <th style={thStyle}>Acciones</th>}
             </tr>
           </thead>
           <tbody>
@@ -336,9 +323,6 @@ export function CatalogsAndAssignmentsWorkspace({
                 <td style={tdStyle}>
                   {String(p.startDate).slice(0, 10)} →{' '}
                   {String(p.endDate).slice(0, 10)}
-                </td>
-                <td style={{ ...tdStyle, fontWeight: 600 }}>
-                  {formatUsdCurrency(Number(p.budget ?? 0))}
                 </td>
                 <td style={tdStyle}>
                   <span
@@ -356,7 +340,7 @@ export function CatalogsAndAssignmentsWorkspace({
                     {p.status}
                   </span>
                 </td>
-                {canEditCatalogs && (
+                {canManageProjects && (
                   <td style={tdStyle}>
                     <select
                       value={p.status}
@@ -369,8 +353,8 @@ export function CatalogsAndAssignmentsWorkspace({
                       style={{ ...inputStyle, padding: '0.25rem', fontSize: '0.8rem' }}
                     >
                       <option value={ProjectStatus.ACTIVO}>ACTIVO</option>
-                      <option value={ProjectStatus.SUSPENDIDO}>SUSPENDIDO</option>
-                      <option value={ProjectStatus.FINALIZADO}>FINALIZADO</option>
+                      <option value={ProjectStatus.INACTIVO}>INACTIVO</option>
+                      <option value={ProjectStatus.CERRADO}>CERRADO</option>
                     </select>
                   </td>
                 )}
@@ -386,7 +370,7 @@ export function CatalogsAndAssignmentsWorkspace({
           <h2 style={sectionTitleStyle}>
             2. Grupos de Pago y Periodicidades (RN-CAT-03)
           </h2>
-          {canEditCatalogs && (
+          {canManagePaymentGroups && (
             <form onSubmit={handleCreatePaymentGroup} style={formGridStyle}>
               <input
                 value={pgName}
@@ -405,9 +389,10 @@ export function CatalogsAndAssignmentsWorkspace({
                 <option value={Periodicity.MENSUAL}>MENSUAL</option>
               </select>
               <input
-                value={pgDesc}
-                onChange={(e) => setPgDesc(e.target.value)}
-                placeholder="Descripción"
+                value={pgCutoffRules}
+                onChange={(e) => setPgCutoffRules(e.target.value)}
+                placeholder="Regla de corte (ej. días 15 y último del mes)"
+                required
                 style={inputStyle}
               />
               <button type="submit" style={primaryButtonStyle}>
@@ -430,7 +415,7 @@ export function CatalogsAndAssignmentsWorkspace({
                   <td style={tdStyle}>
                     <code>{pg.periodicity}</code>
                   </td>
-                  <td style={tdStyle}>{pg.description ?? '—'}</td>
+                  <td style={tdStyle}>{pg.cutoffRules}</td>
                 </tr>
               ))}
             </tbody>
@@ -441,7 +426,7 @@ export function CatalogsAndAssignmentsWorkspace({
           <h2 style={sectionTitleStyle}>
             3. Beneficiarios (Sin Cuenta de Usuario — RN-SEG-01)
           </h2>
-          {canEditCatalogs && (
+          {canManageBeneficiaries && (
             <form onSubmit={handleCreateBeneficiary} style={formGridStyle}>
               <input
                 value={benDni}
@@ -454,13 +439,6 @@ export function CatalogsAndAssignmentsWorkspace({
                 value={benName}
                 onChange={(e) => setBenName(e.target.value)}
                 placeholder="Nombre Completo"
-                required
-                style={inputStyle}
-              />
-              <input
-                value={benTitle}
-                onChange={(e) => setBenTitle(e.target.value)}
-                placeholder="Cargo / Rol en Proyecto"
                 required
                 style={inputStyle}
               />
@@ -480,7 +458,7 @@ export function CatalogsAndAssignmentsWorkspace({
               <tr style={theadRowStyle}>
                 <th style={thStyle}>Cédula</th>
                 <th style={thStyle}>Beneficiario</th>
-                <th style={thStyle}>Cargo</th>
+                <th style={thStyle}>Correo</th>
                 <th style={thStyle}>Referencia Pago</th>
               </tr>
             </thead>
@@ -489,8 +467,8 @@ export function CatalogsAndAssignmentsWorkspace({
                 <tr key={b.id} style={trStyle}>
                   <td style={{ ...tdStyle, fontWeight: 600 }}>{b.dni}</td>
                   <td style={tdStyle}>{b.fullName}</td>
-                  <td style={tdStyle}>{b.roleTitle ?? 'Investigador'}</td>
-                  <td style={tdStyle}>{b.bankReference ?? '—'}</td>
+                  <td style={tdStyle}>{b.email ?? '—'}</td>
+                  <td style={tdStyle}>{b.bankInfo ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

@@ -8,9 +8,9 @@
 -- 1. Usuarios del Sistema (Segregación de Funciones RN-SEG-02: ADMIN, GENERADOR, RECEPTOR)
 INSERT INTO "users" ("id", "email", "full_name", "password_hash", "role", "is_active")
 VALUES
-  ('11111111-1111-4111-8111-111111111101', 'admin@uc.edu.ve', 'Ing. Carlos Rivas (Administrador del Sistema)', '0123456789abcdef0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', 'ADMIN', true),
-  ('11111111-1111-4111-8111-111111111102', 'coordinador@uc.edu.ve', 'Dra. Elena Vargas (Coordinadora General - Generador)', '0123456789abcdef0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', 'GENERADOR', true),
-  ('11111111-1111-4111-8111-111111111103', 'gerente@uc.edu.ve', 'Lic. Roberto Silva (Gerente Administración - Receptor)', '0123456789abcdef0123456789abcdef:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08', 'RECEPTOR', true)
+  ('11111111-1111-4111-8111-111111111101', 'admin@uc.edu.ve', 'Ing. Carlos Rivas (Administrador del Sistema)', '36ec09f5f0914d2b5f13913506df5b15:fd050a4f52bee228a2fb0e5b3039e4f72d82d2243c951b40f3f3e086bb0db56969e2a4a68282b756c53e047b00bb0d418861c61411c3ada78913fcad41e44541', 'ADMIN', true),
+  ('11111111-1111-4111-8111-111111111102', 'coordinador@uc.edu.ve', 'Dra. Elena Vargas (Coordinadora General - Generador)', '36ec09f5f0914d2b5f13913506df5b15:fd050a4f52bee228a2fb0e5b3039e4f72d82d2243c951b40f3f3e086bb0db56969e2a4a68282b756c53e047b00bb0d418861c61411c3ada78913fcad41e44541', 'GENERADOR', true),
+  ('11111111-1111-4111-8111-111111111103', 'gerente@uc.edu.ve', 'Lic. Roberto Silva (Gerente Administración - Receptor)', '36ec09f5f0914d2b5f13913506df5b15:fd050a4f52bee228a2fb0e5b3039e4f72d82d2243c951b40f3f3e086bb0db56969e2a4a68282b756c53e047b00bb0d418861c61411c3ada78913fcad41e44541', 'RECEPTOR', true)
 ON CONFLICT ("email") DO NOTHING;
 
 -- 2. Proyectos Científicos: Física, Química y Biología (RN-CAT-01)
@@ -64,6 +64,12 @@ VALUES
   ('88888888-8888-4888-8888-888888888801', 'SOL-FIS-2026-001', '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', 900.00, 600.00, 'ENTREGADA')
 ON CONFLICT ("code") DO NOTHING;
 
+INSERT INTO "payment_request_items" ("id", "payment_request_id", "accrual_id", "requested_amount")
+VALUES
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', '88888888-8888-4888-8888-888888888801', '77777777-7777-4777-8777-777777777701', 450.00),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', '88888888-8888-4888-8888-888888888801', '77777777-7777-4777-8777-777777777702', 450.00)
+ON CONFLICT ("payment_request_id", "accrual_id") DO NOTHING;
+
 INSERT INTO "payments" ("id", "receipt_code", "payment_request_id", "beneficiary_id", "delivered_by_id", "amount", "payment_date", "reference", "status")
 VALUES
   ('99999999-9999-4999-8999-999999999901', 'REC-2026-001', '88888888-8888-4888-8888-888888888801', '44444444-4444-4444-8444-444444444401', '11111111-1111-4111-8111-111111111103', 600.00, '2026-11-05', 'ZELLE-UC-9901', 'VALIDO')
@@ -84,5 +90,11 @@ ON CONFLICT ("code") DO NOTHING;
 INSERT INTO "petty_cash_periods" ("id", "petty_cash_id", "year_month", "carryover_balance", "initial_replenishment", "available_balance", "closing_balance", "status", "opened_by_id", "approved_by_id", "closed_by_id")
 VALUES
   ('cccccccc-cccc-4ccc-8ccc-cccccccccc01', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-10', 0.00, 200.00, 65.50, 65.50, 'CERRADO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccc02', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-11', 65.50, 134.50, 135.00, NULL, 'ABIERTO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', NULL)
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccc02', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-11', 65.50, 134.50, 200.00, NULL, 'ABIERTO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', NULL)
 ON CONFLICT ("petty_cash_id", "year_month") DO NOTHING;
+
+-- Vale histórico de octubre que justifica el saldo consumido (134.50) y el cierre en 65.50
+INSERT INTO "petty_cash_vouchers" ("id", "code", "period_id", "requested_by_id", "approved_by_id", "disbursed_by_id", "beneficiary_name", "concept", "requested_amount", "disbursed_amount", "settled_amount", "returned_amount", "invoice_reference", "status")
+VALUES
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'VALE-FIS-2026-10', 'cccccccc-cccc-4ccc-8ccc-cccccccccc01', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103', 'TSU. Luis Herrera', 'Compra de insumos ópticos y guantes de nitrilo', 134.50, 134.50, 134.50, 0.00, 'FACT-FIS-2026-1042', 'RENDIDO')
+ON CONFLICT ("code") DO NOTHING;

@@ -40,10 +40,9 @@ export interface LivePaymentRequest {
   id: string;
   code: string;
   projectId: string;
-  requestedAmount: string | number;
-  approvedAmount?: string | number | null;
+  totalAmount: string | number;
+  paidAmount: string | number;
   status: PaymentRequestStatus;
-  justification?: string | null;
   rejectionReason?: string | null;
   project?: { code: string; name: string };
 }
@@ -53,10 +52,9 @@ export interface LivePayment {
   receiptCode: string;
   paymentRequestId: string;
   beneficiaryId: string;
-  amountPaid: string | number;
+  amount: string | number;
   paymentDate: string;
-  paymentMethod: string;
-  referenceNumber?: string | null;
+  reference?: string | null;
   status: string;
   beneficiary?: { fullName: string; dni: string };
   paymentRequest?: { code: string };
@@ -125,17 +123,13 @@ export function FinancialEnginePanel({
   // 2. Estado Nueva Solicitud de Pago
   const [reqCode, setReqCode] = useState('SOL-2026-0009');
   const [reqProjectId, setReqProjectId] = useState('');
-  const [reqAmount, setReqAmount] = useState('450.00');
-  const [reqJustification, setReqJustification] = useState(
-    'Solicitud de fondos quincenal para investigadores activos',
-  );
+  const [reqAccrualIds, setReqAccrualIds] = useState<string[]>([]);
 
   // 3. Estado Ejecución de Pago FIFO
   const [payReceiptCode, setPayReceiptCode] = useState('REC-2026-0009');
   const [payRequestId, setPayRequestId] = useState('');
   const [payBeneficiaryId, setPayBeneficiaryId] = useState('');
   const [payAmount, setPayAmount] = useState('300.00');
-  const [payMethod] = useState('TRANSFERENCIA_USD');
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
   const [payDate, setPayDate] = useState('2026-02-20');
 
@@ -143,6 +137,31 @@ export function FinancialEnginePanel({
   const [annulReason, setAnnulReason] = useState(
     'Corrección contable autorizada por Gerencia Administrativa FACYT (RN-PAG-03)',
   );
+
+  const hasPendingBalance = (accrual: LiveAccrual): boolean =>
+    (accrual.status === AccrualStatus.PENDIENTE ||
+      accrual.status === AccrualStatus.PARCIAL) &&
+    Number(accrual.balanceDue) > 0;
+
+  const firstProjectWithPendingAccruals = projects.find((p) =>
+    accruals.some((a) => a.projectId === p.id && hasPendingBalance(a)),
+  );
+  const effectiveReqProjectId =
+    reqProjectId || firstProjectWithPendingAccruals?.id || projects[0]?.id || '';
+  const eligibleRequestAccruals = accruals.filter(
+    (a) => a.projectId === effectiveReqProjectId && hasPendingBalance(a),
+  );
+  const selectedRequestedTotal = eligibleRequestAccruals
+    .filter((a) => reqAccrualIds.includes(a.id))
+    .reduce((total, a) => total + Number(a.balanceDue), 0);
+
+  const toggleRequestAccrual = (accrualId: string) => {
+    setReqAccrualIds((current) =>
+      current.includes(accrualId)
+        ? current.filter((id) => id !== accrualId)
+        : [...current, accrualId],
+    );
+  };
 
   const handlePreviewBatch = async () => {
     const targetProject = batchProjectId || projects[0]?.id;
@@ -209,9 +228,16 @@ export function FinancialEnginePanel({
 
   const handleCreatePaymentRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetProject = reqProjectId || projects[0]?.id;
+    const targetProject = effectiveReqProjectId;
     if (!targetProject) {
       onNotify('error', 'Seleccione un proyecto.');
+      return;
+    }
+    if (reqAccrualIds.length === 0) {
+      onNotify(
+        'error',
+        'Seleccione al menos una causación con saldo pendiente para consolidar la solicitud.',
+      );
       return;
     }
     try {
@@ -221,11 +247,14 @@ export function FinancialEnginePanel({
         body: {
           code: reqCode,
           projectId: targetProject,
-          requestedAmount: reqAmount,
-          justification: reqJustification,
+          accrualIds: reqAccrualIds,
         },
       });
-      onNotify('success', `Solicitud '${reqCode}' creada en estado CREADA.`);
+      onNotify(
+        'success',
+        `Solicitud '${reqCode}' creada por $${selectedRequestedTotal.toFixed(2)} USD.`,
+      );
+      setReqAccrualIds([]);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -247,28 +276,24 @@ export function FinancialEnginePanel({
 
   const handleReviewRequest = async (
     id: string,
-    decision: 'APPROVE' | 'REJECT',
-    requestedAmount: string | number,
+    decision: 'APROBADA' | 'RECHAZADA',
   ) => {
     try {
       await apiRequest(`/payment-requests/${id}/review`, {
         method: 'PATCH',
         token,
         body:
-          decision === 'APPROVE'
-            ? {
-                decision: 'APPROVE',
-                approvedAmount: String(requestedAmount),
-              }
+          decision === 'APROBADA'
+            ? { decision: 'APROBADA' }
             : {
-                decision: 'REJECT',
+                decision: 'RECHAZADA',
                 rejectionReason:
                   'Observación presupuestaria de Gerencia (RN-PAG-01)',
               },
       });
       onNotify(
         'success',
-        decision === 'APPROVE'
+        decision === 'APROBADA'
           ? 'Solicitud APROBADA por Gerencia.'
           : 'Solicitud RECHAZADA con motivo registrado.',
       );
@@ -317,10 +342,9 @@ export function FinancialEnginePanel({
           receiptCode: payReceiptCode,
           paymentRequestId: targetRequest,
           beneficiaryId: targetBeneficiary,
-          amountPaid: payAmount,
+          amount: payAmount,
           paymentDate: payDate,
-          paymentMethod: payMethod,
-          referenceNumber: payReference,
+          reference: payReference,
         },
       });
       onNotify(
@@ -538,7 +562,8 @@ export function FinancialEnginePanel({
                   </td>
                   {(isGenerador || isReceptor) && (
                     <td style={tdStyle}>
-                      {row.status === AccrualStatus.PENDIENTE &&
+                      {isGenerador &&
+                        row.status === AccrualStatus.PENDIENTE &&
                         Number(row.paidAmount) === 0 && (
                           <button
                             type="button"
@@ -594,32 +619,57 @@ export function FinancialEnginePanel({
               style={inputStyle}
             />
             <select
-              value={reqProjectId}
-              onChange={(e) => setReqProjectId(e.target.value)}
+              value={effectiveReqProjectId}
+              onChange={(e) => {
+                setReqProjectId(e.target.value);
+                setReqAccrualIds([]);
+              }}
               style={inputStyle}
             >
-              <option value="">-- Proyecto --</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.code} - {p.name}
                 </option>
               ))}
             </select>
-            <input
-              type="number"
-              step="0.01"
-              value={reqAmount}
-              onChange={(e) => setReqAmount(e.target.value)}
-              placeholder="Monto Solicitado USD"
-              required
-              style={inputStyle}
-            />
-            <input
-              value={reqJustification}
-              onChange={(e) => setReqJustification(e.target.value)}
-              placeholder="Justificación"
-              style={inputStyle}
-            />
+            <div
+              style={{
+                gridColumn: '1 / -1',
+                padding: '0.6rem',
+                borderRadius: '0.35rem',
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+              }}
+            >
+              <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.35rem' }}>
+                Causaciones con saldo pendiente del proyecto (
+                {formatUsdCurrency(selectedRequestedTotal)} seleccionados)
+              </div>
+              {eligibleRequestAccruals.length === 0 ? (
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                  Este proyecto no tiene causaciones pendientes.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                  {eligibleRequestAccruals.map((a) => (
+                    <label
+                      key={a.id}
+                      style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', fontSize: '0.8rem' }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={reqAccrualIds.includes(a.id)}
+                        onChange={() => toggleRequestAccrual(a.id)}
+                      />
+                      {String(a.periodStart).slice(0, 10)} al{' '}
+                      {String(a.periodEnd).slice(0, 10)} ·{' '}
+                      {a.beneficiary?.fullName ?? a.beneficiaryId} · Saldo{' '}
+                      {formatUsdCurrency(Number(a.balanceDue))}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             <button type="submit" style={primaryButtonStyle}>
               + Crear Solicitud (CREADA)
             </button>
@@ -632,7 +682,7 @@ export function FinancialEnginePanel({
               <th style={thStyle}>Código</th>
               <th style={thStyle}>Proyecto</th>
               <th style={thStyle}>Solicitado</th>
-              <th style={thStyle}>Aprobado</th>
+              <th style={thStyle}>Pagado</th>
               <th style={thStyle}>Estado</th>
               <th style={thStyle}>Acciones por Rol y Reporte PDF</th>
             </tr>
@@ -647,12 +697,10 @@ export function FinancialEnginePanel({
                     <code>{req.project?.code ?? req.projectId}</code>
                   </td>
                   <td style={tdStyle}>
-                    {formatUsdCurrency(Number(req.requestedAmount))}
+                    {formatUsdCurrency(Number(req.totalAmount))}
                   </td>
                   <td style={{ ...tdStyle, fontWeight: 700, color: '#047857' }}>
-                    {req.approvedAmount
-                      ? formatUsdCurrency(Number(req.approvedAmount))
-                      : '—'}
+                    {formatUsdCurrency(Number(req.paidAmount))}
                   </td>
                   <td style={tdStyle}>
                     <span
@@ -682,34 +730,23 @@ export function FinancialEnginePanel({
                       <>
                         <button
                           type="button"
-                          onClick={() =>
-                            handleReviewRequest(
-                              req.id,
-                              'APPROVE',
-                              req.requestedAmount,
-                            )
-                          }
+                          onClick={() => handleReviewRequest(req.id, 'APROBADA')}
                           style={successButtonStyle}
                         >
                           ✅ Aprobar
                         </button>
                         <button
                           type="button"
-                          onClick={() =>
-                            handleReviewRequest(
-                              req.id,
-                              'REJECT',
-                              req.requestedAmount,
-                            )
-                          }
+                          onClick={() => handleReviewRequest(req.id, 'RECHAZADA')}
                           style={dangerOutlineButtonStyle}
                         >
                           ❌ Rechazar
                         </button>
                       </>
                     )}
-                    {(isGenerador || isReceptor) &&
-                      req.status === PaymentRequestStatus.ENTREGADA && (
+                    {isReceptor &&
+                      req.status === PaymentRequestStatus.ENTREGADA &&
+                      Number(req.paidAmount) >= Number(req.totalAmount) && (
                         <button
                           type="button"
                           onClick={() => handleCloseRequest(req.id)}
@@ -767,7 +804,7 @@ export function FinancialEnginePanel({
                 )
                 .map((r) => (
                   <option key={r.id} value={r.id}>
-                    {r.code} (Aprobado: ${r.approvedAmount})
+                    {r.code} (Total: ${r.totalAmount} · Pagado: ${r.paidAmount})
                   </option>
                 ))}
             </select>
@@ -845,11 +882,10 @@ export function FinancialEnginePanel({
                   {p.beneficiary?.fullName ?? p.beneficiaryId}
                 </td>
                 <td style={{ ...tdStyle, fontWeight: 700, color: '#047857' }}>
-                  {formatUsdCurrency(Number(p.amountPaid))}
+                  {formatUsdCurrency(Number(p.amount))}
                 </td>
                 <td style={tdStyle}>
-                  {String(p.paymentDate).slice(0, 10)} · {p.paymentMethod} (
-                  {p.referenceNumber ?? 'S/R'})
+                  {String(p.paymentDate).slice(0, 10)} · ({p.reference ?? 'S/R'})
                 </td>
                 <td style={tdStyle}>
                   <span
@@ -859,8 +895,8 @@ export function FinancialEnginePanel({
                       fontSize: '0.75rem',
                       fontWeight: 700,
                       backgroundColor:
-                        p.status === 'ACTIVO' ? '#dcfce7' : '#fee2e2',
-                      color: p.status === 'ACTIVO' ? '#065f46' : '#991b1b',
+                        p.status === 'VALIDO' ? '#dcfce7' : '#fee2e2',
+                      color: p.status === 'VALIDO' ? '#065f46' : '#991b1b',
                     }}
                   >
                     {p.status}
@@ -879,7 +915,7 @@ export function FinancialEnginePanel({
                   >
                     📄 Recibo PDF (FIFO)
                   </button>
-                  {isReceptor && p.status === 'ACTIVO' && (
+                  {isReceptor && p.status === 'VALIDO' && (
                     <button
                       type="button"
                       onClick={() => handleAnnulPayment(p.id)}

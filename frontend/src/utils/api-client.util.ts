@@ -3,7 +3,13 @@
  * Cumple CC-01 (Cero any), CC-03 (Funciones puras) y TEST-01 (Unit tests 1:1).
  */
 
-export const DEFAULT_API_BASE_URL = 'http://localhost:3000/api';
+const configuredApiBaseUrl = import.meta.env.VITE_API_URL?.trim();
+
+export const DEFAULT_API_BASE_URL = (
+  configuredApiBaseUrl && configuredApiBaseUrl.length > 0
+    ? configuredApiBaseUrl
+    : 'http://localhost:3000/api'
+).replace(/\/+$/, '');
 
 export interface ApiRequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';

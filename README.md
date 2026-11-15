@@ -34,7 +34,7 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 
 | Capa | Tecnología | Propósito |
 | :--- | :--- | :--- |
-| **Cliente (Frontend)** | **React 18 + Vite + TypeScript** + TailwindCSS | Single Page Application (SPA) con control de acceso por rol y visualización reactiva. |
+| **Cliente (Frontend)** | **React 18 + Vite + TypeScript** + estilos inline | Single Page Application (SPA) con control de acceso por rol y visualización reactiva. |
 | **Servidor (Backend API)** | **NestJS (Node.js + TypeScript)** | Arquitectura modular en capas (`Controllers` $\rightarrow$ `Services` $\rightarrow$ `Repositories/Prisma`). |
 | **Base de Datos** | **PostgreSQL 16 + Prisma ORM** | Integridad referencial, transacciones ACID, tipos decimales exactos (`NUMERIC`) y `JSONB` para auditoría. |
 | **Infraestructura** | **Docker & Docker Compose** | Entorno reproducible simulando producción en un solo comando. |
@@ -50,7 +50,9 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 ├── database/                 # Scripts DDL de creación SQL y carga inicial (Seeds)
 ├── docs/
 │   ├── DECISIONES_TECNICAS_DEFENSA.md  # Justificación arquitectónica y guía para la defensa
+│   ├── INFORME_ESTADO_Y_PENDIENTES.md  # Auditoría, validaciones y trabajo pendiente
 │   └── BITACORA_IA.md                  # Registro de prompts y uso de IA (Entregable #5)
+├── scripts/                  # Prueba de humo end-to-end de la API
 ├── docker-compose.yml        # Orquestación de contenedores (PostgreSQL + Backend + Frontend)
 └── README.md                 # Documentación principal de instalación y despliegue
 ```
@@ -83,25 +85,43 @@ cd sistema-control-pagos-asignaciones
 cp .env.example .env
 
 # 3. Levantar la infraestructura completa (PostgreSQL 16 + DDL + Seed + Backend NestJS + Frontend React)
-docker compose up --build
+docker compose up -d --build
 ```
 * **Frontend Web (SPA):** `http://localhost:5173`
 * **Backend API REST:** `http://localhost:3000/api`
 * **Health Check:** `http://localhost:3000/api/health`
 
+> **Nota sobre el seed:** PostgreSQL ejecuta los scripts `database/*.sql` **solo la primera vez** que se crea el volumen. Si modifica los datos de demostración o desea volver al estado inicial, ejecute `docker compose down -v` y luego `docker compose up -d --build`. Esto elimina la base de datos y vuelve a cargar el seed.
+
+### Prueba de humo end-to-end (API)
+Con los contenedores levantados:
+```bash
+node scripts/api-smoke-test.mjs
+```
+El script crea datos de prueba con un sufijo único y valida autenticación, RBAC, catálogos, prorrateo, solicitudes, pagos FIFO, anulaciones, PDFs, cajas chicas y auditoría.
+
 ### Ejecución Manual en Entorno Local (Desarrollo y Pruebas Unitarias)
 ```bash
+# 0. Crear la base de datos y cargar el esquema + datos de demostración
+createdb scpa_db
+psql -d scpa_db -f database/01_init_schema.sql
+psql -d scpa_db -f database/02_seed_data.sql
+
+# Copiar variables de entorno del backend (ajustar DATABASE_URL si es necesario)
+cp backend/.env.example backend/.env
+
 # 1. Instalar dependencias y generar cliente Prisma en Backend
 npm --prefix backend install
 npm --prefix backend run prisma:generate
 
-# 2. Ejecutar las 27 suites de Pruebas Unitarias 1:1 en Backend (186 tests con patrón AAA)
+# 2. Ejecutar las 27 suites de Pruebas Unitarias 1:1 en Backend (188 tests con patrón AAA)
 npm --prefix backend test -- --runInBand
 
-# 3. Poblar datos iniciales de prueba (Seed programático con Prisma)
+# 3. Poblar datos iniciales de prueba completos (catálogos, asignaciones,
+#    causaciones, solicitud, pago FIFO y caja chica con arrastre)
 npm --prefix backend run prisma:seed
 
-# 4. Instalar dependencias y ejecutar las 4 suites de Pruebas Unitarias en Frontend (21 tests en Vitest)
+# 4. Instalar dependencias y ejecutar las 5 suites de Pruebas Unitarias en Frontend (25 tests en Vitest)
 npm --prefix frontend install
 npm --prefix frontend test
 
@@ -145,6 +165,7 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 
 ## 8. Documentación Adicional para Evaluación
 
+* 📋 [Informe de Estado, Validación y Pendientes](./docs/INFORME_ESTADO_Y_PENDIENTES.md)
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)
 * 🧪 [Estándares de Desarrollo, Clean Code y Unit Testing 1:1](./docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md)
 * 📄 [Guía de Decisiones Técnicas y Sustentación para la Defensa](./docs/DECISIONES_TECNICAS_DEFENSA.md)

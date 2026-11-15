@@ -43,15 +43,14 @@ type WorkspaceTab =
 interface ExecutiveSummaryData {
   totalAccruedUsd: string;
   totalPaidUsd: string;
-  totalPendingUsd: string;
-  beneficiaryCount: number;
-  debtsByBeneficiary: Array<{
+  totalPendingDebtUsd: string;
+  beneficiaryBalances: Array<{
     beneficiaryId: string;
     beneficiaryName: string;
-    dni: string;
-    totalAccrued: string;
-    totalPaid: string;
-    pendingBalance: string;
+    beneficiaryDni: string;
+    totalAccruedUsd: string;
+    totalPaidUsd: string;
+    totalDebtDueUsd: string;
   }>;
 }
 
@@ -85,7 +84,6 @@ const FALLBACK_PROJECTS: LiveProject[] = [
     scope: ProjectScope.INTERNO,
     startDate: '2026-01-01',
     endDate: '2026-12-31',
-    budget: '25000.00',
     status: ProjectStatus.ACTIVO,
   },
   {
@@ -96,7 +94,6 @@ const FALLBACK_PROJECTS: LiveProject[] = [
     scope: ProjectScope.EXTERNO,
     startDate: '2026-01-01',
     endDate: '2026-12-31',
-    budget: '40000.00',
     status: ProjectStatus.ACTIVO,
   },
   {
@@ -107,7 +104,6 @@ const FALLBACK_PROJECTS: LiveProject[] = [
     scope: ProjectScope.INTERNO,
     startDate: '2026-01-01',
     endDate: '2026-06-30',
-    budget: '15000.00',
     status: ProjectStatus.ACTIVO,
   },
 ];
@@ -117,14 +113,14 @@ const FALLBACK_PAYMENT_GROUPS: LivePaymentGroup[] = [
     id: 'pg-1',
     name: 'Nómina Quincenal Investigadores',
     periodicity: Periodicity.QUINCENAL,
-    description: 'Pagos cada 15/16 días calendario',
+    cutoffRules: 'Pagos cada 15/16 días calendario',
     isActive: true,
   },
   {
     id: 'pg-2',
     name: 'Nómina Mensual Coordinadores Técnicos',
     periodicity: Periodicity.MENSUAL,
-    description: 'Pagos al cierre de cada mes',
+    cutoffRules: 'Pagos al cierre de cada mes',
     isActive: true,
   },
 ];
@@ -134,18 +130,16 @@ const FALLBACK_BENEFICIARIES: LiveBeneficiary[] = [
     id: 'b-1',
     dni: 'V-15234567',
     fullName: 'Dr. Alejandro Rivas',
-    roleTitle: 'Investigador Principal Física',
     email: 'arivas@uc.edu.ve',
-    bankReference: 'Zelle / Cuenta USD #4401',
+    bankInfo: 'Zelle / Cuenta USD #4401',
     isActive: true,
   },
   {
     id: 'b-2',
     dni: 'V-19876543',
     fullName: 'Dra. Sofía Méndez',
-    roleTitle: 'Investigadora Asociada Química',
     email: 'smendez@uc.edu.ve',
-    bankReference: 'Zelle / Efectivo Taquilla #1108',
+    bankInfo: 'Zelle / Efectivo Taquilla #1108',
     isActive: true,
   },
 ];
@@ -233,18 +227,26 @@ export function App(): React.ReactElement {
   const loadWorkspaceData = useCallback(
     async (authToken: string, role: UserRole) => {
       try {
-        const [projRes, pgRes, benRes, asigRes] = await Promise.all([
+        const [projRes, pgRes, benRes] = await Promise.all([
           apiRequest<LiveProject[]>('/projects', { token: authToken }),
           apiRequest<LivePaymentGroup[]>('/payment-groups', {
             token: authToken,
           }),
           apiRequest<LiveBeneficiary[]>('/beneficiaries', { token: authToken }),
-          apiRequest<LiveAssignment[]>('/assignments', { token: authToken }),
         ]);
         setProjects(projRes);
         setPaymentGroups(pgRes);
         setBeneficiaries(benRes);
-        setAssignments(asigRes);
+
+        // RN-SEG-02: ADMIN no gestiona ni consulta asignaciones.
+        if (role === UserRole.ADMIN) {
+          setAssignments([]);
+        } else {
+          const asigRes = await apiRequest<LiveAssignment[]>('/assignments', {
+            token: authToken,
+          });
+          setAssignments(asigRes);
+        }
 
         if (role === UserRole.GENERADOR || role === UserRole.RECEPTOR) {
           const [accRes, reqRes, payRes, pcRes, sumRes] = await Promise.all([
@@ -361,7 +363,7 @@ export function App(): React.ReactElement {
     ? Number(summary.totalPaidUsd)
     : accruals.reduce((acc, r) => acc + Number(r.paidAmount), 0);
   const totalPendingDisplay = summary
-    ? Number(summary.totalPendingUsd)
+    ? Number(summary.totalPendingDebtUsd)
     : accruals.reduce((acc, r) => acc + Number(r.balanceDue), 0);
 
   return (
@@ -657,24 +659,24 @@ export function App(): React.ReactElement {
                   </tr>
                 </thead>
                 <tbody>
-                  {(summary?.debtsByBeneficiary ?? []).map((row) => (
+                  {(summary?.beneficiaryBalances ?? []).map((row) => (
                     <tr key={row.beneficiaryId} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '0.55rem', fontWeight: 600 }}>{row.dni}</td>
+                      <td style={{ padding: '0.55rem', fontWeight: 600 }}>{row.beneficiaryDni}</td>
                       <td style={{ padding: '0.55rem', fontWeight: 600 }}>{row.beneficiaryName}</td>
                       <td style={{ padding: '0.55rem' }}>
-                        {formatUsdCurrency(Number(row.totalAccrued))}
+                        {formatUsdCurrency(Number(row.totalAccruedUsd))}
                       </td>
                       <td style={{ padding: '0.55rem', color: '#047857', fontWeight: 600 }}>
-                        {formatUsdCurrency(Number(row.totalPaid))}
+                        {formatUsdCurrency(Number(row.totalPaidUsd))}
                       </td>
                       <td
                         style={{
                           padding: '0.55rem',
-                          color: Number(row.pendingBalance) > 0 ? '#b91c1c' : '#64748b',
+                          color: Number(row.totalDebtDueUsd) > 0 ? '#b91c1c' : '#64748b',
                           fontWeight: 700,
                         }}
                       >
-                        {formatUsdCurrency(Number(row.pendingBalance))}
+                        {formatUsdCurrency(Number(row.totalDebtDueUsd))}
                       </td>
                     </tr>
                   ))}

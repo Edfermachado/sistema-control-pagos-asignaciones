@@ -190,3 +190,23 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   4. **Verificación Integral de Pruebas Unitarias 1:1 (`TEST-01`):**
      * **Backend (Jest):** 27 suites pasadas (`188/188 unit tests` en verde) + `nest build` exitoso.
      * **Frontend (Vitest):** 5 suites pasadas (`25/25 unit tests` en verde) + `vite build` exitoso.
+
+---
+
+### Interacción #11 — Auditoría Integral, Corrección de Contratos Frontend/Backend y Prueba de Humo End-to-End
+* **Fecha:** Noviembre 2026
+* **Herramienta / Modelo:** DeepSeek V4.1 Flash (OpenCode)
+* **Indicación (Prompt) del Usuario:**
+  > *"Necesito que analices el pdf del directorio actual, se trata de un proyecto con varios compañeros... analices todo y dejes todo listo para que yo pueda comenzar a hacer pruebas, además de un reporte de que son las cosas que aún faltan por llevar a cabo."*
+* **Hallazgos y correcciones aplicadas:**
+  1. **Acceso al sistema (`database/02_seed_data.sql`):** el hash del seed SQL no era compatible con `scrypt`; los tres usuarios demo devolvían `401`. Se reemplazó por un hash válido y se verificó el login de los tres roles.
+  2. **Contratos de API en Frontend:** se alinearon `App.tsx`, `CatalogsAndAssignmentsWorkspace.tsx` y `FinancialEnginePanel.tsx` con los DTO y respuestas reales del backend (resumen ejecutivo, montos, estados, claves de pago, revisión de solicitudes y permisos RBAC).
+  3. **Carga del workspace ADMIN:** se dejó de consultar `/assignments` con rol `ADMIN` (403 según `RN-SEG-02`), permitiendo cargar usuarios y `audit_log`.
+  4. **Seed completo (`backend/prisma/seed.ts`):** se agregaron asignaciones, causaciones, solicitud con ítems, pago FIFO, caja chica y vale histórico; se validó también sobre una base creada con `prisma db push`.
+  5. **Prueba de humo (`scripts/api-smoke-test.mjs`):** 40 verificaciones end-to-end contra Docker (RBAC, prorrateo, FIFO, sobrepago, anulación con reversión, PDFs, cajas chicas y auditoría).
+  6. **Documentación:** se agregó `docs/INFORME_ESTADO_Y_PENDIENTES.md` con el estado por requerimiento, correcciones y pendientes priorizados.
+* **Verificación final:**
+  * **Backend (Jest):** 27 suites / `188/188` tests en verde + `nest build` exitoso.
+  * **Frontend (Vitest):** 5 suites / `25/25` tests en verde + `vite build` exitoso.
+  * **Docker Compose:** stack completo levantado desde volumen limpio.
+  * **UI (Chromium headless):** dashboard, catálogos, motor financiero, cajas chicas, usuarios y auditoría sin errores de consola.
