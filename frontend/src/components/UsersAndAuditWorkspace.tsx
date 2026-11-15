@@ -160,337 +160,344 @@ export function UsersAndAuditWorkspace({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div className="stack stack--lg">
       {isAdmin && (
-        <section style={cardStyle}>
-          <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.08rem', color: '#0f172a' }}>
-            1. Administración de Usuarios y Segregación de Roles (Exclusivo ADMIN — RN-SEG-04)
-          </h2>
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
-            El Administrador gestiona cuentas del sistema pero tiene prohibido ejecutar causaciones, solicitudes, pagos o movimientos de caja chica.
-          </p>
-
-          <form onSubmit={handleCreateUser} style={formGridStyle}>
-            <input
-              type="email"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              placeholder="Correo institucional"
-              required
-              style={inputStyle}
-            />
-            <input
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="Nombre completo"
-              required
-              style={inputStyle}
-            />
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Contraseña segura"
-              required
-              style={inputStyle}
-            />
-            <select
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value as UserRole)}
-              style={inputStyle}
-            >
-              <option value={UserRole.ADMIN}>ADMIN (Administrador)</option>
-              <option value={UserRole.GENERADOR}>GENERADOR (Coordinador)</option>
-              <option value={UserRole.RECEPTOR}>RECEPTOR (Gerencia)</option>
-            </select>
-            <button type="submit" style={primaryButtonStyle}>
-              + Crear Usuario
-            </button>
-          </form>
-
-          <table style={tableStyle}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={thStyle}>Nombre</th>
-                <th style={thStyle}>Correo</th>
-                <th style={thStyle}>Rol RBAC</th>
-                <th style={thStyle}>Estado</th>
-                <th style={thStyle}>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id} style={trStyle}>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>{u.fullName}</td>
-                  <td style={tdStyle}>{u.email}</td>
-                  <td style={tdStyle}>
-                    <code>{u.role}</code>
-                  </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        padding: '0.18rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        backgroundColor: u.isActive ? '#dcfce7' : '#fee2e2',
-                        color: u.isActive ? '#065f46' : '#991b1b',
-                      }}
-                    >
-                      {u.isActive ? 'ACTIVO' : 'INACTIVO'}
-                    </span>
-                  </td>
-                  <td style={tdStyle}>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleUserStatus(u.id, u.isActive)}
-                      style={secondaryButtonStyle}
-                    >
-                      {u.isActive ? 'Desactivar' : 'Activar'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      {isAdmin && (
-        <section style={cardStyle}>
-          <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.08rem', color: '#0f172a' }}>
-            2. Parámetros Globales del Sistema (Exclusivo ADMIN — RF 2.1)
-          </h2>
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
-            Configuración clave-valor que gobierna reglas operativas del sistema.
-          </p>
-
-          <form onSubmit={handleCreateParameter} style={formGridStyle}>
-            <input
-              value={paramKey}
-              onChange={(e) => setParamKey(e.target.value)}
-              placeholder="CLAVE_PARAMETRO"
-              required
-              style={inputStyle}
-            />
-            <input
-              value={paramValue}
-              onChange={(e) => setParamValue(e.target.value)}
-              placeholder="Valor"
-              required
-              style={inputStyle}
-            />
-            <input
-              value={paramDescription}
-              onChange={(e) => setParamDescription(e.target.value)}
-              placeholder="Descripción"
-              required
-              style={inputStyle}
-            />
-            <button type="submit" style={primaryButtonStyle}>
-              + Crear Parámetro
-            </button>
-          </form>
-
-          <table style={tableStyle}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={thStyle}>Clave</th>
-                <th style={thStyle}>Valor</th>
-                <th style={thStyle}>Descripción</th>
-                <th style={thStyle}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {parameters.map((parameter) => (
-                <tr key={parameter.id} style={trStyle}>
-                  <td style={{ ...tdStyle, fontWeight: 700 }}>
-                    <code>{parameter.key}</code>
-                  </td>
-                  <td style={tdStyle}>
-                    <input
-                      value={parameterValues[parameter.id] ?? parameter.value}
-                      onChange={(e) =>
-                        setParameterValues((current) => ({
-                          ...current,
-                          [parameter.id]: e.target.value,
-                        }))
-                      }
-                      style={{ ...inputStyle, width: '150px' }}
-                    />
-                  </td>
-                  <td style={tdStyle}>{parameter.description}</td>
-                  <td style={{ ...tdStyle, display: 'flex', gap: '0.4rem' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleUpdateParameter(parameter)}
-                      style={secondaryButtonStyle}
-                    >
-                      Guardar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteParameter(parameter)}
-                      style={dangerButtonStyle}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      )}
-
-      <section
-        style={{
-          backgroundColor: '#0f172a',
-          color: '#f8fafc',
-          padding: '1.15rem',
-          borderRadius: '0.5rem',
-          border: '1px solid #334155',
-        }}
-      >
-        <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.08rem', color: '#38bdf8' }}>
-          3. Bitácora Forense Inmutable — Tabla audit_log (RN-AUD-03)
-        </h2>
-        <p style={{ margin: '0 0 0.85rem', fontSize: '0.82rem', color: '#94a3b8' }}>
-          Registro automático append-only en PostgreSQL con instantáneas JSONB previas y nuevas.
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
-          {auditLogs.map((log) => (
-            <div
-              key={log.id}
-              style={{
-                padding: '0.65rem 0.8rem',
-                backgroundColor: '#1e293b',
-                borderRadius: '0.4rem',
-                border: '1px solid #334155',
-                fontSize: '0.82rem',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <strong style={{ color: '#38bdf8' }}>[{log.action}]</strong>{' '}
-                  · Tabla: <code>{log.tableName}</code> · ID Registro:{' '}
-                  <code>{log.recordId}</code>
-                </div>
-                <div style={{ color: '#cbd5e1' }}>
-                  Rol: <code>{log.userRole ?? 'SISTEMA'}</code> ·{' '}
-                  {String(log.createdAt).slice(0, 19).replace('T', ' ')} UTC
-                </div>
-              </div>
-              {Boolean(log.oldValues || log.newValues) && (
-                <div
-                  style={{
-                    marginTop: '0.4rem',
-                    fontFamily: 'monospace',
-                    fontSize: '0.76rem',
-                    color: '#cbd5e1',
-                    wordBreak: 'break-all',
-                  }}
-                >
-                  {log.oldValues ? (
-                    <span>
-                      Antes: {JSON.stringify(log.oldValues)} →{' '}
-                    </span>
-                  ) : null}
-                  {log.newValues ? (
-                    <span style={{ color: '#86efac' }}>
-                      Nuevo: {JSON.stringify(log.newValues)}
-                    </span>
-                  ) : null}
-                </div>
-              )}
+        <section className="sheet">
+          <div className="sheet__head">
+            <div>
+              <h2 className="sheet__title">
+                Administración de usuarios y segregación de roles
+              </h2>
+              <p className="sheet__hint">
+                El administrador gestiona cuentas del sistema, pero tiene
+                prohibido ejecutar causaciones, solicitudes, pagos o movimientos
+                de caja chica. Exclusivo ADMIN — RN-SEG-02.
+              </p>
             </div>
-          ))}
+          </div>
+          <div className="sheet__body">
+            <form className="form-grid" onSubmit={handleCreateUser}>
+              <div className="field">
+                <label className="field__label" htmlFor="user-email">
+                  Correo institucional
+                </label>
+                <input
+                  id="user-email"
+                  className="input"
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  placeholder="Correo institucional"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="user-name">
+                  Nombre completo
+                </label>
+                <input
+                  id="user-name"
+                  className="input"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Nombre completo"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="user-role">
+                  Rol
+                </label>
+                <select
+                  id="user-role"
+                  className="select"
+                  value={newRole}
+                  onChange={(e) => setNewRole(e.target.value as UserRole)}
+                >
+                  <option value={UserRole.ADMIN}>ADMIN (Administrador)</option>
+                  <option value={UserRole.GENERADOR}>
+                    GENERADOR (Coordinador)
+                  </option>
+                  <option value={UserRole.RECEPTOR}>RECEPTOR (Gerencia)</option>
+                </select>
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="user-password">
+                  Contraseña
+                </label>
+                <input
+                  id="user-password"
+                  className="input"
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Contraseña segura"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn">
+                + Crear Usuario
+              </button>
+            </form>
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Correo</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Rol</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={5}>
+                        Sin usuarios registrados. Use el formulario de alta para
+                        crear la primera cuenta.
+                      </td>
+                    </tr>
+                  )}
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td className="nowrap">{u.email}</td>
+                      <td className="table__strong">{u.fullName}</td>
+                      <td>{u.role}</td>
+                      <td>
+                        <span
+                          className={`badge ${
+                            u.isActive ? 'badge--ok' : 'badge--alert'
+                          }`}
+                        >
+                          {u.isActive ? 'ACTIVO' : 'INACTIVO'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() =>
+                            handleToggleUserStatus(u.id, u.isActive)
+                          }
+                        >
+                          {u.isActive ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {isAdmin && (
+        <section className="sheet">
+          <div className="sheet__head">
+            <div>
+              <h2 className="sheet__title">Parámetros globales del sistema</h2>
+              <p className="sheet__hint">
+                Configuración clave-valor que gobierna las reglas operativas del
+                sistema. Exclusivo ADMIN — RF 2.1.
+              </p>
+            </div>
+          </div>
+          <div className="sheet__body">
+            <form className="form-row" onSubmit={handleCreateParameter}>
+              <div className="field">
+                <label className="field__label" htmlFor="parameter-key">
+                  Clave
+                </label>
+                <input
+                  id="parameter-key"
+                  className="input"
+                  value={paramKey}
+                  onChange={(e) => setParamKey(e.target.value)}
+                  placeholder="CLAVE_PARAMETRO"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="parameter-value">
+                  Valor
+                </label>
+                <input
+                  id="parameter-value"
+                  className="input"
+                  value={paramValue}
+                  onChange={(e) => setParamValue(e.target.value)}
+                  placeholder="Valor"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label
+                  className="field__label"
+                  htmlFor="parameter-description"
+                >
+                  Descripción
+                </label>
+                <input
+                  id="parameter-description"
+                  className="input"
+                  value={paramDescription}
+                  onChange={(e) => setParamDescription(e.target.value)}
+                  placeholder="Descripción"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn">
+                + Crear Parámetro
+              </button>
+            </form>
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Clave</th>
+                    <th scope="col">Valor</th>
+                    <th scope="col">Descripción</th>
+                    <th scope="col">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parameters.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={4}>
+                        Sin parámetros globales. Registre uno con el formulario
+                        de alta.
+                      </td>
+                    </tr>
+                  )}
+                  {parameters.map((parameter) => (
+                    <tr key={parameter.id}>
+                      <td className="nowrap">
+                        <code>{parameter.key}</code>
+                      </td>
+                      <td>
+                        <input
+                          className="input"
+                          value={
+                            parameterValues[parameter.id] ?? parameter.value
+                          }
+                          onChange={(e) =>
+                            setParameterValues((current) => ({
+                              ...current,
+                              [parameter.id]: e.target.value,
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>{parameter.description}</td>
+                      <td>
+                        <div className="btn-group">
+                          <button
+                            type="button"
+                            className="btn btn--sm"
+                            onClick={() => handleUpdateParameter(parameter)}
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--danger btn--sm"
+                            onClick={() => handleDeleteParameter(parameter)}
+                          >
+                            Eliminar
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Bitácora de auditoría</h2>
+            <p className="sheet__hint">
+              Registro automático append-only en PostgreSQL con instantáneas
+              JSONB previas y nuevas. RN-AUD-03.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body sheet__body--flush">
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Fecha</th>
+                  <th scope="col">Usuario</th>
+                  <th scope="col">Rol</th>
+                  <th scope="col">Acción</th>
+                  <th scope="col">Tabla</th>
+                  <th scope="col">Registro</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.length === 0 && (
+                  <tr className="table__empty">
+                    <td colSpan={6}>
+                      Sin registros de auditoría. Las operaciones sobre la base
+                      de datos quedarán registradas aquí.
+                    </td>
+                  </tr>
+                )}
+                {auditLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td className="nowrap">
+                      {String(log.createdAt).slice(0, 19).replace('T', ' ')} UTC
+                    </td>
+                    <td>{log.user?.fullName ?? log.user?.email ?? '—'}</td>
+                    <td>{log.userRole ?? 'SISTEMA'}</td>
+                    <td className="table__strong">{log.action}</td>
+                    <td className="nowrap">
+                      <code>{log.tableName}</code>
+                    </td>
+                    <td className="nowrap">
+                      <code>{log.recordId}</code>
+                      {Boolean(log.oldValues || log.newValues) && (
+                        <details>
+                          <summary>Cambios</summary>
+                          <pre>
+                            {[
+                              log.oldValues
+                                ? `Antes: ${JSON.stringify(
+                                    log.oldValues,
+                                    null,
+                                    2,
+                                  )}`
+                                : '',
+                              log.newValues
+                                ? `Nuevo: ${JSON.stringify(
+                                    log.newValues,
+                                    null,
+                                    2,
+                                  )}`
+                                : '',
+                            ]
+                              .filter(Boolean)
+                              .join('\n\n')}
+                          </pre>
+                        </details>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>
   );
 }
-
-const cardStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  padding: '1.15rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #cbd5e1',
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '0.6rem',
-  marginBottom: '1rem',
-  padding: '0.75rem',
-  backgroundColor: '#f8fafc',
-  borderRadius: '0.4rem',
-  border: '1px solid #e2e8f0',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.45rem 0.6rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #94a3b8',
-  fontSize: '0.85rem',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: '0.45rem 0.75rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#1e3a8a',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.82rem',
-  cursor: 'pointer',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '0.3rem 0.6rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #1e40af',
-  backgroundColor: '#eff6ff',
-  color: '#1e3a8a',
-  fontWeight: 600,
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-};
-
-const dangerButtonStyle: React.CSSProperties = {
-  padding: '0.3rem 0.6rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #dc2626',
-  backgroundColor: '#fef2f2',
-  color: '#b91c1c',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.85rem',
-};
-
-const theadRowStyle: React.CSSProperties = {
-  backgroundColor: '#f1f5f9',
-  textAlign: 'left',
-  borderBottom: '2px solid #cbd5e1',
-};
-
-const thStyle: React.CSSProperties = {
-  padding: '0.5rem',
-  color: '#334155',
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.5rem',
-};

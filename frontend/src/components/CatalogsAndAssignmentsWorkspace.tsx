@@ -71,6 +71,21 @@ interface CatalogsProps {
   onNotify: (type: 'success' | 'error', message: string) => void;
 }
 
+const PROJECT_AREA_DISPLAY: Record<
+  ProjectArea,
+  { label: string; className: string }
+> = {
+  [ProjectArea.FISICA]: { label: 'Física', className: 'area--fisica' },
+  [ProjectArea.QUIMICA]: { label: 'Química', className: 'area--quimica' },
+  [ProjectArea.BIOLOGIA]: { label: 'Biología', className: 'area--biologia' },
+};
+
+const PROJECT_STATUS_BADGE: Record<ProjectStatus, string> = {
+  [ProjectStatus.ACTIVO]: 'badge--ok',
+  [ProjectStatus.INACTIVO]: 'badge--warn',
+  [ProjectStatus.CERRADO]: 'badge--plain',
+};
+
 export function CatalogsAndAssignmentsWorkspace({
   token,
   activeRole,
@@ -441,648 +456,791 @@ export function CatalogsAndAssignmentsWorkspace({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* SECCIÓN 1: PROYECTOS CIENTÍFICOS */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          1. Proyectos de Investigación FACYT (Física, Química y Biología — RN-CAT-01 / RN-CAT-02)
-        </h2>
-
-        {canManageProjects && (
-          <form onSubmit={handleSaveProject} style={formGridStyle}>
-            <input
-              value={projCode}
-              onChange={(e) => setProjCode(e.target.value)}
-              placeholder="Código (ej. PROY-FIS-01)"
-              required
-              disabled={Boolean(editingProjectId)}
-              style={inputStyle}
-            />
-            <input
-              value={projName}
-              onChange={(e) => setProjName(e.target.value)}
-              placeholder="Nombre del Proyecto"
-              required
-              style={inputStyle}
-            />
-            <select
-              value={projArea}
-              onChange={(e) => setProjArea(e.target.value as ProjectArea)}
-              style={inputStyle}
-            >
-              <option value={ProjectArea.FISICA}>FÍSICA</option>
-              <option value={ProjectArea.QUIMICA}>QUÍMICA</option>
-              <option value={ProjectArea.BIOLOGIA}>BIOLOGÍA</option>
-            </select>
-            <select
-              value={projScope}
-              onChange={(e) => setProjScope(e.target.value as ProjectScope)}
-              style={inputStyle}
-            >
-              <option value={ProjectScope.INTERNO}>INTERNO (UC)</option>
-              <option value={ProjectScope.EXTERNO}>EXTERNO</option>
-            </select>
-            <input
-              type="date"
-              value={projStart}
-              onChange={(e) => setProjStart(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={projEnd}
-              onChange={(e) => setProjEnd(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <button type="submit" style={primaryButtonStyle}>
-              {editingProjectId ? 'Actualizar Proyecto' : '+ Crear Proyecto'}
-            </button>
-            {editingProjectId && (
-              <button
-                type="button"
-                onClick={cancelEditingProject}
-                style={secondaryButtonStyle}
-              >
-                Cancelar
-              </button>
+    <div className="stack stack--lg">
+      {/* PROYECTOS */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Proyectos de investigación</h2>
+            <p className="sheet__hint">
+              Área, ámbito y vigencia de cada proyecto científico de FACYT.
+              RN-CAT-01 y RN-CAT-02.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            {canManageProjects && (
+              <form onSubmit={handleSaveProject} className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-code">
+                    Código
+                  </label>
+                  <input
+                    id="proj-code"
+                    className="input"
+                    value={projCode}
+                    onChange={(e) => setProjCode(e.target.value)}
+                    required
+                    disabled={Boolean(editingProjectId)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-name">
+                    Nombre del proyecto
+                  </label>
+                  <input
+                    id="proj-name"
+                    className="input"
+                    value={projName}
+                    onChange={(e) => setProjName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-area">
+                    Área
+                  </label>
+                  <select
+                    id="proj-area"
+                    className="select"
+                    value={projArea}
+                    onChange={(e) => setProjArea(e.target.value as ProjectArea)}
+                  >
+                    <option value={ProjectArea.FISICA}>Física</option>
+                    <option value={ProjectArea.QUIMICA}>Química</option>
+                    <option value={ProjectArea.BIOLOGIA}>Biología</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-scope">
+                    Ámbito
+                  </label>
+                  <select
+                    id="proj-scope"
+                    className="select"
+                    value={projScope}
+                    onChange={(e) => setProjScope(e.target.value as ProjectScope)}
+                  >
+                    <option value={ProjectScope.INTERNO}>INTERNO (UC)</option>
+                    <option value={ProjectScope.EXTERNO}>EXTERNO</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-start">
+                    Inicio
+                  </label>
+                  <input
+                    id="proj-start"
+                    className="input"
+                    type="date"
+                    value={projStart}
+                    onChange={(e) => setProjStart(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="proj-end">
+                    Fin
+                  </label>
+                  <input
+                    id="proj-end"
+                    className="input"
+                    type="date"
+                    value={projEnd}
+                    onChange={(e) => setProjEnd(e.target.value)}
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  {editingProjectId ? 'Actualizar Proyecto' : '+ Crear Proyecto'}
+                </button>
+                {editingProjectId && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={cancelEditingProject}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </form>
             )}
-          </form>
-        )}
 
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Código</th>
-              <th style={thStyle}>Nombre</th>
-              <th style={thStyle}>Área</th>
-              <th style={thStyle}>Ámbito</th>
-              <th style={thStyle}>Vigencia</th>
-              <th style={thStyle}>Estado</th>
-              {canManageProjects && <th style={thStyle}>Acciones</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {projects.map((p) => (
-              <tr key={p.id} style={trStyle}>
-                <td style={{ ...tdStyle, fontWeight: 700 }}>{p.code}</td>
-                <td style={tdStyle}>{p.name}</td>
-                <td style={tdStyle}>{p.area}</td>
-                <td style={tdStyle}>{p.scope}</td>
-                <td style={tdStyle}>
-                  {String(p.startDate).slice(0, 10)} →{' '}
-                  {String(p.endDate).slice(0, 10)}
-                </td>
-                <td style={tdStyle}>
-                  <span
-                    style={{
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      backgroundColor:
-                        p.status === ProjectStatus.ACTIVO ? '#dcfce7' : '#fee2e2',
-                      color:
-                        p.status === ProjectStatus.ACTIVO ? '#065f46' : '#991b1b',
-                    }}
-                  >
-                    {p.status}
-                  </span>
-                </td>
-                {canManageProjects && (
-                  <td style={tdStyle}>
-                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                      <button
-                        type="button"
-                        onClick={() => startEditingProject(p)}
-                        style={secondaryButtonStyle}
-                      >
-                        Editar
-                      </button>
-                      <select
-                        value={p.status}
-                        onChange={(e) =>
-                          handleChangeProjectStatus(
-                            p.id,
-                            e.target.value as ProjectStatus,
-                          )
-                        }
-                        style={{ ...inputStyle, padding: '0.25rem', fontSize: '0.8rem' }}
-                      >
-                        <option value={ProjectStatus.ACTIVO}>ACTIVO</option>
-                        <option value={ProjectStatus.INACTIVO}>INACTIVO</option>
-                        <option value={ProjectStatus.CERRADO}>CERRADO</option>
-                      </select>
-                    </div>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Código</th>
+                    <th scope="col">Nombre</th>
+                    <th scope="col">Área</th>
+                    <th scope="col">Ámbito</th>
+                    <th scope="col">Vigencia</th>
+                    <th scope="col">Estado</th>
+                    {canManageProjects && <th scope="col">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {projects.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={canManageProjects ? 7 : 6}>
+                        No hay proyectos en el catálogo. Registre el primero con
+                        el formulario superior.
+                      </td>
+                    </tr>
+                  )}
+                  {projects.map((p) => (
+                    <tr key={p.id}>
+                      <td className="nowrap">{p.code}</td>
+                      <td className="table__strong">{p.name}</td>
+                      <td>
+                        <span
+                          className={`area ${PROJECT_AREA_DISPLAY[p.area].className}`}
+                        >
+                          {PROJECT_AREA_DISPLAY[p.area].label}
+                        </span>
+                      </td>
+                      <td>{p.scope}</td>
+                      <td className="nowrap">
+                        {String(p.startDate).slice(0, 10)} →{' '}
+                        {String(p.endDate).slice(0, 10)}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${PROJECT_STATUS_BADGE[p.status]}`}
+                        >
+                          {p.status}
+                        </span>
+                      </td>
+                      {canManageProjects && (
+                        <td>
+                          <div className="btn-group">
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() => startEditingProject(p)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() =>
+                                handleChangeProjectStatus(
+                                  p.id,
+                                  p.status === ProjectStatus.ACTIVO
+                                    ? ProjectStatus.INACTIVO
+                                    : ProjectStatus.ACTIVO,
+                                )
+                              }
+                            >
+                              {p.status === ProjectStatus.ACTIVO
+                                ? 'Desactivar'
+                                : 'Activar'}
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* SECCIÓN 2: GRUPOS DE PAGO Y BENEFICIARIOS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))', gap: '1.25rem' }}>
-        <section style={cardStyle}>
-          <h2 style={sectionTitleStyle}>
-            2. Grupos de Pago y Periodicidades (RN-CAT-03)
-          </h2>
-          {canManagePaymentGroups && (
-            <form onSubmit={handleSavePaymentGroup} style={formGridStyle}>
-              <input
-                value={pgName}
-                onChange={(e) => setPgName(e.target.value)}
-                placeholder="Nombre del Grupo"
-                required
-                style={inputStyle}
-              />
-              <select
-                value={pgPeriodicity}
-                onChange={(e) => setPgPeriodicity(e.target.value as Periodicity)}
-                style={inputStyle}
-              >
-                <option value={Periodicity.SEMANAL}>SEMANAL</option>
-                <option value={Periodicity.QUINCENAL}>QUINCENAL</option>
-                <option value={Periodicity.MENSUAL}>MENSUAL</option>
-              </select>
-              <input
-                value={pgCutoffRules}
-                onChange={(e) => setPgCutoffRules(e.target.value)}
-                placeholder="Regla de corte (ej. días 15 y último del mes)"
-                required
-                style={inputStyle}
-              />
-              <button type="submit" style={primaryButtonStyle}>
-                {editingGroupId ? 'Actualizar Grupo' : '+ Crear Grupo'}
-              </button>
-              {editingGroupId && (
-                <button
-                  type="button"
-                  onClick={cancelEditingGroup}
-                  style={secondaryButtonStyle}
-                >
-                  Cancelar
+      {/* GRUPOS DE PAGO Y FECHAS DE CORTE */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Grupos de pago y fechas de corte</h2>
+            <p className="sheet__hint">
+              Periodicidad y regla de corte de cada grupo. Los períodos estándar
+              se generan al crear el grupo; el ADMIN puede agregar o eliminar
+              cortes personalizados. RN-CAT-03.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            {canManagePaymentGroups && (
+              <form onSubmit={handleSavePaymentGroup} className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="pg-name">
+                    Nombre del grupo
+                  </label>
+                  <input
+                    id="pg-name"
+                    className="input"
+                    value={pgName}
+                    onChange={(e) => setPgName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="pg-periodicity">
+                    Periodicidad
+                  </label>
+                  <select
+                    id="pg-periodicity"
+                    className="select"
+                    value={pgPeriodicity}
+                    onChange={(e) =>
+                      setPgPeriodicity(e.target.value as Periodicity)
+                    }
+                  >
+                    <option value={Periodicity.SEMANAL}>SEMANAL</option>
+                    <option value={Periodicity.QUINCENAL}>QUINCENAL</option>
+                    <option value={Periodicity.MENSUAL}>MENSUAL</option>
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="pg-cutoff">
+                    Regla de corte
+                  </label>
+                  <input
+                    id="pg-cutoff"
+                    className="input"
+                    value={pgCutoffRules}
+                    onChange={(e) => setPgCutoffRules(e.target.value)}
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  {editingGroupId ? 'Actualizar Grupo' : '+ Crear Grupo'}
                 </button>
-              )}
-            </form>
-          )}
-          <table style={tableStyle}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={thStyle}>Grupo</th>
-                <th style={thStyle}>Periodicidad</th>
-                <th style={thStyle}>Regla de Corte</th>
-                <th style={thStyle}>Estado</th>
-                {canManagePaymentGroups && <th style={thStyle}>Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {paymentGroups.map((pg) => (
-                <tr key={pg.id} style={trStyle}>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>{pg.name}</td>
-                  <td style={tdStyle}>
-                    <code>{pg.periodicity}</code>
-                  </td>
-                  <td style={tdStyle}>{pg.cutoffRules}</td>
-                  <td style={tdStyle}>{pg.isActive ? 'ACTIVO' : 'INACTIVO'}</td>
-                  {canManagePaymentGroups && (
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => startEditingGroup(pg)}
-                          style={secondaryButtonStyle}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePaymentGroup(pg)}
-                          style={dangerOutlineButtonStyle}
-                        >
-                          {pg.isActive ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </div>
-                    </td>
+                {editingGroupId && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={cancelEditingGroup}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </form>
+            )}
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Grupo</th>
+                    <th scope="col">Periodicidad</th>
+                    <th scope="col">Regla de corte</th>
+                    <th scope="col">Estado</th>
+                    {canManagePaymentGroups && <th scope="col">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentGroups.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={canManagePaymentGroups ? 5 : 4}>
+                        No hay grupos de pago registrados. Cree uno para definir
+                        sus fechas de corte.
+                      </td>
+                    </tr>
                   )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-
-        <section style={cardStyle}>
-          <h2 style={sectionTitleStyle}>
-            3. Beneficiarios (Sin Cuenta de Usuario — RN-SEG-01)
-          </h2>
-          {canManageBeneficiaries && (
-            <form onSubmit={handleSaveBeneficiary} style={formGridStyle}>
-              <input
-                value={benDni}
-                onChange={(e) => setBenDni(e.target.value)}
-                placeholder="Cédula (ej. V-18456789)"
-                required
-                disabled={Boolean(editingBeneficiaryId)}
-                style={inputStyle}
-              />
-              <input
-                value={benName}
-                onChange={(e) => setBenName(e.target.value)}
-                placeholder="Nombre Completo"
-                required
-                style={inputStyle}
-              />
-              <input
-                value={benEmail}
-                onChange={(e) => setBenEmail(e.target.value)}
-                placeholder="Correo"
-                style={inputStyle}
-              />
-              <input
-                value={benPhone}
-                onChange={(e) => setBenPhone(e.target.value)}
-                placeholder="Teléfono"
-                style={inputStyle}
-              />
-              <input
-                value={benBank}
-                onChange={(e) => setBenBank(e.target.value)}
-                placeholder="Datos de Pago / Zelle / Banco"
-                style={inputStyle}
-              />
-              <button type="submit" style={primaryButtonStyle}>
-                {editingBeneficiaryId
-                  ? 'Actualizar Beneficiario'
-                  : '+ Registrar Beneficiario'}
-              </button>
-              {editingBeneficiaryId && (
-                <button
-                  type="button"
-                  onClick={cancelEditingBeneficiary}
-                  style={secondaryButtonStyle}
-                >
-                  Cancelar
-                </button>
-              )}
-            </form>
-          )}
-          <table style={tableStyle}>
-            <thead>
-              <tr style={theadRowStyle}>
-                <th style={thStyle}>Cédula</th>
-                <th style={thStyle}>Beneficiario</th>
-                <th style={thStyle}>Correo</th>
-                <th style={thStyle}>Referencia Pago</th>
-                <th style={thStyle}>Estado</th>
-                {canManageBeneficiaries && <th style={thStyle}>Acciones</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {beneficiaries.map((b) => (
-                <tr key={b.id} style={trStyle}>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>{b.dni}</td>
-                  <td style={tdStyle}>{b.fullName}</td>
-                  <td style={tdStyle}>{b.email ?? '—'}</td>
-                  <td style={tdStyle}>{b.bankInfo ?? '—'}</td>
-                  <td style={tdStyle}>{b.isActive ? 'ACTIVO' : 'INACTIVO'}</td>
-                  {canManageBeneficiaries && (
-                    <td style={tdStyle}>
-                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                        <button
-                          type="button"
-                          onClick={() => startEditingBeneficiary(b)}
-                          style={secondaryButtonStyle}
+                  {paymentGroups.map((pg) => (
+                    <tr key={pg.id}>
+                      <td className="table__strong">{pg.name}</td>
+                      <td>{pg.periodicity}</td>
+                      <td>{pg.cutoffRules}</td>
+                      <td>
+                        <span
+                          className={`badge ${pg.isActive ? 'badge--ok' : 'badge--warn'}`}
                         >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleBeneficiary(b)}
-                          style={dangerOutlineButtonStyle}
-                        >
-                          {b.isActive ? 'Desactivar' : 'Activar'}
-                        </button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
-      </div>
+                          {pg.isActive ? 'ACTIVO' : 'INACTIVO'}
+                        </span>
+                      </td>
+                      {canManagePaymentGroups && (
+                        <td>
+                          <div className="btn-group">
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() => startEditingGroup(pg)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn--sm ${pg.isActive ? 'btn--danger' : 'btn--ghost'}`}
+                              onClick={() => handleTogglePaymentGroup(pg)}
+                            >
+                              {pg.isActive ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
-      {/* SECCIÓN 4: FECHAS DE CORTE CONFIGURABLES */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          4. Fechas de Corte y Períodos de Pago (RN-CAT-03)
-        </h2>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
-          Los períodos estándar se generan automáticamente al crear el grupo.
-          El ADMIN puede agregar o eliminar cortes personalizados.
-        </p>
-        <select
-          value={effectivePeriodGroupId}
-          onChange={(e) => setPeriodGroupId(e.target.value)}
-          style={{ ...inputStyle, marginBottom: '0.75rem' }}
-        >
-          {paymentGroups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name} ({group.periodicity})
-            </option>
-          ))}
-        </select>
+            <div className="subsheet">
+              <h3 className="subsheet__title">Fechas de corte del grupo</h3>
+              <div className="stack">
+                <div className="field">
+                  <label className="field__label" htmlFor="period-group">
+                    Grupo de pago
+                  </label>
+                  <select
+                    id="period-group"
+                    className="select"
+                    value={effectivePeriodGroupId}
+                    onChange={(e) => setPeriodGroupId(e.target.value)}
+                  >
+                    {paymentGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name} ({group.periodicity})
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-        {canManagePaymentGroups && (
-          <form onSubmit={handleCreatePaymentPeriod} style={formGridStyle}>
-            <input
-              type="date"
-              value={newPeriodStart}
-              onChange={(e) => setNewPeriodStart(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={newPeriodEnd}
-              onChange={(e) => setNewPeriodEnd(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              value={newPeriodLabel}
-              onChange={(e) => setNewPeriodLabel(e.target.value)}
-              placeholder="Etiqueta del corte"
-              style={inputStyle}
-            />
-            <button type="submit" style={primaryButtonStyle}>
-              + Agregar Corte
-            </button>
-          </form>
-        )}
-
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Inicio</th>
-              <th style={thStyle}>Fin</th>
-              <th style={thStyle}>Etiqueta</th>
-              {canManagePaymentGroups && <th style={thStyle}>Acción</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {periods.map((period) => (
-              <tr key={period.id} style={trStyle}>
-                <td style={tdStyle}>{String(period.periodStart).slice(0, 10)}</td>
-                <td style={tdStyle}>{String(period.periodEnd).slice(0, 10)}</td>
-                <td style={tdStyle}>{period.label ?? '—'}</td>
                 {canManagePaymentGroups && (
-                  <td style={tdStyle}>
-                    <button
-                      type="button"
-                      onClick={() => handleDeletePaymentPeriod(period.id)}
-                      style={dangerOutlineButtonStyle}
-                    >
-                      Eliminar
-                    </button>
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* SECCIÓN 5: ASIGNACIONES CONTRACTUALES EN USD */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          5. Asignaciones Contractuales en USD por Proyecto y Grupo (RN-CAT-04)
-        </h2>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
-          Un beneficiario puede participar en múltiples proyectos distintos a la vez, pero el sistema bloquea asignaciones solapadas dentro del mismo proyecto.
-        </p>
-
-        {canEditAssignments && (
-          <form onSubmit={handleCreateAssignment} style={formGridStyle}>
-            <select
-              value={asigBeneficiaryId}
-              onChange={(e) => setAsigBeneficiaryId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Seleccionar Beneficiario --</option>
-              {beneficiaries.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.fullName} ({b.dni})
-                </option>
-              ))}
-            </select>
-            <select
-              value={asigProjectId}
-              onChange={(e) => setAsigProjectId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Seleccionar Proyecto --</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} - {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={asigGroupId}
-              onChange={(e) => setAsigGroupId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Seleccionar Grupo de Pago --</option>
-              {paymentGroups.map((pg) => (
-                <option key={pg.id} value={pg.id}>
-                  {pg.name} ({pg.periodicity})
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              step="0.01"
-              value={asigAmount}
-              onChange={(e) => setAsigAmount(e.target.value)}
-              placeholder="Monto por período (USD)"
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={asigStart}
-              onChange={(e) => setAsigStart(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={asigEnd}
-              onChange={(e) => setAsigEnd(e.target.value)}
-              style={inputStyle}
-            />
-            <button type="submit" style={primaryButtonStyle}>
-              + Crear Asignación USD
-            </button>
-          </form>
-        )}
-
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Beneficiario</th>
-              <th style={thStyle}>Proyecto</th>
-              <th style={thStyle}>Grupo de Pago</th>
-              <th style={thStyle}>Monto Base (USD)</th>
-              <th style={thStyle}>Vigencia Asignación</th>
-              <th style={thStyle}>Estado</th>
-              {canEditAssignments && <th style={thStyle}>Acción</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {assignments.map((a) => (
-              <tr key={a.id} style={trStyle}>
-                <td style={{ ...tdStyle, fontWeight: 600 }}>
-                  {a.beneficiary?.fullName ?? a.beneficiaryId}
-                </td>
-                <td style={tdStyle}>
-                  <code>{a.project?.code ?? a.projectId}</code>
-                </td>
-                <td style={tdStyle}>
-                  {a.paymentGroup?.name ?? a.paymentGroupId}
-                </td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: '#0f172a' }}>
-                  {formatUsdCurrency(Number(a.amountPerPeriod))}
-                </td>
-                <td style={tdStyle}>
-                  {String(a.startDate).slice(0, 10)} →{' '}
-                  {a.endDate ? String(a.endDate).slice(0, 10) : 'Indefinido'}
-                </td>
-                <td style={tdStyle}>
-                  <span
-                    style={{
-                      padding: '0.15rem 0.45rem',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      backgroundColor: a.isActive ? '#dcfce7' : '#f1f5f9',
-                      color: a.isActive ? '#065f46' : '#64748b',
-                    }}
+                  <form
+                    onSubmit={handleCreatePaymentPeriod}
+                    className="form-row"
                   >
-                    {a.isActive ? 'ACTIVA' : 'INACTIVA'}
-                  </span>
-                </td>
-                {canEditAssignments && (
-                  <td style={tdStyle}>
-                    {a.isActive && (
-                      <button
-                        type="button"
-                        onClick={() => handleDeactivateAssignment(a.id)}
-                        style={dangerOutlineButtonStyle}
-                      >
-                        Desactivar
-                      </button>
-                    )}
-                  </td>
+                    <div className="field">
+                      <label className="field__label" htmlFor="period-start">
+                        Inicio
+                      </label>
+                      <input
+                        id="period-start"
+                        className="input"
+                        type="date"
+                        value={newPeriodStart}
+                        onChange={(e) => setNewPeriodStart(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="field__label" htmlFor="period-end">
+                        Fin
+                      </label>
+                      <input
+                        id="period-end"
+                        className="input"
+                        type="date"
+                        value={newPeriodEnd}
+                        onChange={(e) => setNewPeriodEnd(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="field__label" htmlFor="period-label">
+                        Etiqueta
+                      </label>
+                      <input
+                        id="period-label"
+                        className="input"
+                        value={newPeriodLabel}
+                        onChange={(e) => setNewPeriodLabel(e.target.value)}
+                      />
+                    </div>
+                    <button type="submit" className="btn">
+                      + Agregar Corte
+                    </button>
+                  </form>
                 )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Inicio</th>
+                        <th scope="col">Fin</th>
+                        <th scope="col">Etiqueta</th>
+                        {canManagePaymentGroups && <th scope="col">Acción</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periods.length === 0 && (
+                        <tr className="table__empty">
+                          <td colSpan={canManagePaymentGroups ? 4 : 3}>
+                            Sin fechas de corte para el grupo seleccionado.
+                            Agregue un corte personalizado.
+                          </td>
+                        </tr>
+                      )}
+                      {periods.map((period) => (
+                        <tr key={period.id}>
+                          <td className="nowrap">
+                            {String(period.periodStart).slice(0, 10)}
+                          </td>
+                          <td className="nowrap">
+                            {String(period.periodEnd).slice(0, 10)}
+                          </td>
+                          <td>{period.label ?? '—'}</td>
+                          {canManagePaymentGroups && (
+                            <td>
+                              <button
+                                type="button"
+                                className="btn btn--danger btn--sm"
+                                onClick={() =>
+                                  handleDeletePaymentPeriod(period.id)
+                                }
+                              >
+                                Eliminar
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
+
+      {/* BENEFICIARIOS */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Beneficiarios</h2>
+            <p className="sheet__hint">
+              Personas que cobran asignaciones sin cuenta de usuario en el
+              sistema. RN-SEG-01.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            {canManageBeneficiaries && (
+              <form onSubmit={handleSaveBeneficiary} className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="ben-dni">
+                    Cédula
+                  </label>
+                  <input
+                    id="ben-dni"
+                    className="input"
+                    value={benDni}
+                    onChange={(e) => setBenDni(e.target.value)}
+                    required
+                    disabled={Boolean(editingBeneficiaryId)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="ben-name">
+                    Nombre completo
+                  </label>
+                  <input
+                    id="ben-name"
+                    className="input"
+                    value={benName}
+                    onChange={(e) => setBenName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="ben-email">
+                    Correo
+                  </label>
+                  <input
+                    id="ben-email"
+                    className="input"
+                    value={benEmail}
+                    onChange={(e) => setBenEmail(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="ben-phone">
+                    Teléfono
+                  </label>
+                  <input
+                    id="ben-phone"
+                    className="input"
+                    value={benPhone}
+                    onChange={(e) => setBenPhone(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="ben-bank">
+                    Referencia de pago
+                  </label>
+                  <input
+                    id="ben-bank"
+                    className="input"
+                    value={benBank}
+                    onChange={(e) => setBenBank(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  {editingBeneficiaryId
+                    ? 'Actualizar Beneficiario'
+                    : '+ Registrar Beneficiario'}
+                </button>
+                {editingBeneficiaryId && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={cancelEditingBeneficiary}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </form>
+            )}
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Cédula</th>
+                    <th scope="col">Beneficiario</th>
+                    <th scope="col">Correo</th>
+                    <th scope="col">Referencia Pago</th>
+                    <th scope="col">Estado</th>
+                    {canManageBeneficiaries && <th scope="col">Acciones</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {beneficiaries.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={canManageBeneficiaries ? 6 : 5}>
+                        No hay beneficiarios registrados. Registre una persona
+                        para asignarle pagos.
+                      </td>
+                    </tr>
+                  )}
+                  {beneficiaries.map((b) => (
+                    <tr key={b.id}>
+                      <td className="nowrap">{b.dni}</td>
+                      <td className="table__strong">{b.fullName}</td>
+                      <td>{b.email ?? '—'}</td>
+                      <td>{b.bankInfo ?? '—'}</td>
+                      <td>
+                        <span
+                          className={`badge ${b.isActive ? 'badge--ok' : 'badge--warn'}`}
+                        >
+                          {b.isActive ? 'ACTIVO' : 'INACTIVO'}
+                        </span>
+                      </td>
+                      {canManageBeneficiaries && (
+                        <td>
+                          <div className="btn-group">
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() => startEditingBeneficiary(b)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className={`btn btn--sm ${b.isActive ? 'btn--danger' : 'btn--ghost'}`}
+                              onClick={() => handleToggleBeneficiary(b)}
+                            >
+                              {b.isActive ? 'Desactivar' : 'Activar'}
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ASIGNACIONES — RN-SEG-02: el ADMIN no gestiona ni consulta asignaciones */}
+      {activeRole !== UserRole.ADMIN && (
+        <section className="sheet">
+          <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Asignaciones en USD</h2>
+            <p className="sheet__hint">
+              Un beneficiario puede participar en múltiples proyectos distintos
+              a la vez, pero el sistema bloquea asignaciones solapadas dentro
+              del mismo proyecto. RN-CAT-04.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            {canEditAssignments && (
+              <form onSubmit={handleCreateAssignment} className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-beneficiary">
+                    Beneficiario
+                  </label>
+                  <select
+                    id="asig-beneficiary"
+                    className="select"
+                    value={asigBeneficiaryId}
+                    onChange={(e) => setAsigBeneficiaryId(e.target.value)}
+                  >
+                    <option value="">-- Seleccionar Beneficiario --</option>
+                    {beneficiaries.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.fullName} ({b.dni})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-project">
+                    Proyecto
+                  </label>
+                  <select
+                    id="asig-project"
+                    className="select"
+                    value={asigProjectId}
+                    onChange={(e) => setAsigProjectId(e.target.value)}
+                  >
+                    <option value="">-- Seleccionar Proyecto --</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} - {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-group">
+                    Grupo de pago
+                  </label>
+                  <select
+                    id="asig-group"
+                    className="select"
+                    value={asigGroupId}
+                    onChange={(e) => setAsigGroupId(e.target.value)}
+                  >
+                    <option value="">-- Seleccionar Grupo de Pago --</option>
+                    {paymentGroups.map((pg) => (
+                      <option key={pg.id} value={pg.id}>
+                        {pg.name} ({pg.periodicity})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-amount">
+                    Monto por período (USD)
+                  </label>
+                  <input
+                    id="asig-amount"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={asigAmount}
+                    onChange={(e) => setAsigAmount(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-start">
+                    Inicio
+                  </label>
+                  <input
+                    id="asig-start"
+                    className="input"
+                    type="date"
+                    value={asigStart}
+                    onChange={(e) => setAsigStart(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="asig-end">
+                    Fin
+                  </label>
+                  <input
+                    id="asig-end"
+                    className="input"
+                    type="date"
+                    value={asigEnd}
+                    onChange={(e) => setAsigEnd(e.target.value)}
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  + Crear Asignación USD
+                </button>
+              </form>
+            )}
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Beneficiario</th>
+                    <th scope="col">Proyecto</th>
+                    <th scope="col">Grupo de Pago</th>
+                    <th scope="col" className="num">
+                      Monto Base (USD)
+                    </th>
+                    <th scope="col">Vigencia Asignación</th>
+                    <th scope="col">Estado</th>
+                    {canEditAssignments && <th scope="col">Acción</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {assignments.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={canEditAssignments ? 7 : 6}>
+                        No hay asignaciones registradas. Vincule un beneficiario
+                        a un proyecto y a un grupo de pago.
+                      </td>
+                    </tr>
+                  )}
+                  {assignments.map((a) => (
+                    <tr key={a.id}>
+                      <td className="table__strong">
+                        {a.beneficiary?.fullName ?? a.beneficiaryId}
+                      </td>
+                      <td className="nowrap">
+                        {a.project?.code ?? a.projectId}
+                      </td>
+                      <td>{a.paymentGroup?.name ?? a.paymentGroupId}</td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(a.amountPerPeriod))}
+                      </td>
+                      <td className="nowrap">
+                        {String(a.startDate).slice(0, 10)} →{' '}
+                        {a.endDate
+                          ? String(a.endDate).slice(0, 10)
+                          : 'Indefinido'}
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${a.isActive ? 'badge--ok' : 'badge--warn'}`}
+                        >
+                          {a.isActive ? 'ACTIVA' : 'INACTIVA'}
+                        </span>
+                      </td>
+                      {canEditAssignments && (
+                        <td>
+                          {a.isActive && (
+                            <button
+                              type="button"
+                              className="btn btn--danger btn--sm"
+                              onClick={() => handleDeactivateAssignment(a.id)}
+                            >
+                              Desactivar
+                            </button>
+                          )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+      )}
     </div>
   );
 }
-
-const cardStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  padding: '1.15rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #cbd5e1',
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  margin: '0 0 0.75rem',
-  fontSize: '1.08rem',
-  color: '#0f172a',
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
-  gap: '0.6rem',
-  marginBottom: '1rem',
-  padding: '0.75rem',
-  backgroundColor: '#f8fafc',
-  borderRadius: '0.4rem',
-  border: '1px solid #e2e8f0',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.45rem 0.6rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #94a3b8',
-  fontSize: '0.85rem',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: '0.5rem 0.85rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#1e3a8a',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.85rem',
-  cursor: 'pointer',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '0.35rem 0.65rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #1e40af',
-  backgroundColor: '#eff6ff',
-  color: '#1e3a8a',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const dangerOutlineButtonStyle: React.CSSProperties = {
-  padding: '0.25rem 0.55rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #dc2626',
-  backgroundColor: '#fef2f2',
-  color: '#b91c1c',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.86rem',
-};
-
-const theadRowStyle: React.CSSProperties = {
-  backgroundColor: '#f1f5f9',
-  textAlign: 'left',
-  borderBottom: '2px solid #cbd5e1',
-};
-
-const thStyle: React.CSSProperties = {
-  padding: '0.55rem',
-  color: '#334155',
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.55rem',
-};

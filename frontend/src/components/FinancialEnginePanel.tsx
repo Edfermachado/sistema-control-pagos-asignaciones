@@ -10,10 +10,6 @@ import {
 } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 import {
-  getAccrualStatusMeta,
-  getPaymentRequestStatusMeta,
-} from '../utils/financial-status.util';
-import {
   LiveBeneficiary,
   LivePaymentGroup,
   LivePaymentGroupPeriod,
@@ -112,6 +108,43 @@ const PIPELINE_STEPS: PaymentRequestStatus[] = [
   PaymentRequestStatus.ENTREGADA,
   PaymentRequestStatus.CERRADA,
 ];
+
+function accrualBadgeClass(status: AccrualStatus): string {
+  switch (status) {
+    case AccrualStatus.PAGADO:
+      return 'badge badge--ok';
+    case AccrualStatus.ANULADO:
+      return 'badge badge--alert';
+    case AccrualStatus.PENDIENTE:
+    case AccrualStatus.PARCIAL:
+      return 'badge badge--warn';
+    default:
+      return 'badge';
+  }
+}
+
+function requestBadgeClass(status: PaymentRequestStatus): string {
+  switch (status) {
+    case PaymentRequestStatus.APROBADA:
+    case PaymentRequestStatus.ENTREGADA:
+      return 'badge badge--ok';
+    case PaymentRequestStatus.RECHAZADA:
+    case PaymentRequestStatus.ANULADA:
+      return 'badge badge--alert';
+    case PaymentRequestStatus.ENVIADA:
+      return 'badge badge--warn';
+    default:
+      return 'badge badge--plain';
+  }
+}
+
+function batchBadgeClass(status: string): string {
+  return status === 'GENERADO' ? 'badge badge--ok' : 'badge badge--alert';
+}
+
+function paymentBadgeClass(status: string): string {
+  return status === 'VALIDO' ? 'badge badge--ok' : 'badge badge--alert';
+}
 
 export function FinancialEnginePanel({
   token,
@@ -500,723 +533,796 @@ export function FinancialEnginePanel({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* BLOQUE 1: MOTOR DE CAUSACIÓN Y PRORRATEO */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          1. Motor de Causación por Lote y Prorrateo Exacto en USD (RN-CAUS-01 a RN-CAUS-04)
-        </h2>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
-          Fórmula: <code>Monto Causado = Monto Asignado × (Días Activos en el Período / Días Totales del Período)</code> con redondeo financiero <code>ROUND_HALF_UP</code> a 2 decimales.
-        </p>
-
-        {isGenerador && (
-          <form onSubmit={handleGenerateBatch} style={formGridStyle}>
-            <input
-              value={batchCode}
-              onChange={(e) => setBatchCode(e.target.value)}
-              placeholder="Código de Lote"
-              required
-              style={inputStyle}
-            />
-            <select
-              value={batchProjectId}
-              onChange={(e) => setBatchProjectId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Proyecto --</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} - {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={batchGroupId}
-              onChange={(e) => {
-                setBatchGroupId(e.target.value);
-                setBatchPeriodId('');
-              }}
-              style={inputStyle}
-            >
-              <option value="">-- Grupo de Pago --</option>
-              {paymentGroups.map((pg) => (
-                <option key={pg.id} value={pg.id}>
-                  {pg.name} ({pg.periodicity})
-                </option>
-              ))}
-            </select>
-            <select
-              value={batchPeriodId}
-              onChange={(e) => {
-                const selected = batchPeriods.find(
-                  (period) => period.id === e.target.value,
-                );
-                setBatchPeriodId(e.target.value);
-                if (selected) {
-                  setPeriodStart(String(selected.periodStart).slice(0, 10));
-                  setPeriodEnd(String(selected.periodEnd).slice(0, 10));
-                }
-              }}
-              style={inputStyle}
-            >
-              <option value="">-- Fecha de Corte Configurada --</option>
-              {batchPeriods.map((period) => (
-                <option key={period.id} value={period.id}>
-                  {String(period.periodStart).slice(0, 10)} al{' '}
-                  {String(period.periodEnd).slice(0, 10)}
-                </option>
-              ))}
-            </select>
-            <input
-              type="date"
-              value={periodStart}
-              onChange={(e) => setPeriodStart(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={periodEnd}
-              onChange={(e) => setPeriodEnd(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <button
-              type="button"
-              onClick={handlePreviewBatch}
-              style={secondaryButtonStyle}
-            >
-              🔍 1. Previsualizar Prorrateo
-            </button>
-            <button type="submit" style={primaryButtonStyle}>
-              ⚡ 2. Ejecutar Lote Causación
-            </button>
-          </form>
-        )}
-
-        {previewResult && (
-          <div style={{ marginBottom: '1rem', padding: '0.85rem', backgroundColor: '#eff6ff', borderRadius: '0.4rem', border: '1px solid #93c5fd' }}>
-            <strong style={{ color: '#1e3a8a', fontSize: '0.88rem' }}>
-              Vista Previa del Lote ({previewResult.totalPeriodDays} días calendario) — Total a Causar: {formatUsdCurrency(Number(previewResult.totalBatchAmount))}
-            </strong>
-            <ul style={{ margin: '0.4rem 0 0', paddingLeft: '1.2rem', fontSize: '0.84rem' }}>
-              {previewResult.items.map((item) => (
-                <li key={item.assignmentId}>
-                  <strong>{item.beneficiaryName}</strong>: {item.activeDays} / {item.totalPeriodDays} días activos →{' '}
-                  <strong>{formatUsdCurrency(Number(item.proratedAmount))}</strong>
-                </li>
-              ))}
-            </ul>
+    <>
+      {/* 1. MOTOR DE CAUSACIÓN Y PRORRATEO */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">
+              Causación por lote y prorrateo exacto en USD
+            </h2>
+            <p className="sheet__hint">
+              Monto causado = monto asignado × (días activos / días totales del
+              período), con redondeo financiero a 2 decimales. RN-CAUS-01 a
+              RN-CAUS-04.
+            </p>
           </div>
-        )}
-
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Período (Orden FIFO)</th>
-              <th style={thStyle}>Beneficiario / Proyecto</th>
-              <th style={thStyle}>Días Activos (Prorrateo)</th>
-              <th style={thStyle}>Causado (USD)</th>
-              <th style={thStyle}>Pagado (FIFO)</th>
-              <th style={thStyle}>Deuda Pendiente</th>
-              <th style={thStyle}>Estado Inmutable</th>
-              {(isGenerador || isReceptor) && <th style={thStyle}>Acción</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {accruals.map((row) => {
-              const badge = getAccrualStatusMeta(row.status);
-              return (
-                <tr key={row.id} style={trStyle}>
-                  <td style={tdStyle}>
-                    {String(row.periodStart).slice(0, 10)} al{' '}
-                    {String(row.periodEnd).slice(0, 10)}
-                  </td>
-                  <td style={tdStyle}>
-                    <strong>{row.beneficiary?.fullName ?? row.beneficiaryId}</strong>{' '}
-                    (<code>{row.project?.code ?? row.projectId}</code>)
-                  </td>
-                  <td style={tdStyle}>
-                    {row.activeDays} / {row.totalPeriodDays} días
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 600 }}>
-                    {formatUsdCurrency(Number(row.proratedAmount))}
-                  </td>
-                  <td style={{ ...tdStyle, color: '#047857', fontWeight: 600 }}>
-                    {formatUsdCurrency(Number(row.paidAmount))}
-                  </td>
-                  <td
-                    style={{
-                      ...tdStyle,
-                      color: Number(row.balanceDue) > 0 ? '#b91c1c' : '#64748b',
-                      fontWeight: 700,
-                    }}
-                  >
-                    {formatUsdCurrency(Number(row.balanceDue))}
-                  </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.76rem',
-                        fontWeight: 700,
-                        color: badge.colorHex,
-                        backgroundColor: badge.backgroundHex,
-                      }}
-                    >
-                      {badge.label}
-                    </span>
-                  </td>
-                  {(isGenerador || isReceptor) && (
-                    <td style={tdStyle}>
-                      {isGenerador &&
-                        row.status === AccrualStatus.PENDIENTE &&
-                        Number(row.paidAmount) === 0 && (
-                          <button
-                            type="button"
-                            onClick={() => handleAnnulAccrual(row.id)}
-                            style={dangerOutlineButtonStyle}
-                          >
-                            Anular Causación
-                          </button>
-                        )}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-
-      {/* BLOQUE 1B: LOTES DE CAUSACIÓN Y ANULACIÓN JUSTIFICADA */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          1B. Lotes de Causación Emitidos (RN-CAUS-04 / RN-GLOB-04)
-        </h2>
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Lote</th>
-              <th style={thStyle}>Proyecto</th>
-              <th style={thStyle}>Período</th>
-              <th style={thStyle}>Total (USD)</th>
-              <th style={thStyle}>Estado</th>
-              {isGenerador && <th style={thStyle}>Acción</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {accrualBatches.map((batch) => (
-              <tr key={batch.id} style={trStyle}>
-                <td style={{ ...tdStyle, fontWeight: 700 }}>{batch.code}</td>
-                <td style={tdStyle}>
-                  <code>{batch.project?.code ?? batch.projectId}</code>
-                </td>
-                <td style={tdStyle}>
-                  {String(batch.periodStart).slice(0, 10)} al{' '}
-                  {String(batch.periodEnd).slice(0, 10)}
-                </td>
-                <td style={{ ...tdStyle, fontWeight: 600 }}>
-                  {formatUsdCurrency(Number(batch.totalAmount))}
-                </td>
-                <td style={tdStyle}>{batch.status}</td>
-                {isGenerador && (
-                  <td style={tdStyle}>
-                    {batch.status === 'GENERADO' &&
-                      !(batch.accruals ?? []).some(
-                        (accrual) => Number(accrual.paidAmount) > 0,
-                      ) && (
-                        <button
-                          type="button"
-                          onClick={() => handleAnnulBatch(batch.id)}
-                          style={dangerOutlineButtonStyle}
-                        >
-                          Anular Lote
-                        </button>
-                      )}
-                  </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-
-      {/* BLOQUE 2: CICLO DE SOLICITUDES DE PAGO */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          2. Ciclo de Solicitudes de Pago y Autorización Segregada (RN-PAG-01)
-        </h2>
-
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.85rem' }}>
-          {PIPELINE_STEPS.map((step) => {
-            const meta = getPaymentRequestStatusMeta(step);
-            return (
-              <span
-                key={step}
-                style={{
-                  padding: '0.28rem 0.65rem',
-                  borderRadius: '999px',
-                  fontSize: '0.76rem',
-                  fontWeight: 600,
-                  color: meta.colorHex,
-                  backgroundColor: meta.backgroundHex,
-                }}
-              >
-                {meta.label}
-              </span>
-            );
-          })}
         </div>
-
-        {isGenerador && (
-          <form onSubmit={handleCreatePaymentRequest} style={formGridStyle}>
-            <input
-              value={reqCode}
-              onChange={(e) => setReqCode(e.target.value)}
-              placeholder="Código Solicitud (ej. SOL-2026-002)"
-              required
-              style={inputStyle}
-            />
-            <select
-              value={effectiveReqProjectId}
-              onChange={(e) => {
-                setReqProjectId(e.target.value);
-                setReqAccrualIds([]);
-              }}
-              style={inputStyle}
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.code} - {p.name}
-                </option>
-              ))}
-            </select>
-            <div
-              style={{
-                gridColumn: '1 / -1',
-                padding: '0.6rem',
-                borderRadius: '0.35rem',
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#ffffff',
-              }}
-            >
-              <div style={{ fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.35rem' }}>
-                Causaciones con saldo pendiente del proyecto (
-                {formatUsdCurrency(selectedRequestedTotal)} seleccionados)
-              </div>
-              {eligibleRequestAccruals.length === 0 ? (
-                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  Este proyecto no tiene causaciones pendientes.
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                  {eligibleRequestAccruals.map((a) => (
-                    <label
-                      key={a.id}
-                      style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', fontSize: '0.8rem' }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={reqAccrualIds.includes(a.id)}
-                        onChange={() => toggleRequestAccrual(a.id)}
-                      />
-                      {String(a.periodStart).slice(0, 10)} al{' '}
-                      {String(a.periodEnd).slice(0, 10)} ·{' '}
-                      {a.beneficiary?.fullName ?? a.beneficiaryId} · Saldo{' '}
-                      {formatUsdCurrency(Number(a.balanceDue))}
+        <div className="sheet__body">
+          <div className="stack">
+            {isGenerador && (
+              <form onSubmit={handleGenerateBatch} className="stack">
+                <div className="form-grid">
+                  <div className="field">
+                    <label className="field__label" htmlFor="batch-code">
+                      Código de lote
                     </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button type="submit" style={primaryButtonStyle}>
-              + Crear Solicitud (CREADA)
-            </button>
-          </form>
-        )}
-
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Código</th>
-              <th style={thStyle}>Proyecto</th>
-              <th style={thStyle}>Solicitado</th>
-              <th style={thStyle}>Pagado</th>
-              <th style={thStyle}>Estado</th>
-              <th style={thStyle}>Acciones por Rol y Reporte PDF</th>
-            </tr>
-          </thead>
-          <tbody>
-            {paymentRequests.map((req) => {
-              const meta = getPaymentRequestStatusMeta(req.status);
-              return (
-                <tr key={req.id} style={trStyle}>
-                  <td style={{ ...tdStyle, fontWeight: 700 }}>{req.code}</td>
-                  <td style={tdStyle}>
-                    <code>{req.project?.code ?? req.projectId}</code>
-                  </td>
-                  <td style={tdStyle}>
-                    {formatUsdCurrency(Number(req.totalAmount))}
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: 700, color: '#047857' }}>
-                    {formatUsdCurrency(Number(req.paidAmount))}
-                  </td>
-                  <td style={tdStyle}>
-                    <span
-                      style={{
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: meta.colorHex,
-                        backgroundColor: meta.backgroundHex,
+                    <input
+                      id="batch-code"
+                      className="input"
+                      value={batchCode}
+                      onChange={(e) => setBatchCode(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="batch-project">
+                      Proyecto
+                    </label>
+                    <select
+                      id="batch-project"
+                      className="select"
+                      value={batchProjectId}
+                      onChange={(e) => setBatchProjectId(e.target.value)}
+                    >
+                      <option value="">Seleccione un proyecto</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.code} - {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="batch-group">
+                      Grupo de pago
+                    </label>
+                    <select
+                      id="batch-group"
+                      className="select"
+                      value={batchGroupId}
+                      onChange={(e) => {
+                        setBatchGroupId(e.target.value);
+                        setBatchPeriodId('');
                       }}
                     >
-                      {meta.label}
-                    </span>
-                  </td>
-                  <td style={{ ...tdStyle, display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    {isGenerador && req.status === PaymentRequestStatus.CREADA && (
-                      <button
-                        type="button"
-                        onClick={() => handleSendRequest(req.id)}
-                        style={secondaryButtonStyle}
-                      >
-                        📤 Enviar a Gerencia
-                      </button>
-                    )}
-                    {isReceptor && req.status === PaymentRequestStatus.ENVIADA && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleReviewRequest(req.id, 'APROBADA')}
-                          style={successButtonStyle}
-                        >
-                          ✅ Aprobar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleReviewRequest(req.id, 'RECHAZADA')}
-                          style={dangerOutlineButtonStyle}
-                        >
-                          ❌ Rechazar
-                        </button>
-                      </>
-                    )}
-                    {isReceptor &&
-                      req.status === PaymentRequestStatus.ENTREGADA &&
-                      Number(req.paidAmount) >= Number(req.totalAmount) && (
-                        <button
-                          type="button"
-                          onClick={() => handleCloseRequest(req.id)}
-                          style={secondaryButtonStyle}
-                        >
-                          🔒 Cerrar Solicitud
-                        </button>
-                      )}
-                    {isGenerador &&
-                      Number(req.paidAmount) === 0 &&
-                      req.status !== PaymentRequestStatus.CERRADA &&
-                      req.status !== PaymentRequestStatus.RECHAZADA &&
-                      req.status !== PaymentRequestStatus.ANULADA && (
-                        <button
-                          type="button"
-                          onClick={() => handleAnnulRequest(req.id)}
-                          style={dangerOutlineButtonStyle}
-                        >
-                          🚫 Anular Solicitud
-                        </button>
-                      )}
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleDownloadPdf(
-                          `/reports/payment-requests/${req.id}/pdf`,
-                          `solicitud_${req.code}.pdf`,
-                        )
-                      }
-                      style={pdfButtonStyle}
+                      <option value="">Seleccione un grupo de pago</option>
+                      {paymentGroups.map((pg) => (
+                        <option key={pg.id} value={pg.id}>
+                          {pg.name} ({pg.periodicity})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="batch-period">
+                      Fecha de corte
+                    </label>
+                    <select
+                      id="batch-period"
+                      className="select"
+                      value={batchPeriodId}
+                      onChange={(e) => {
+                        const selected = batchPeriods.find(
+                          (period) => period.id === e.target.value,
+                        );
+                        setBatchPeriodId(e.target.value);
+                        if (selected) {
+                          setPeriodStart(
+                            String(selected.periodStart).slice(0, 10),
+                          );
+                          setPeriodEnd(String(selected.periodEnd).slice(0, 10));
+                        }
+                      }}
                     >
-                      📑 PDF Consolidado
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </section>
-
-      {/* BLOQUE 3: EJECUCIÓN DE PAGOS CON PRELACIÓN FIFO Y ANULACIONES JUSTIFICADAS */}
-      <section style={cardStyle}>
-        <h2 style={sectionTitleStyle}>
-          3. Entrega de Fondos con Prelación Automática FIFO e Inmutabilidad (RN-PAG-02 y RN-PAG-03)
-        </h2>
-
-        {isReceptor && (
-          <form onSubmit={handleExecuteFifoPayment} style={formGridStyle}>
-            <input
-              value={payReceiptCode}
-              onChange={(e) => setPayReceiptCode(e.target.value)}
-              placeholder="Código Recibo (ej. REC-2026-002)"
-              required
-              style={inputStyle}
-            />
-            <select
-              value={payRequestId}
-              onChange={(e) => setPayRequestId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Solicitud Aprobada --</option>
-              {paymentRequests
-                .filter(
-                  (r) =>
-                    r.status === PaymentRequestStatus.APROBADA ||
-                    r.status === PaymentRequestStatus.ENTREGADA,
-                )
-                .map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.code} (Total: ${r.totalAmount} · Pagado: ${r.paidAmount})
-                  </option>
-                ))}
-            </select>
-            <select
-              value={payBeneficiaryId}
-              onChange={(e) => setPayBeneficiaryId(e.target.value)}
-              style={inputStyle}
-            >
-              <option value="">-- Beneficiario a Pagar --</option>
-              {beneficiaries.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.fullName} ({b.dni})
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              step="0.01"
-              value={payAmount}
-              onChange={(e) => setPayAmount(e.target.value)}
-              placeholder="Monto a Entregar USD"
-              required
-              style={inputStyle}
-            />
-            <input
-              type="date"
-              value={payDate}
-              onChange={(e) => setPayDate(e.target.value)}
-              required
-              style={inputStyle}
-            />
-            <input
-              value={payReference}
-              onChange={(e) => setPayReference(e.target.value)}
-              placeholder="Referencia Bancaria / Zelle"
-              style={inputStyle}
-            />
-            <button type="submit" style={successButtonStyle}>
-              💵 Registrar Pago FIFO
-            </button>
-          </form>
-        )}
-
-        <div style={{ marginBottom: '0.85rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#334155' }}>
-            Motivo para Anulación Justificada Inmutable (RN-PAG-03):
-          </label>
-          <input
-            value={annulReason}
-            onChange={(e) => setAnnulReason(e.target.value)}
-            style={{ ...inputStyle, flex: 1, minWidth: '280px' }}
-          />
-        </div>
-
-        <table style={tableStyle}>
-          <thead>
-            <tr style={theadRowStyle}>
-              <th style={thStyle}>Recibo</th>
-              <th style={thStyle}>Solicitud</th>
-              <th style={thStyle}>Beneficiario</th>
-              <th style={thStyle}>Monto Entregado</th>
-              <th style={thStyle}>Fecha / Referencia</th>
-              <th style={thStyle}>Estado</th>
-              <th style={thStyle}>Recibo PDF y Anulación</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.map((p) => (
-              <tr key={p.id} style={trStyle}>
-                <td style={{ ...tdStyle, fontWeight: 700 }}>{p.receiptCode}</td>
-                <td style={tdStyle}>
-                  <code>{p.paymentRequest?.code ?? p.paymentRequestId}</code>
-                </td>
-                <td style={tdStyle}>
-                  {p.beneficiary?.fullName ?? p.beneficiaryId}
-                </td>
-                <td style={{ ...tdStyle, fontWeight: 700, color: '#047857' }}>
-                  {formatUsdCurrency(Number(p.amount))}
-                </td>
-                <td style={tdStyle}>
-                  {String(p.paymentDate).slice(0, 10)} · ({p.reference ?? 'S/R'})
-                </td>
-                <td style={tdStyle}>
-                  <span
-                    style={{
-                      padding: '0.2rem 0.5rem',
-                      borderRadius: '0.25rem',
-                      fontSize: '0.75rem',
-                      fontWeight: 700,
-                      backgroundColor:
-                        p.status === 'VALIDO' ? '#dcfce7' : '#fee2e2',
-                      color: p.status === 'VALIDO' ? '#065f46' : '#991b1b',
-                    }}
-                  >
-                    {p.status}
-                  </span>
-                </td>
-                <td style={{ ...tdStyle, display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                      <option value="">Seleccione un corte configurado</option>
+                      {batchPeriods.map((period) => (
+                        <option key={period.id} value={period.id}>
+                          {String(period.periodStart).slice(0, 10)} al{' '}
+                          {String(period.periodEnd).slice(0, 10)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="period-start">
+                      Inicio del período
+                    </label>
+                    <input
+                      id="period-start"
+                      className="input"
+                      type="date"
+                      value={periodStart}
+                      onChange={(e) => setPeriodStart(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="period-end">
+                      Fin del período
+                    </label>
+                    <input
+                      id="period-end"
+                      className="input"
+                      type="date"
+                      value={periodEnd}
+                      onChange={(e) => setPeriodEnd(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="btn-group">
                   <button
                     type="button"
-                    onClick={() =>
-                      handleDownloadPdf(
-                        `/reports/payments/${p.id}/pdf`,
-                        `recibo_${p.receiptCode}.pdf`,
-                      )
-                    }
-                    style={pdfButtonStyle}
+                    className="btn btn--ghost"
+                    onClick={handlePreviewBatch}
                   >
-                    📄 Recibo PDF (FIFO)
+                    Previsualizar prorrateo
                   </button>
-                  {isReceptor && p.status === 'VALIDO' && (
-                    <button
-                      type="button"
-                      onClick={() => handleAnnulPayment(p.id)}
-                      style={dangerOutlineButtonStyle}
-                    >
-                      🚫 Anular con Reversión FIFO
-                    </button>
+                  <button type="submit" className="btn">
+                    Ejecutar lote de causación
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {previewResult && (
+              <div className="subsheet">
+                <h3 className="subsheet__title">Vista previa del lote</h3>
+                <p className="sheet__hint">
+                  {previewResult.totalPeriodDays} días calendario en el período.
+                  Total a causar:{' '}
+                  {formatUsdCurrency(Number(previewResult.totalBatchAmount))}.
+                </p>
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Beneficiario</th>
+                        <th scope="col" className="num">
+                          Días activos
+                        </th>
+                        <th scope="col" className="num">
+                          Días totales
+                        </th>
+                        <th scope="col" className="num">
+                          Monto prorrateado (USD)
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {previewResult.items.map((item) => (
+                        <tr key={item.assignmentId}>
+                          <td className="table__strong">
+                            {item.beneficiaryName}
+                          </td>
+                          <td className="num">{item.activeDays}</td>
+                          <td className="num">{item.totalPeriodDays}</td>
+                          <td className="num">
+                            {formatUsdCurrency(Number(item.proratedAmount))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Período</th>
+                    <th scope="col">Beneficiario</th>
+                    <th scope="col">Proyecto</th>
+                    <th scope="col">Días activos / totales</th>
+                    <th scope="col" className="num">
+                      Causado (USD)
+                    </th>
+                    <th scope="col" className="num">
+                      Pagado FIFO (USD)
+                    </th>
+                    <th scope="col" className="num">
+                      Deuda pendiente (USD)
+                    </th>
+                    <th scope="col">Estado</th>
+                    {(isGenerador || isReceptor) && (
+                      <th scope="col">Acción</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {accruals.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={isGenerador || isReceptor ? 9 : 8}>
+                        Sin causaciones registradas. Genere un lote de causación
+                        con el formulario superior.
+                      </td>
+                    </tr>
                   )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {accruals.map((row) => (
+                    <tr key={row.id}>
+                      <td className="nowrap">
+                        {String(row.periodStart).slice(0, 10)} al{' '}
+                        {String(row.periodEnd).slice(0, 10)}
+                      </td>
+                      <td className="table__strong">
+                        {row.beneficiary?.fullName ?? row.beneficiaryId}
+                      </td>
+                      <td className="nowrap">
+                        {row.project?.code ?? row.projectId}
+                      </td>
+                      <td>
+                        {row.activeDays} / {row.totalPeriodDays}
+                      </td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(row.proratedAmount))}
+                      </td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(row.paidAmount))}
+                      </td>
+                      <td className="num table__strong">
+                        {formatUsdCurrency(Number(row.balanceDue))}
+                      </td>
+                      <td>
+                        <span className={accrualBadgeClass(row.status)}>
+                          {row.status}
+                        </span>
+                      </td>
+                      {(isGenerador || isReceptor) && (
+                        <td>
+                          {isGenerador &&
+                            row.status === AccrualStatus.PENDIENTE &&
+                            Number(row.paidAmount) === 0 && (
+                              <button
+                                type="button"
+                                className="btn btn--danger btn--sm"
+                                onClick={() => handleAnnulAccrual(row.id)}
+                              >
+                                Anular causación
+                              </button>
+                            )}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
-    </div>
+
+      {/* 2. LOTES DE CAUSACIÓN EMITIDOS */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Lotes de causación emitidos</h2>
+            <p className="sheet__hint">
+              Lotes generados y persistidos, con su total y anulación
+              justificada. RN-CAUS-04 y RN-GLOB-04.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body sheet__body--flush">
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Lote</th>
+                  <th scope="col">Proyecto</th>
+                  <th scope="col">Período</th>
+                  <th scope="col" className="num">
+                    Total (USD)
+                  </th>
+                  <th scope="col">Estado</th>
+                  {isGenerador && <th scope="col">Acción</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {accrualBatches.length === 0 && (
+                  <tr className="table__empty">
+                    <td colSpan={isGenerador ? 6 : 5}>
+                      Sin lotes emitidos. Genere un lote desde el folio de
+                      causación.
+                    </td>
+                  </tr>
+                )}
+                {accrualBatches.map((batch) => (
+                  <tr key={batch.id}>
+                    <td className="nowrap table__strong">{batch.code}</td>
+                    <td className="nowrap">
+                      {batch.project?.code ?? batch.projectId}
+                    </td>
+                    <td className="nowrap">
+                      {String(batch.periodStart).slice(0, 10)} al{' '}
+                      {String(batch.periodEnd).slice(0, 10)}
+                    </td>
+                    <td className="num">
+                      {formatUsdCurrency(Number(batch.totalAmount))}
+                    </td>
+                    <td>
+                      <span className={batchBadgeClass(batch.status)}>
+                        {batch.status}
+                      </span>
+                    </td>
+                    {isGenerador && (
+                      <td>
+                        {batch.status === 'GENERADO' &&
+                          !(batch.accruals ?? []).some(
+                            (accrual) => Number(accrual.paidAmount) > 0,
+                          ) && (
+                            <button
+                              type="button"
+                              className="btn btn--danger btn--sm"
+                              onClick={() => handleAnnulBatch(batch.id)}
+                            >
+                              Anular lote
+                            </button>
+                          )}
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. CICLO DE SOLICITUDES DE PAGO */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">Ciclo de solicitudes de pago</h2>
+            <p className="sheet__hint">
+              Creación, envío a Gerencia, aprobación o rechazo y cierre, con
+              segregación de funciones. RN-PAG-01.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            <div className="row" aria-label="Flujo de la solicitud">
+              {PIPELINE_STEPS.map((step) => (
+                <span key={step} className={requestBadgeClass(step)}>
+                  {step}
+                </span>
+              ))}
+            </div>
+
+            {isGenerador && (
+              <form onSubmit={handleCreatePaymentRequest} className="stack">
+                <div className="form-grid">
+                  <div className="field">
+                    <label className="field__label" htmlFor="req-code">
+                      Código de solicitud
+                    </label>
+                    <input
+                      id="req-code"
+                      className="input"
+                      value={reqCode}
+                      onChange={(e) => setReqCode(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="req-project">
+                      Proyecto
+                    </label>
+                    <select
+                      id="req-project"
+                      className="select"
+                      value={effectiveReqProjectId}
+                      onChange={(e) => {
+                        setReqProjectId(e.target.value);
+                        setReqAccrualIds([]);
+                      }}
+                    >
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.code} - {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="field">
+                  <span className="field__label">
+                    Causaciones con saldo pendiente del proyecto
+                  </span>
+                  <div className="subsheet">
+                    <p className="sheet__hint">
+                      Seleccionadas:{' '}
+                      {formatUsdCurrency(selectedRequestedTotal)} USD.
+                    </p>
+                    {eligibleRequestAccruals.length === 0 ? (
+                      <p className="muted">
+                        Este proyecto no tiene causaciones con saldo pendiente.
+                      </p>
+                    ) : (
+                      <div className="stack">
+                        {eligibleRequestAccruals.map((a) => (
+                          <label key={a.id} className="row">
+                            <input
+                              type="checkbox"
+                              checked={reqAccrualIds.includes(a.id)}
+                              onChange={() => toggleRequestAccrual(a.id)}
+                            />
+                            <span>
+                              {a.beneficiary?.fullName ?? a.beneficiaryId}
+                            </span>
+                            <span className="muted">
+                              saldo {formatUsdCurrency(Number(a.balanceDue))}
+                            </span>
+                            <span className="muted">
+                              {String(a.periodStart).slice(0, 10)} al{' '}
+                              {String(a.periodEnd).slice(0, 10)}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="btn-group">
+                  <button type="submit" className="btn">
+                    Crear solicitud
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Código</th>
+                    <th scope="col">Proyecto</th>
+                    <th scope="col" className="num">
+                      Solicitado (USD)
+                    </th>
+                    <th scope="col" className="num">
+                      Pagado (USD)
+                    </th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paymentRequests.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={6}>
+                        Sin solicitudes de pago. Cree una solicitud
+                        seleccionando causaciones con saldo pendiente.
+                      </td>
+                    </tr>
+                  )}
+                  {paymentRequests.map((req) => (
+                    <tr key={req.id}>
+                      <td className="nowrap table__strong">{req.code}</td>
+                      <td className="nowrap">
+                        {req.project?.code ?? req.projectId}
+                      </td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(req.totalAmount))}
+                      </td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(req.paidAmount))}
+                      </td>
+                      <td>
+                        <span className={requestBadgeClass(req.status)}>
+                          {req.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="btn-group">
+                          {isGenerador &&
+                            req.status === PaymentRequestStatus.CREADA && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => handleSendRequest(req.id)}
+                              >
+                                Enviar a Gerencia
+                              </button>
+                            )}
+                          {isReceptor &&
+                            req.status === PaymentRequestStatus.ENVIADA && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn--sm"
+                                  onClick={() =>
+                                    handleReviewRequest(req.id, 'APROBADA')
+                                  }
+                                >
+                                  Aprobar
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() =>
+                                    handleReviewRequest(req.id, 'RECHAZADA')
+                                  }
+                                >
+                                  Rechazar
+                                </button>
+                              </>
+                            )}
+                          {isReceptor &&
+                            req.status === PaymentRequestStatus.ENTREGADA &&
+                            Number(req.paidAmount) >= Number(req.totalAmount) && (
+                              <button
+                                type="button"
+                                className="btn btn--ghost btn--sm"
+                                onClick={() => handleCloseRequest(req.id)}
+                              >
+                                Cerrar solicitud
+                              </button>
+                            )}
+                          {isGenerador &&
+                            Number(req.paidAmount) === 0 &&
+                            req.status !== PaymentRequestStatus.CERRADA &&
+                            req.status !== PaymentRequestStatus.RECHAZADA &&
+                            req.status !== PaymentRequestStatus.ANULADA && (
+                              <button
+                                type="button"
+                                className="btn btn--danger btn--sm"
+                                onClick={() => handleAnnulRequest(req.id)}
+                              >
+                                Anular solicitud
+                              </button>
+                            )}
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() =>
+                              handleDownloadPdf(
+                                `/reports/payment-requests/${req.id}/pdf`,
+                                `solicitud_${req.code}.pdf`,
+                              )
+                            }
+                          >
+                            PDF consolidado
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 4. ENTREGA DE FONDOS FIFO Y ANULACIONES */}
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">
+              Entrega de fondos con prelación FIFO
+            </h2>
+            <p className="sheet__hint">
+              Pagos aplicados por antigüedad de la deuda y anulación con
+              reversión contable. RN-PAG-02 y RN-PAG-03.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body">
+          <div className="stack">
+            {isReceptor && (
+              <form onSubmit={handleExecuteFifoPayment} className="stack">
+                <div className="form-grid">
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-receipt">
+                      Código de recibo
+                    </label>
+                    <input
+                      id="pay-receipt"
+                      className="input"
+                      value={payReceiptCode}
+                      onChange={(e) => setPayReceiptCode(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-request">
+                      Solicitud aprobada
+                    </label>
+                    <select
+                      id="pay-request"
+                      className="select"
+                      value={payRequestId}
+                      onChange={(e) => setPayRequestId(e.target.value)}
+                    >
+                      <option value="">
+                        Seleccione una solicitud aprobada
+                      </option>
+                      {paymentRequests
+                        .filter(
+                          (r) =>
+                            r.status === PaymentRequestStatus.APROBADA ||
+                            r.status === PaymentRequestStatus.ENTREGADA,
+                        )
+                        .map((r) => (
+                          <option key={r.id} value={r.id}>
+                            {r.code} (Total:{' '}
+                            {formatUsdCurrency(Number(r.totalAmount))}, Pagado:{' '}
+                            {formatUsdCurrency(Number(r.paidAmount))})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-beneficiary">
+                      Beneficiario
+                    </label>
+                    <select
+                      id="pay-beneficiary"
+                      className="select"
+                      value={payBeneficiaryId}
+                      onChange={(e) => setPayBeneficiaryId(e.target.value)}
+                    >
+                      <option value="">Seleccione un beneficiario</option>
+                      {beneficiaries.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.fullName} ({b.dni})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-amount">
+                      Monto a entregar (USD)
+                    </label>
+                    <input
+                      id="pay-amount"
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={payAmount}
+                      onChange={(e) => setPayAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-date">
+                      Fecha de pago
+                    </label>
+                    <input
+                      id="pay-date"
+                      className="input"
+                      type="date"
+                      value={payDate}
+                      onChange={(e) => setPayDate(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="pay-reference">
+                      Referencia bancaria
+                    </label>
+                    <input
+                      id="pay-reference"
+                      className="input"
+                      value={payReference}
+                      onChange={(e) => setPayReference(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="btn-group">
+                  <button type="submit" className="btn">
+                    Registrar pago
+                  </button>
+                </div>
+              </form>
+            )}
+
+            <div className="field">
+              <label className="field__label" htmlFor="annul-reason">
+                Motivo para anulación justificada (RN-PAG-03)
+              </label>
+              <input
+                id="annul-reason"
+                className="input"
+                value={annulReason}
+                onChange={(e) => setAnnulReason(e.target.value)}
+              />
+            </div>
+
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Recibo</th>
+                    <th scope="col">Solicitud</th>
+                    <th scope="col">Beneficiario</th>
+                    <th scope="col" className="num">
+                      Monto entregado (USD)
+                    </th>
+                    <th scope="col">Fecha / referencia</th>
+                    <th scope="col">Estado</th>
+                    <th scope="col">Recibo PDF y anulación</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.length === 0 && (
+                    <tr className="table__empty">
+                      <td colSpan={7}>
+                        Sin pagos registrados. Registre un pago con prelación
+                        FIFO sobre una solicitud aprobada.
+                      </td>
+                    </tr>
+                  )}
+                  {payments.map((p) => (
+                    <tr key={p.id}>
+                      <td className="nowrap table__strong">
+                        {p.receiptCode}
+                      </td>
+                      <td className="nowrap">
+                        {p.paymentRequest?.code ?? p.paymentRequestId}
+                      </td>
+                      <td className="table__strong">
+                        {p.beneficiary?.fullName ?? p.beneficiaryId}
+                      </td>
+                      <td className="num">
+                        {formatUsdCurrency(Number(p.amount))}
+                      </td>
+                      <td className="nowrap">
+                        {String(p.paymentDate).slice(0, 10)} ({p.reference ??
+                          'S/R'})
+                      </td>
+                      <td>
+                        <span className={paymentBadgeClass(p.status)}>
+                          {p.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="btn-group">
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() =>
+                              handleDownloadPdf(
+                                `/reports/payments/${p.id}/pdf`,
+                                `recibo_${p.receiptCode}.pdf`,
+                              )
+                            }
+                          >
+                            Recibo PDF
+                          </button>
+                          {isReceptor && p.status === 'VALIDO' && (
+                            <button
+                              type="button"
+                              className="btn btn--danger btn--sm"
+                              onClick={() => handleAnnulPayment(p.id)}
+                            >
+                              Anular con reversión FIFO
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
   );
 }
-
-const cardStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  padding: '1.15rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #cbd5e1',
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-};
-
-const sectionTitleStyle: React.CSSProperties = {
-  margin: '0 0 0.5rem',
-  fontSize: '1.08rem',
-  color: '#0f172a',
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))',
-  gap: '0.6rem',
-  marginBottom: '1rem',
-  padding: '0.75rem',
-  backgroundColor: '#f8fafc',
-  borderRadius: '0.4rem',
-  border: '1px solid #e2e8f0',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.45rem 0.6rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #94a3b8',
-  fontSize: '0.85rem',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: '0.45rem 0.75rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#1e3a8a',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.82rem',
-  cursor: 'pointer',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '0.4rem 0.7rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #1e40af',
-  backgroundColor: '#eff6ff',
-  color: '#1e3a8a',
-  fontWeight: 600,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-const successButtonStyle: React.CSSProperties = {
-  padding: '0.4rem 0.7rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#047857',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-};
-
-const pdfButtonStyle: React.CSSProperties = {
-  padding: '0.3rem 0.6rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #334155',
-  backgroundColor: '#f8fafc',
-  color: '#0f172a',
-  fontWeight: 600,
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-};
-
-const dangerOutlineButtonStyle: React.CSSProperties = {
-  padding: '0.3rem 0.6rem',
-  borderRadius: '0.3rem',
-  border: '1px solid #dc2626',
-  backgroundColor: '#fef2f2',
-  color: '#b91c1c',
-  fontSize: '0.78rem',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.85rem',
-};
-
-const theadRowStyle: React.CSSProperties = {
-  backgroundColor: '#f1f5f9',
-  textAlign: 'left',
-  borderBottom: '2px solid #cbd5e1',
-};
-
-const thStyle: React.CSSProperties = {
-  padding: '0.55rem',
-  color: '#334155',
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.55rem',
-};

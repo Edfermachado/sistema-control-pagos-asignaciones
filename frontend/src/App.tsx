@@ -56,6 +56,51 @@ interface ExecutiveSummaryData {
   }>;
 }
 
+interface WorkspaceMeta {
+  index: string;
+  label: string;
+  title: string;
+  lead: string;
+}
+
+const WORKSPACE_META: Record<WorkspaceTab, WorkspaceMeta> = {
+  RESUMEN: {
+    index: '1',
+    label: 'Resumen y deudas',
+    title: 'Resumen ejecutivo y deudas por beneficiario',
+    lead:
+      'Cuánto se ha causado, cuánto se ha pagado por prelación FIFO y cuánto se le adeuda a cada persona, por proyecto científico.',
+  },
+  CATALOGOS: {
+    index: '2',
+    label: 'Catálogos y asignaciones',
+    title: 'Catálogos, beneficiarios y asignaciones',
+    lead:
+      'Proyectos con área, ámbito y vigencia; grupos de pago con fechas de corte; personas que cobran, sin usuario en el sistema (RN-SEG-01).',
+  },
+  MOTOR_FINANCIERO: {
+    index: '3',
+    label: 'Causación y pagos',
+    title: 'Causación prorrateada, solicitudes y pagos FIFO',
+    lead:
+      'Generación por lote, ciclo de la solicitud, entrega de fondos con prelación por antigüedad y corrección por anulación justificada.',
+  },
+  CAJA_CHICA: {
+    index: '4',
+    label: 'Cajas chicas',
+    title: 'Cajas chicas por proyecto y arrastre mensual',
+    lead:
+      'Apertura mensual, vales con aprobación separada del desembolso, rendición con comprobante y arrastre del saldo al mes siguiente.',
+  },
+  AUDITORIA: {
+    index: '5',
+    label: 'Usuarios y auditoría',
+    title: 'Usuarios, parámetros y bitácora forense',
+    lead:
+      'Cuentas de los tres roles, parámetros globales del sistema y visor de audit_log con los cambios reales de la base de datos.',
+  },
+};
+
 const DEMO_ROLE_CREDENTIALS: Record<
   UserRole,
   { email: string; password: string; label: string }
@@ -76,6 +121,14 @@ const DEMO_ROLE_CREDENTIALS: Record<
     label: 'RECEPTOR - Gerencia (gerente@uc.edu.ve)',
   },
 };
+
+const TAB_ORDER: WorkspaceTab[] = [
+  'RESUMEN',
+  'CATALOGOS',
+  'MOTOR_FINANCIERO',
+  'CAJA_CHICA',
+  'AUDITORIA',
+];
 
 const FALLBACK_PROJECTS: LiveProject[] = [
   {
@@ -188,18 +241,15 @@ export function App(): React.ReactElement {
     DEMO_ROLE_CREDENTIALS[UserRole.GENERADOR].email,
   );
 
-  // Login manual expandible
   const [customEmail, setCustomEmail] = useState('');
   const [customPassword, setCustomPassword] = useState('');
   const [showCustomLogin, setShowCustomLogin] = useState(false);
 
-  // Notificación global
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
 
-  // Estado de datos en vivo
   const [projects, setProjects] = useState<LiveProject[]>(FALLBACK_PROJECTS);
   const [paymentGroups, setPaymentGroups] = useState<LivePaymentGroup[]>(
     FALLBACK_PAYMENT_GROUPS,
@@ -335,8 +385,13 @@ export function App(): React.ReactElement {
   const handleRoleSwitch = (newRole: UserRole) => {
     setActiveRole(newRole);
     setNotification(null);
-    if (newRole === UserRole.ADMIN && activeTab === 'MOTOR_FINANCIERO') {
-      setActiveTab('AUDITORIA');
+    // RN-SEG-02: al cambiar de rol, el espacio activo debe seguir siendo válido para ese rol.
+    const allowedTabs: WorkspaceTab[] =
+      newRole === UserRole.ADMIN
+        ? ['RESUMEN', 'CATALOGOS', 'AUDITORIA']
+        : TAB_ORDER;
+    if (!allowedTabs.includes(activeTab)) {
+      setActiveTab('RESUMEN');
     }
   };
 
@@ -381,445 +436,360 @@ export function App(): React.ReactElement {
     ? Number(summary.totalPendingDebtUsd)
     : accruals.reduce((acc, r) => acc + Number(r.balanceDue), 0);
 
+  const visibleTabs = TAB_ORDER.filter(
+    (tab) =>
+      activeRole !== UserRole.ADMIN ||
+      (tab !== 'MOTOR_FINANCIERO' && tab !== 'CAJA_CHICA'),
+  );
+  const meta = WORKSPACE_META[activeTab];
+  const balanceRows = summary?.beneficiaryBalances ?? [];
+
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f1f5f9', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0f172a' }}>
-      {/* BARRA SUPERIOR INSTITUCIONAL FACYT - UC */}
-      <header style={{ backgroundColor: '#0f172a', color: '#f8fafc', padding: '1rem 1.5rem', borderBottom: '3px solid #38bdf8' }}>
-        <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+    <div className="shell">
+      <aside className="rail">
+        <div className="brand">
+          <p className="brand__org">
+            Universidad de Carabobo
+            <br />
+            FACYT · Ciencias y Tecnología
+          </p>
+          <p className="brand__name">Control de Pagos</p>
+          <p className="brand__sub">
+            Asignaciones en USD · Sistemas de Información
+          </p>
+        </div>
+
+        <nav className="nav" aria-label="Espacios de trabajo">
+          <p className="nav__label">Espacios de trabajo</p>
+          {visibleTabs.map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              className="nav__item"
+              aria-current={activeTab === tab ? 'page' : undefined}
+              onClick={() => setActiveTab(tab)}
+            >
+              <span className="nav__index" aria-hidden="true">
+                {WORKSPACE_META[tab].index}
+              </span>
+              <span>{WORKSPACE_META[tab].label}</span>
+            </button>
+          ))}
+        </nav>
+
+        <div className="rail__foot">
           <div>
-            <div style={{ fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#38bdf8', fontWeight: 700 }}>
-              Universidad de Carabobo · Facultad Experimental de Ciencias y Tecnología (FACYT)
-            </div>
-            <h1 style={{ margin: '0.2rem 0 0', fontSize: '1.35rem' }}>
-              Sistema de Control de Pagos y Asignaciones (USD)
-            </h1>
-            <div style={{ marginTop: '0.3rem', display: 'flex', gap: '0.6rem', alignItems: 'center', fontSize: '0.8rem' }}>
-              <span
-                style={{
-                  padding: '0.15rem 0.55rem',
-                  borderRadius: '999px',
-                  fontWeight: 700,
-                  backgroundColor: isConnectedToApi ? '#065f46' : '#92400e',
-                  color: '#ffffff',
-                }}
-              >
-                {isConnectedToApi
-                  ? '🟢 Conectado en Vivo a API + PostgreSQL'
-                  : '🟡 Modo Previsualización Local'}
-              </span>
-              <span style={{ color: '#cbd5e1' }}>
-                Usuario: <strong>{currentUserEmail}</strong> ·{' '}
-                {getRoleDisplayLabel(activeRole)}
-              </span>
-            </div>
+            <div className="rail__foot-label">Sesión activa</div>
+            <div className="rail__session">{currentUserEmail}</div>
+            <div>{getRoleDisplayLabel(activeRole)}</div>
+          </div>
+          <div>
+            <div className="rail__foot-label">Normas del dominio</div>
+            <div>RN-CAUS · RN-PAG · RN-CAJA · RN-AUD</div>
+          </div>
+        </div>
+      </aside>
+
+      <div className="workspace">
+        <header className="ws-head">
+          <div>
+            <h1 className="ws-title">{meta.title}</h1>
+            <p className="ws-lead">{meta.lead}</p>
           </div>
 
-          {/* SELECTOR RÁPIDO DE ROL RBAC + LOGIN MANUAL */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
-              <label htmlFor="role-select" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#cbd5e1' }}>
-                Cambiar Rol (Login JWT Automático):
-              </label>
+          <div className="ws-tools">
+            <span
+              className={`badge ${
+                isConnectedToApi ? 'badge--ok' : 'badge--warn'
+              }`}
+              title={
+                isConnectedToApi
+                  ? 'Sesión JWT activa contra la API y PostgreSQL'
+                  : 'Sin respuesta de la API: se muestran datos de demostración'
+              }
+            >
+              {isConnectedToApi ? 'API conectada' : 'Sin conexión a la API'}
+            </span>
+            <label className="field field--inline" htmlFor="role-select">
+              <span className="field__label">Rol</span>
               <select
                 id="role-select"
+                className="select"
                 value={activeRole}
                 onChange={(e) => handleRoleSwitch(e.target.value as UserRole)}
-                style={{
-                  padding: '0.4rem 0.6rem',
-                  borderRadius: '0.35rem',
-                  border: '1px solid #38bdf8',
-                  backgroundColor: '#1e293b',
-                  color: '#f8fafc',
-                  fontWeight: 600,
-                  fontSize: '0.82rem',
-                }}
               >
                 <option value={UserRole.GENERADOR}>
-                  GENERADOR — Coordinador (coordinador@uc.edu.ve)
+                  GENERADOR — Coordinador
                 </option>
-                <option value={UserRole.RECEPTOR}>
-                  RECEPTOR — Gerencia (gerente@uc.edu.ve)
-                </option>
-                <option value={UserRole.ADMIN}>
-                  ADMIN — Administrador (admin@uc.edu.ve)
-                </option>
+                <option value={UserRole.RECEPTOR}>RECEPTOR — Gerencia</option>
+                <option value={UserRole.ADMIN}>ADMIN — Administrador</option>
               </select>
+            </label>
+            <div className="btn-group">
               <button
                 type="button"
-                onClick={() => setShowCustomLogin(!showCustomLogin)}
-                style={{
-                  padding: '0.4rem 0.65rem',
-                  borderRadius: '0.35rem',
-                  border: '1px solid #64748b',
-                  backgroundColor: '#334155',
-                  color: '#f8fafc',
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                }}
+                className="btn btn--ghost btn--sm"
+                onClick={() => setShowCustomLogin((current) => !current)}
+                aria-expanded={showCustomLogin}
               >
-                🔑 Login Manual
+                {showCustomLogin ? 'Ocultar login' : 'Login manual'}
               </button>
               <button
                 type="button"
+                className="btn btn--sm"
                 onClick={refreshData}
-                style={{
-                  padding: '0.4rem 0.65rem',
-                  borderRadius: '0.35rem',
-                  border: 'none',
-                  backgroundColor: '#0284c7',
-                  color: '#ffffff',
-                  fontWeight: 600,
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                }}
               >
-                🔄 Actualizar
+                Actualizar datos
               </button>
             </div>
           </div>
-        </div>
 
-        {showCustomLogin && (
-          <form
-            onSubmit={handleCustomLoginSubmit}
-            style={{
-              maxWidth: '1240px',
-              margin: '0.85rem auto 0',
-              padding: '0.75rem',
-              backgroundColor: '#1e293b',
-              borderRadius: '0.4rem',
-              display: 'flex',
-              gap: '0.6rem',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <strong style={{ fontSize: '0.82rem', color: '#38bdf8' }}>
-              Autenticación JWT contra /api/auth/login:
-            </strong>
-            <input
-              type="email"
-              value={customEmail}
-              onChange={(e) => setCustomEmail(e.target.value)}
-              placeholder="Correo (ej. coordinador@uc.edu.ve)"
-              required
-              style={{ padding: '0.38rem 0.6rem', borderRadius: '0.3rem', border: '1px solid #64748b' }}
-            />
-            <input
-              type="password"
-              value={customPassword}
-              onChange={(e) => setCustomPassword(e.target.value)}
-              placeholder="Contraseña (PasswordUC2026!)"
-              required
-              style={{ padding: '0.38rem 0.6rem', borderRadius: '0.3rem', border: '1px solid #64748b' }}
-            />
-            <button
-              type="submit"
-              style={{
-                padding: '0.4rem 0.8rem',
-                borderRadius: '0.3rem',
-                border: 'none',
-                backgroundColor: '#10b981',
-                color: '#ffffff',
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
+          {showCustomLogin && (
+            <form
+              className="form-row ws-login"
+              onSubmit={handleCustomLoginSubmit}
             >
-              Iniciar Sesión
-            </button>
-          </form>
-        )}
-      </header>
-
-      {/* PESTAÑAS DE NAVEGACIÓN PRINCIPAL */}
-      <nav style={{ backgroundColor: '#ffffff', borderBottom: '1px solid #cbd5e1', padding: '0 1.5rem' }}>
-        <div style={{ maxWidth: '1240px', margin: '0 auto', display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-          <TabButton
-            active={activeTab === 'RESUMEN'}
-            onClick={() => setActiveTab('RESUMEN')}
-            label="📊 1. Dashboard Ejecutivo y Deudas"
-          />
-          <TabButton
-            active={activeTab === 'CATALOGOS'}
-            onClick={() => setActiveTab('CATALOGOS')}
-            label="🗂️ 2. Catálogos, Beneficiarios y Asignaciones"
-          />
-          {activeRole !== UserRole.ADMIN && (
-            <TabButton
-              active={activeTab === 'MOTOR_FINANCIERO'}
-              onClick={() => setActiveTab('MOTOR_FINANCIERO')}
-              label="⚙️ 3. Causación Prorrateada, Solicitudes y Pagos FIFO"
-            />
+              <div className="field">
+                <label className="field__label" htmlFor="custom-email">
+                  Correo institucional
+                </label>
+                <input
+                  id="custom-email"
+                  className="input"
+                  type="email"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  placeholder="coordinador@uc.edu.ve"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label className="field__label" htmlFor="custom-password">
+                  Contraseña
+                </label>
+                <input
+                  id="custom-password"
+                  className="input"
+                  type="password"
+                  value={customPassword}
+                  onChange={(e) => setCustomPassword(e.target.value)}
+                  placeholder="PasswordUC2026!"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              <button type="submit" className="btn">
+                Iniciar sesión
+              </button>
+            </form>
           )}
-          {activeRole !== UserRole.ADMIN && (
-            <TabButton
-              active={activeTab === 'CAJA_CHICA'}
-              onClick={() => setActiveTab('CAJA_CHICA')}
-              label="💵 4. Control de Cajas Chicas y Arrastre Mensual"
-            />
-          )}
-          <TabButton
-            active={activeTab === 'AUDITORIA'}
-            onClick={() => setActiveTab('AUDITORIA')}
-            label="🛡️ 5. Usuarios y Bitácora Forense (audit_log)"
-          />
-        </div>
-      </nav>
+        </header>
 
-      {/* CONTENIDO PRINCIPAL */}
-      <main style={{ maxWidth: '1240px', margin: '0 auto', padding: '1.5rem' }}>
-        {notification && (
-          <div
-            style={{
-              marginBottom: '1.2rem',
-              padding: '0.8rem 1rem',
-              borderRadius: '0.45rem',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              backgroundColor:
-                notification.type === 'success' ? '#dcfce7' : '#fee2e2',
-              color: notification.type === 'success' ? '#065f46' : '#991b1b',
-              border: `1px solid ${notification.type === 'success' ? '#86efac' : '#fca5a5'}`,
-              fontWeight: 600,
-              fontSize: '0.88rem',
-            }}
-          >
-            <span>
-              {notification.type === 'success' ? '✅ ' : '⚠️ '}
-              {notification.message}
-            </span>
-            <button
-              type="button"
-              onClick={() => setNotification(null)}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                fontWeight: 700,
-                cursor: 'pointer',
-                color: 'inherit',
-              }}
+        <div className="ws-body">
+          {notification && (
+            <div
+              className={`notice ${
+                notification.type === 'success' ? 'notice--ok' : 'notice--error'
+              }`}
+              role="status"
             >
-              ✕
-            </button>
-          </div>
-        )}
-
-        {/* PESTAÑA 1: DASHBOARD EJECUTIVO Y CONSULTAS CLAVE */}
-        {activeTab === 'RESUMEN' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem' }}>
-              <KpiCard
-                title="Total Causado Acumulado (USD)"
-                value={formatUsdCurrency(totalAccruedDisplay)}
-                subtitle="Suma prorrateada por días activos (RN-CAUS-01)"
-                bgHex="#ffffff"
-                accentHex="#1e3a8a"
-              />
-              <KpiCard
-                title="Total Pagado Vía FIFO (USD)"
-                value={formatUsdCurrency(totalPaidDisplay)}
-                subtitle="Saldado por orden de antigüedad (RN-PAG-02)"
-                bgHex="#f0fdf4"
-                accentHex="#047857"
-              />
-              <KpiCard
-                title="Deuda Total Pendiente (USD)"
-                value={formatUsdCurrency(totalPendingDisplay)}
-                subtitle="Obligación neta con investigadores"
-                bgHex="#fef2f2"
-                accentHex="#b91c1c"
-              />
-              <KpiCard
-                title="Proyectos y Beneficiarios"
-                value={`${projects.length} Proyectos / ${beneficiaries.length} Benef.`}
-                subtitle="Física, Química y Biología FACYT"
-                bgHex="#ffffff"
-                accentHex="#0f172a"
-              />
+              <span>{notification.message}</span>
+              <button
+                type="button"
+                className="notice__close"
+                onClick={() => setNotification(null)}
+                aria-label="Cerrar aviso"
+              >
+                ✕
+              </button>
             </div>
+          )}
 
-            <section style={{ backgroundColor: '#ffffff', padding: '1.15rem', borderRadius: '0.5rem', border: '1px solid #cbd5e1' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                <div>
-                  <h2 style={{ margin: 0, fontSize: '1.08rem' }}>
-                    Consultas Clave del Enunciado: Estado de Cuenta por Persona (RN-AUD-01)
-                  </h2>
-                  <p style={{ margin: '0.2rem 0 0', fontSize: '0.82rem', color: '#475569' }}>
-                    Responde en vivo: ¿Cuánto se ha causado? ¿Cuánto se ha pagado? ¿Cuánto se le adeuda a cada beneficiario?
+          {activeTab === 'RESUMEN' && (
+            <>
+              <section className="ledger" aria-label="Totales acumulados">
+                <div className="ledger__figures">
+                  <div className="figure">
+                    <p className="figure__label">Total causado</p>
+                    <p className="figure__value num">
+                      {formatUsdCurrency(totalAccruedDisplay)}
+                    </p>
+                    <p className="figure__note">
+                      Suma prorrateada por días activos (RN-CAUS-01 a 03).
+                    </p>
+                  </div>
+                  <div className="figure">
+                    <p className="figure__label">Total pagado por FIFO</p>
+                    <p className="figure__value num">
+                      {formatUsdCurrency(totalPaidDisplay)}
+                    </p>
+                    <p className="figure__note">
+                      Abonos aplicados por antigüedad de la deuda (RN-PAG-02).
+                    </p>
+                  </div>
+                  <div className="figure">
+                    <p className="figure__label">Deuda pendiente</p>
+                    <p className="figure__value figure__value--debt num">
+                      {formatUsdCurrency(totalPendingDisplay)}
+                    </p>
+                    <p className="figure__note">
+                      Obligación neta con el personal de los proyectos.
+                    </p>
+                  </div>
+                </div>
+                <div className="ledger__side">
+                  <p className="ledger__side-title">Cobertura actual</p>
+                  <p className="ledger__count">
+                    <strong className="num">{projects.length}</strong>
+                    <span>proyectos en catálogo</span>
+                  </p>
+                  <p className="ledger__count">
+                    <strong className="num">{beneficiaries.length}</strong>
+                    <span>beneficiarios sin usuario</span>
+                  </p>
+                  <p className="ledger__count">
+                    <strong className="num">{accruals.length}</strong>
+                    <span>causaciones registradas</span>
                   </p>
                 </div>
-                <select
-                  value={summaryProjectFilter}
-                  onChange={(e) => setSummaryProjectFilter(e.target.value)}
-                  style={{ padding: '0.4rem 0.6rem', borderRadius: '0.35rem', border: '1px solid #94a3b8', fontSize: '0.84rem' }}
-                >
-                  <option value="">Todos los Proyectos Científicos</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.code} — {p.name} ({p.area})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              </section>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.86rem' }}>
-                <thead>
-                  <tr style={{ backgroundColor: '#f1f5f9', textAlign: 'left', borderBottom: '2px solid #cbd5e1' }}>
-                    <th style={{ padding: '0.55rem' }}>Cédula</th>
-                    <th style={{ padding: '0.55rem' }}>Beneficiario (Sin Usuario — RN-SEG-01)</th>
-                    <th style={{ padding: '0.55rem' }}>Total Causado (USD)</th>
-                    <th style={{ padding: '0.55rem' }}>Total Pagado FIFO (USD)</th>
-                    <th style={{ padding: '0.55rem' }}>Saldo Adeudado (USD)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(summary?.beneficiaryBalances ?? []).map((row) => (
-                    <tr key={row.beneficiaryId} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '0.55rem', fontWeight: 600 }}>{row.beneficiaryDni}</td>
-                      <td style={{ padding: '0.55rem', fontWeight: 600 }}>{row.beneficiaryName}</td>
-                      <td style={{ padding: '0.55rem' }}>
-                        {formatUsdCurrency(Number(row.totalAccruedUsd))}
-                      </td>
-                      <td style={{ padding: '0.55rem', color: '#047857', fontWeight: 600 }}>
-                        {formatUsdCurrency(Number(row.totalPaidUsd))}
-                      </td>
-                      <td
-                        style={{
-                          padding: '0.55rem',
-                          color: Number(row.totalDebtDueUsd) > 0 ? '#b91c1c' : '#64748b',
-                          fontWeight: 700,
-                        }}
-                      >
-                        {formatUsdCurrency(Number(row.totalDebtDueUsd))}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
-          </div>
-        )}
+              <section className="sheet">
+                <div className="sheet__head">
+                  <div>
+                    <h2 className="sheet__title">
+                      Estado de cuenta por beneficiario
+                    </h2>
+                    <p className="sheet__hint">
+                      Consultas clave del enunciado (RN-AUD-01): causado, pagado
+                      y adeudado por persona, con filtro por proyecto científico.
+                    </p>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="project-filter">
+                      Proyecto
+                    </label>
+                    <select
+                      id="project-filter"
+                      className="select"
+                      value={summaryProjectFilter}
+                      onChange={(e) => setSummaryProjectFilter(e.target.value)}
+                    >
+                      <option value="">Todos los proyectos</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.code} — {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div className="sheet__body sheet__body--flush">
+                  <div className="table-scroll">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th scope="col">Cédula</th>
+                          <th scope="col">Beneficiario</th>
+                          <th scope="col" className="num">
+                            Causado (USD)
+                          </th>
+                          <th scope="col" className="num">
+                            Pagado FIFO (USD)
+                          </th>
+                          <th scope="col" className="num">
+                            Saldo adeudado (USD)
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {balanceRows.length === 0 && (
+                          <tr className="table__empty">
+                            <td colSpan={5}>
+                              Sin causaciones registradas para el filtro actual.
+                              Genere un lote de causación en el espacio 3.
+                            </td>
+                          </tr>
+                        )}
+                        {balanceRows.map((row) => (
+                          <tr key={row.beneficiaryId}>
+                            <td className="nowrap">{row.beneficiaryDni}</td>
+                            <td className="table__strong">
+                              {row.beneficiaryName}
+                            </td>
+                            <td className="num">
+                              {formatUsdCurrency(Number(row.totalAccruedUsd))}
+                            </td>
+                            <td className="num">
+                              {formatUsdCurrency(Number(row.totalPaidUsd))}
+                            </td>
+                            <td className="num table__strong">
+                              {formatUsdCurrency(Number(row.totalDebtDueUsd))}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
 
-        {/* PESTAÑA 2: CATÁLOGOS Y ASIGNACIONES */}
-        {activeTab === 'CATALOGOS' && (
-          <CatalogsAndAssignmentsWorkspace
-            token={token}
-            activeRole={activeRole}
-            projects={projects}
-            paymentGroups={paymentGroups}
-            beneficiaries={beneficiaries}
-            assignments={assignments}
-            onRefresh={refreshData}
-            onNotify={handleNotify}
-          />
-        )}
+          {activeTab === 'CATALOGOS' && (
+            <CatalogsAndAssignmentsWorkspace
+              token={token}
+              activeRole={activeRole}
+              projects={projects}
+              paymentGroups={paymentGroups}
+              beneficiaries={beneficiaries}
+              assignments={assignments}
+              onRefresh={refreshData}
+              onNotify={handleNotify}
+            />
+          )}
 
-        {/* PESTAÑA 3: MOTOR FINANCIERO (CAUSACIÓN, SOLICITUDES, FIFO Y ANULACIONES) */}
-        {activeTab === 'MOTOR_FINANCIERO' && (
-          <FinancialEnginePanel
-            token={token}
-            activeRole={activeRole}
-            projects={projects}
-            paymentGroups={paymentGroups}
-            beneficiaries={beneficiaries}
-            accruals={accruals}
-            accrualBatches={accrualBatches}
-            paymentRequests={paymentRequests}
-            payments={payments}
-            onRefresh={refreshData}
-            onNotify={handleNotify}
-          />
-        )}
+          {activeTab === 'MOTOR_FINANCIERO' && (
+            <FinancialEnginePanel
+              token={token}
+              activeRole={activeRole}
+              projects={projects}
+              paymentGroups={paymentGroups}
+              beneficiaries={beneficiaries}
+              accruals={accruals}
+              accrualBatches={accrualBatches}
+              paymentRequests={paymentRequests}
+              payments={payments}
+              onRefresh={refreshData}
+              onNotify={handleNotify}
+            />
+          )}
 
-        {/* PESTAÑA 4: CAJAS CHICAS Y ARRASTRE MENSUAL */}
-        {activeTab === 'CAJA_CHICA' && (
-          <PettyCashAndReportsPanel
-            token={token}
-            activeRole={activeRole}
-            projects={projects}
-            pettyCashes={pettyCashes}
-            onRefresh={refreshData}
-            onNotify={handleNotify}
-          />
-        )}
+          {activeTab === 'CAJA_CHICA' && (
+            <PettyCashAndReportsPanel
+              token={token}
+              activeRole={activeRole}
+              projects={projects}
+              pettyCashes={pettyCashes}
+              onRefresh={refreshData}
+              onNotify={handleNotify}
+            />
+          )}
 
-        {/* PESTAÑA 5: USUARIOS Y BITÁCORA FORENSE AUDIT_LOG */}
-        {activeTab === 'AUDITORIA' && (
-          <UsersAndAuditWorkspace
-            token={token}
-            activeRole={activeRole}
-            users={users}
-            parameters={parameters}
-            auditLogs={auditLogs}
-            onRefresh={refreshData}
-            onNotify={handleNotify}
-          />
-        )}
-      </main>
-    </div>
-  );
-}
-
-function TabButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}): React.ReactElement {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      style={{
-        padding: '0.85rem 1rem',
-        border: 'none',
-        borderBottom: active ? '3px solid #1e3a8a' : '3px solid transparent',
-        backgroundColor: active ? '#eff6ff' : 'transparent',
-        color: active ? '#1e3a8a' : '#475569',
-        fontWeight: active ? 700 : 600,
-        fontSize: '0.86rem',
-        cursor: 'pointer',
-      }}
-    >
-      {label}
-    </button>
-  );
-}
-
-function KpiCard({
-  title,
-  value,
-  subtitle,
-  bgHex,
-  accentHex,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  bgHex: string;
-  accentHex: string;
-}): React.ReactElement {
-  return (
-    <div
-      style={{
-        backgroundColor: bgHex,
-        padding: '1rem',
-        borderRadius: '0.5rem',
-        border: '1px solid #cbd5e1',
-        borderLeft: `4px solid ${accentHex}`,
-      }}
-    >
-      <div style={{ fontSize: '0.78rem', color: '#475569', fontWeight: 600 }}>
-        {title}
+          {activeTab === 'AUDITORIA' && (
+            <UsersAndAuditWorkspace
+              token={token}
+              activeRole={activeRole}
+              users={users}
+              parameters={parameters}
+              auditLogs={auditLogs}
+              onRefresh={refreshData}
+              onNotify={handleNotify}
+            />
+          )}
+        </div>
       </div>
-      <div style={{ fontSize: '1.35rem', fontWeight: 800, color: accentHex, margin: '0.25rem 0' }}>
-        {value}
-      </div>
-      <div style={{ fontSize: '0.75rem', color: '#64748b' }}>{subtitle}</div>
     </div>
   );
 }

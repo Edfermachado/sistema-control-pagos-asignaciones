@@ -342,402 +342,595 @@ export function PettyCashAndReportsPanel({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* FORMULARIOS OPERATIVOS PARA GENERADOR */}
+    <div className="stack stack--lg">
       {isGenerador && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1rem' }}>
-          <section style={cardStyle}>
-            <h3 style={subTitleStyle}>1. Crear Caja Chica por Proyecto</h3>
-            <form onSubmit={handleCreatePettyCash} style={stackFormStyle}>
-              <input
-                value={boxCode}
-                onChange={(e) => setBoxCode(e.target.value)}
-                placeholder="Código (ej. CC-QUI-02)"
-                required
-                style={inputStyle}
-              />
-              <input
-                value={boxName}
-                onChange={(e) => setBoxName(e.target.value)}
-                placeholder="Nombre de la Caja Chica"
-                required
-                style={inputStyle}
-              />
-              <select
-                value={boxProjectId}
-                onChange={(e) => setBoxProjectId(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="">-- Seleccionar Proyecto --</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.code} - {p.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                step="0.01"
-                value={boxAuthAmount}
-                onChange={(e) => setBoxAuthAmount(e.target.value)}
-                placeholder="Tope Autorizado USD"
-                required
-                style={inputStyle}
-              />
-              <button type="submit" style={primaryButtonStyle}>
-                + Crear Caja Chica
-              </button>
-            </form>
+        <>
+          <section className="sheet">
+            <div className="sheet__head">
+              <div>
+                <h2 className="sheet__title">Crear caja chica por proyecto</h2>
+                <p className="sheet__hint">
+                  Código, nombre, proyecto y tope autorizado de la caja chica
+                  (RN-CAJA-01).
+                </p>
+              </div>
+            </div>
+            <div className="sheet__body">
+              <form className="form-grid" onSubmit={handleCreatePettyCash}>
+                <div className="field">
+                  <label className="field__label" htmlFor="box-code">
+                    Código de la caja
+                  </label>
+                  <input
+                    id="box-code"
+                    className="input"
+                    value={boxCode}
+                    onChange={(e) => setBoxCode(e.target.value)}
+                    placeholder="CC-QUI-02"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="box-name">
+                    Nombre de la caja chica
+                  </label>
+                  <input
+                    id="box-name"
+                    className="input"
+                    value={boxName}
+                    onChange={(e) => setBoxName(e.target.value)}
+                    placeholder="Caja chica de reactivos"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="box-project">
+                    Proyecto
+                  </label>
+                  <select
+                    id="box-project"
+                    className="select"
+                    value={boxProjectId}
+                    onChange={(e) => setBoxProjectId(e.target.value)}
+                  >
+                    <option value="">Seleccionar proyecto</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.code} - {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="box-auth-amount">
+                    Tope autorizado (USD)
+                  </label>
+                  <input
+                    id="box-auth-amount"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={boxAuthAmount}
+                    onChange={(e) => setBoxAuthAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  Crear caja chica
+                </button>
+              </form>
+            </div>
           </section>
 
-          <section style={cardStyle}>
-            <h3 style={subTitleStyle}>
-              2. Solicitar Apertura Mensual (con Arrastre)
-            </h3>
-            <form onSubmit={handleOpenPeriod} style={stackFormStyle}>
-              <select
-                value={periodPettyCashId}
-                onChange={(e) => setPeriodPettyCashId(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="">-- Seleccionar Caja Chica --</option>
-                {pettyCashes.map((pc) => (
-                  <option key={pc.id} value={pc.id}>
-                    {pc.code} ({pc.name})
-                  </option>
-                ))}
-              </select>
-              <input
-                value={periodYearMonth}
-                onChange={(e) => setPeriodYearMonth(e.target.value)}
-                placeholder="Mes YYYY-MM (ej. 2026-03)"
-                required
-                style={inputStyle}
-              />
-              <input
-                type="number"
-                step="0.01"
-                value={periodReplenishment}
-                onChange={(e) => setPeriodReplenishment(e.target.value)}
-                placeholder="Reposición Inicial USD"
-                required
-                style={inputStyle}
-              />
-              <button type="submit" style={primaryButtonStyle}>
-                📅 Solicitar Apertura Mensual
-              </button>
-            </form>
+          <section className="sheet">
+            <div className="sheet__head">
+              <div>
+                <h2 className="sheet__title">
+                  Solicitar apertura mensual (con arrastre)
+                </h2>
+                <p className="sheet__hint">
+                  Apertura mensual con arrastre automático del saldo del mes
+                  anterior (RN-CAJA-02).
+                </p>
+              </div>
+            </div>
+            <div className="sheet__body">
+              <form className="form-grid" onSubmit={handleOpenPeriod}>
+                <div className="field">
+                  <label className="field__label" htmlFor="period-box">
+                    Caja chica
+                  </label>
+                  <select
+                    id="period-box"
+                    className="select"
+                    value={periodPettyCashId}
+                    onChange={(e) => setPeriodPettyCashId(e.target.value)}
+                  >
+                    <option value="">Seleccionar caja chica</option>
+                    {pettyCashes.map((pc) => (
+                      <option key={pc.id} value={pc.id}>
+                        {pc.code} ({pc.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="period-year-month">
+                    Mes (YYYY-MM)
+                  </label>
+                  <input
+                    id="period-year-month"
+                    className="input"
+                    value={periodYearMonth}
+                    onChange={(e) => setPeriodYearMonth(e.target.value)}
+                    placeholder="2026-03"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label
+                    className="field__label"
+                    htmlFor="period-replenishment"
+                  >
+                    Reposición inicial (USD)
+                  </label>
+                  <input
+                    id="period-replenishment"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={periodReplenishment}
+                    onChange={(e) => setPeriodReplenishment(e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  Solicitar apertura mensual
+                </button>
+              </form>
+            </div>
           </section>
 
-          <section style={cardStyle}>
-            <h3 style={subTitleStyle}>3. Emitir Solicitud de Vale</h3>
-            <form onSubmit={handleRequestVoucher} style={stackFormStyle}>
-              <select
-                value={voucherPeriodId}
-                onChange={(e) => setVoucherPeriodId(e.target.value)}
-                style={inputStyle}
-              >
-                <option value="">-- Período Mensual ABIERTO --</option>
-                {openPeriodsList.map((per) => (
-                  <option key={per.id} value={per.id}>
-                    {per.boxCode} · {per.yearMonth} (Disp: $
-                    {per.availableBalance})
-                  </option>
-                ))}
-              </select>
-              <input
-                value={voucherCode}
-                onChange={(e) => setVoucherCode(e.target.value)}
-                placeholder="Código Vale (ej. VALE-2026-009)"
-                required
-                style={inputStyle}
-              />
-              <input
-                value={voucherBeneficiary}
-                onChange={(e) => setVoucherBeneficiary(e.target.value)}
-                placeholder="Responsable / Beneficiario"
-                required
-                style={inputStyle}
-              />
-              <input
-                value={voucherConcept}
-                onChange={(e) => setVoucherConcept(e.target.value)}
-                placeholder="Concepto del Gasto Menor"
-                required
-                style={inputStyle}
-              />
-              <input
-                type="number"
-                step="0.01"
-                value={voucherAmount}
-                onChange={(e) => setVoucherAmount(e.target.value)}
-                placeholder="Monto Solicitado USD"
-                required
-                style={inputStyle}
-              />
-              <button type="submit" style={primaryButtonStyle}>
-                🧾 Solicitar Vale
-              </button>
-            </form>
+          <section className="sheet">
+            <div className="sheet__head">
+              <div>
+                <h2 className="sheet__title">Emitir solicitud de vale</h2>
+                <p className="sheet__hint">
+                  Solicitud de vale sobre un período abierto, con beneficiario,
+                  concepto y monto estimado (RN-CAJA-03).
+                </p>
+              </div>
+            </div>
+            <div className="sheet__body">
+              <form className="form-grid" onSubmit={handleRequestVoucher}>
+                <div className="field">
+                  <label className="field__label" htmlFor="voucher-period">
+                    Período mensual abierto
+                  </label>
+                  <select
+                    id="voucher-period"
+                    className="select"
+                    value={voucherPeriodId}
+                    onChange={(e) => setVoucherPeriodId(e.target.value)}
+                  >
+                    <option value="">Seleccionar período abierto</option>
+                    {openPeriodsList.map((per) => (
+                      <option key={per.id} value={per.id}>
+                        {per.boxCode} - {per.yearMonth} (Disp: $
+                        {per.availableBalance})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="voucher-code">
+                    Código del vale
+                  </label>
+                  <input
+                    id="voucher-code"
+                    className="input"
+                    value={voucherCode}
+                    onChange={(e) => setVoucherCode(e.target.value)}
+                    placeholder="VALE-2026-009"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="voucher-beneficiary">
+                    Responsable / beneficiario
+                  </label>
+                  <input
+                    id="voucher-beneficiary"
+                    className="input"
+                    value={voucherBeneficiary}
+                    onChange={(e) => setVoucherBeneficiary(e.target.value)}
+                    placeholder="TSU. Carlos Pérez"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="voucher-concept">
+                    Concepto del gasto menor
+                  </label>
+                  <input
+                    id="voucher-concept"
+                    className="input"
+                    value={voucherConcept}
+                    onChange={(e) => setVoucherConcept(e.target.value)}
+                    placeholder="Compra urgente de insumos"
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="voucher-amount">
+                    Monto solicitado (USD)
+                  </label>
+                  <input
+                    id="voucher-amount"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={voucherAmount}
+                    onChange={(e) => setVoucherAmount(e.target.value)}
+                    placeholder="0.00"
+                    required
+                  />
+                </div>
+                <button type="submit" className="btn">
+                  Solicitar vale
+                </button>
+              </form>
+            </div>
           </section>
+
+          <section className="sheet">
+            <div className="sheet__head">
+              <div>
+                <h2 className="sheet__title">Rendición de vale desembolsado</h2>
+                <p className="sheet__hint">
+                  Datos para rendir un vale desembolsado y motivos de rechazo o
+                  anulación (RN-CAJA-03).
+                </p>
+              </div>
+            </div>
+            <div className="sheet__body">
+              <div className="form-grid">
+                <div className="field">
+                  <label className="field__label" htmlFor="settle-amount">
+                    Monto gastado según factura (USD)
+                  </label>
+                  <input
+                    id="settle-amount"
+                    className="input"
+                    type="number"
+                    step="0.01"
+                    value={settleAmount}
+                    onChange={(e) => setSettleAmount(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="settle-invoice">
+                    N° factura / comprobante
+                  </label>
+                  <input
+                    id="settle-invoice"
+                    className="input"
+                    value={settleInvoice}
+                    onChange={(e) => setSettleInvoice(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="settle-file">
+                    Archivo del comprobante (PDF/PNG/JPEG)
+                  </label>
+                  <input
+                    id="settle-file"
+                    className="input"
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg"
+                    onChange={(e) => setSettleFile(e.target.files?.[0] ?? null)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="reject-reason">
+                    Motivo de rechazo de vale
+                  </label>
+                  <input
+                    id="reject-reason"
+                    className="input"
+                    value={voucherRejectionReason}
+                    onChange={(e) => setVoucherRejectionReason(e.target.value)}
+                  />
+                </div>
+                <div className="field">
+                  <label className="field__label" htmlFor="annul-reason">
+                    Motivo de anulación de vale
+                  </label>
+                  <input
+                    id="annul-reason"
+                    className="input"
+                    value={voucherAnnulReason}
+                    onChange={(e) => setVoucherAnnulReason(e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
+
+      {pettyCashes.length === 0 && (
+        <div className="empty">
+          <strong>Sin cajas chicas registradas</strong>
+          Aún no hay cajas chicas. Un generador debe crear una caja por proyecto
+          y solicitar la apertura de su período mensual.
         </div>
       )}
 
-      {/* PARÁMETROS RÁPIDOS DE RENDICIÓN CON FACTURA */}
-      {isGenerador && (
-        <section style={{ ...cardStyle, backgroundColor: '#f8fafc' }}>
-          <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>
-              Datos para Rendir Vale Desembolsado (RN-CAJA-03):
-            </strong>
-            <label style={{ fontSize: '0.82rem' }}>
-              Monto Gastado Según Factura (USD):{' '}
-              <input
-                type="number"
-                step="0.01"
-                value={settleAmount}
-                onChange={(e) => setSettleAmount(e.target.value)}
-                style={{ ...inputStyle, width: '110px' }}
-              />
-            </label>
-            <label style={{ fontSize: '0.82rem' }}>
-              N° Factura / Comprobante Obligatorio:{' '}
-              <input
-                value={settleInvoice}
-                onChange={(e) => setSettleInvoice(e.target.value)}
-                style={{ ...inputStyle, width: '210px' }}
-              />
-            </label>
-            <label style={{ fontSize: '0.82rem' }}>
-              Archivo del Comprobante (PDF/PNG/JPEG):{' '}
-              <input
-                type="file"
-                accept="application/pdf,image/png,image/jpeg"
-                onChange={(e) => setSettleFile(e.target.files?.[0] ?? null)}
-                style={{ fontSize: '0.8rem' }}
-              />
-            </label>
-          </div>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
-            <label style={{ fontSize: '0.82rem', flex: 1, minWidth: '260px' }}>
-              Motivo de Rechazo de Vale:{' '}
-              <input
-                value={voucherRejectionReason}
-                onChange={(e) => setVoucherRejectionReason(e.target.value)}
-                style={{ ...inputStyle, width: '100%' }}
-              />
-            </label>
-            <label style={{ fontSize: '0.82rem', flex: 1, minWidth: '260px' }}>
-              Motivo de Anulación de Vale:{' '}
-              <input
-                value={voucherAnnulReason}
-                onChange={(e) => setVoucherAnnulReason(e.target.value)}
-                style={{ ...inputStyle, width: '100%' }}
-              />
-            </label>
-          </div>
-        </section>
-      )}
+      {pettyCashes.map((box) => {
+        const availableBalance = box.periods
+          .filter((period) => period.status === 'ABIERTO')
+          .reduce((sum, period) => sum + Number(period.availableBalance), 0);
+        const allVouchers = box.periods.flatMap((period) =>
+          (period.vouchers ?? []).map((voucher) => ({
+            voucher,
+            yearMonth: period.yearMonth,
+          })),
+        );
 
-      {/* LISTADO DETALLADO DE CAJAS CHICAS, PERÍODOS Y VALES */}
-      {pettyCashes.map((box) => (
-        <section key={box.id} style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
-            <div>
-              <h2 style={{ margin: 0, fontSize: '1.1rem', color: '#0f172a' }}>
-                {box.code} — {box.name}
-              </h2>
-              <span style={{ fontSize: '0.82rem', color: '#475569' }}>
-                Proyecto: <code>{box.project?.code ?? box.projectId}</code> · Tope Autorizado:{' '}
-                <strong>{formatUsdCurrency(Number(box.authorizedAmount))}</strong>
-              </span>
+        return (
+          <section className="sheet" key={box.id}>
+            <div className="sheet__head">
+              <div>
+                <h2 className="sheet__title">
+                  {box.code} — {box.name}
+                </h2>
+                <p className="sheet__hint">
+                  Proyecto: {box.project?.code ?? box.projectId}. Tope
+                  autorizado: {formatUsdCurrency(Number(box.authorizedAmount))}{' '}
+                  (RN-CAJA-01).
+                </p>
+              </div>
+              <div className="btn-group">
+                <span className={`badge ${badgeClassForStatus(box.status)}`}>
+                  {box.status}
+                </span>
+                {isReceptor && box.status === 'ACTIVA' && (
+                  <button
+                    type="button"
+                    className="btn btn--danger btn--sm"
+                    onClick={() => handleClosePettyCash(box.id)}
+                  >
+                    Cerrar caja chica
+                  </button>
+                )}
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <span
-                style={{
-                  padding: '0.25rem 0.6rem',
-                  borderRadius: '999px',
-                  fontSize: '0.76rem',
-                  fontWeight: 700,
-                  backgroundColor: '#dcfce7',
-                  color: '#065f46',
-                }}
-              >
-                {box.status}
-              </span>
-              {isReceptor && box.status === 'ACTIVA' && (
-                <button
-                  type="button"
-                  onClick={() => handleClosePettyCash(box.id)}
-                  style={dangerButtonStyle}
-                >
-                  Cerrar Caja Chica
-                </button>
-              )}
-            </div>
-          </div>
 
-          {box.periods.map((per) => {
-            const totalOpening =
-              Number(per.carryoverBalance) + Number(per.initialReplenishment);
-            const usedPercent = calculatePettyCashUtilizationPercent(
-              totalOpening,
-              Number(per.availableBalance),
-            );
-            return (
-              <div
-                key={per.id}
-                style={{
-                  padding: '0.9rem',
-                  marginBottom: '0.85rem',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '0.45rem',
-                  border: '1px solid #cbd5e1',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.6rem' }}>
-                  <div>
-                    <strong style={{ fontSize: '0.95rem' }}>
-                      Período Mensual {per.yearMonth}
-                    </strong>{' '}
-                    <span
-                      style={{
-                        padding: '0.18rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        backgroundColor:
-                          per.status === 'ABIERTO'
-                            ? '#dcfce7'
-                            : per.status === 'SOLICITADO'
-                              ? '#fef3c7'
-                              : '#e2e8f0',
-                        color:
-                          per.status === 'ABIERTO'
-                            ? '#065f46'
-                            : per.status === 'SOLICITADO'
-                              ? '#92400e'
-                              : '#334155',
-                      }}
-                    >
-                      {per.status}
-                    </span>
-                  </div>
+            <div className="sheet__body stack">
+              <div className="figure">
+                <p className="figure__label">Saldo disponible</p>
+                <p className="figure__value num">
+                  {formatUsdCurrency(availableBalance)}
+                </p>
+                <p className="figure__note">
+                  Disponible consolidado de los períodos abiertos de la caja
+                  (RN-CAJA-02).
+                </p>
+              </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                    <span style={{ fontWeight: 700, color: '#047857', fontSize: '0.92rem' }}>
-                      Saldo Disponible: {formatUsdCurrency(Number(per.availableBalance))}
-                    </span>
-                    {isReceptor && per.status === 'SOLICITADO' && (
-                      <button
-                        type="button"
-                        onClick={() => handleApprovePeriod(per.id)}
-                        style={successButtonStyle}
-                      >
-                        ✅ Aprobar Apertura
-                      </button>
-                    )}
-                    {isReceptor && per.status === 'ABIERTO' && (
-                      <button
-                        type="button"
-                        onClick={() => handleClosePeriod(per.id)}
-                        style={secondaryButtonStyle}
-                      >
-                        🔒 Cerrar Mes y Arrastre
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                <div style={{ fontSize: '0.82rem', color: '#334155', marginBottom: '0.65rem' }}>
-                  Arrastre mes anterior:{' '}
-                  <strong>{formatUsdCurrency(Number(per.carryoverBalance))}</strong> + Reposición:{' '}
-                  <strong>{formatUsdCurrency(Number(per.initialReplenishment))}</strong> = Apertura Total:{' '}
-                  <strong>{formatUsdCurrency(totalOpening)}</strong> ({usedPercent}% ejecutado)
-                  {per.closingBalance !== null && per.closingBalance !== undefined && (
-                    <span>
-                      {' '}
-                      · Saldo Final Congelado para Próximo Mes:{' '}
-                      <strong>{formatUsdCurrency(Number(per.closingBalance))}</strong>
-                    </span>
-                  )}
-                </div>
-
-                {per.vouchers && per.vouchers.length > 0 && (
-                  <table style={tableStyle}>
+              <div className="subsheet">
+                <h3 className="subsheet__title">Períodos mensuales</h3>
+                <div className="table-scroll">
+                  <table className="table">
                     <thead>
-                      <tr style={theadRowStyle}>
-                        <th style={thStyle}>Vale</th>
-                        <th style={thStyle}>Responsable / Concepto</th>
-                        <th style={thStyle}>Solicitado</th>
-                        <th style={thStyle}>Desembolsado</th>
-                        <th style={thStyle}>Rendido / Vuelto</th>
-                        <th style={thStyle}>Factura</th>
-                        <th style={thStyle}>Estado</th>
-                        <th style={thStyle}>Acción</th>
+                      <tr>
+                        <th scope="col">Mes</th>
+                        <th scope="col" className="num">
+                          Arrastre
+                        </th>
+                        <th scope="col" className="num">
+                          Reposición
+                        </th>
+                        <th scope="col" className="num">
+                          Disponible
+                        </th>
+                        <th scope="col" className="num">
+                          Ejecución
+                        </th>
+                        <th scope="col" className="num">
+                          Saldo final
+                        </th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {per.vouchers.map((v) => (
-                        <tr key={v.id} style={trStyle}>
-                          <td style={{ ...tdStyle, fontWeight: 700 }}>{v.code}</td>
-                          <td style={tdStyle}>
-                            <strong>{v.beneficiaryName}</strong> — {v.concept}
+                      {box.periods.length === 0 && (
+                        <tr className="table__empty">
+                          <td colSpan={8}>
+                            Sin períodos mensuales. Solicite la apertura de un
+                            período para esta caja.
                           </td>
-                          <td style={tdStyle}>
+                        </tr>
+                      )}
+                      {box.periods.map((per) => {
+                        const totalOpening =
+                          Number(per.carryoverBalance) +
+                          Number(per.initialReplenishment);
+                        const usedPercent =
+                          calculatePettyCashUtilizationPercent(
+                            totalOpening,
+                            Number(per.availableBalance),
+                          );
+                        return (
+                          <tr key={per.id}>
+                            <td className="nowrap table__strong">
+                              {per.yearMonth}
+                            </td>
+                            <td className="num">
+                              {formatUsdCurrency(Number(per.carryoverBalance))}
+                            </td>
+                            <td className="num">
+                              {formatUsdCurrency(
+                                Number(per.initialReplenishment),
+                              )}
+                            </td>
+                            <td className="num table__strong">
+                              {formatUsdCurrency(Number(per.availableBalance))}
+                            </td>
+                            <td className="num">{usedPercent}%</td>
+                            <td className="num">
+                              {per.closingBalance !== null &&
+                              per.closingBalance !== undefined
+                                ? formatUsdCurrency(Number(per.closingBalance))
+                                : '—'}
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${badgeClassForStatus(
+                                  per.status,
+                                )}`}
+                              >
+                                {per.status}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="btn-group">
+                                {isReceptor &&
+                                  per.status === 'SOLICITADO' && (
+                                    <button
+                                      type="button"
+                                      className="btn btn--sm"
+                                      onClick={() =>
+                                        handleApprovePeriod(per.id)
+                                      }
+                                    >
+                                      Aprobar apertura
+                                    </button>
+                                  )}
+                                {isReceptor && per.status === 'ABIERTO' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--sm"
+                                    onClick={() => handleClosePeriod(per.id)}
+                                  >
+                                    Cerrar mes y arrastre
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="subsheet">
+                <h3 className="subsheet__title">Vales</h3>
+                <div className="table-scroll">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th scope="col">Período</th>
+                        <th scope="col">Vale</th>
+                        <th scope="col">Beneficiario</th>
+                        <th scope="col">Concepto</th>
+                        <th scope="col" className="num">
+                          Solicitado
+                        </th>
+                        <th scope="col" className="num">
+                          Desembolsado
+                        </th>
+                        <th scope="col" className="num">
+                          Rendido
+                        </th>
+                        <th scope="col">Comprobante</th>
+                        <th scope="col">Estado</th>
+                        <th scope="col">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allVouchers.length === 0 && (
+                        <tr className="table__empty">
+                          <td colSpan={10}>
+                            Sin vales registrados. Emita una solicitud de vale
+                            sobre un período abierto.
+                          </td>
+                        </tr>
+                      )}
+                      {allVouchers.map(({ voucher: v, yearMonth }) => (
+                        <tr key={v.id}>
+                          <td className="nowrap">{yearMonth}</td>
+                          <td className="nowrap table__strong">{v.code}</td>
+                          <td className="table__strong">
+                            {v.beneficiaryName}
+                          </td>
+                          <td>{v.concept}</td>
+                          <td className="num">
                             {formatUsdCurrency(Number(v.requestedAmount))}
                           </td>
-                          <td style={tdStyle}>
+                          <td className="num">
                             {v.disbursedAmount
                               ? formatUsdCurrency(Number(v.disbursedAmount))
                               : '—'}
                           </td>
-                          <td style={tdStyle}>
+                          <td className="num">
                             {v.settledAmount
-                              ? `${formatUsdCurrency(Number(v.settledAmount))} (Vuelto: ${formatUsdCurrency(Number(v.returnedAmount))})`
+                              ? `${formatUsdCurrency(
+                                  Number(v.settledAmount),
+                                )} (Vuelto: ${formatUsdCurrency(
+                                  Number(v.returnedAmount),
+                                )})`
                               : '—'}
                           </td>
-                          <td style={tdStyle}>
-                            <code>{v.invoiceReference ?? 'Pendiente'}</code>
+                          <td>
+                            <div>{v.invoiceReference ?? 'Pendiente'}</div>
                             {v.attachmentUrl && (
-                              <div style={{ fontSize: '0.76rem', marginTop: '0.2rem' }}>
-                                <a
-                                  href={resolveAttachmentUrl(v.attachmentUrl)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                >
-                                  Ver comprobante
-                                </a>
-                              </div>
+                              <a
+                                href={resolveAttachmentUrl(v.attachmentUrl)}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Ver comprobante
+                              </a>
                             )}
                             {v.rejectionReason && (
-                              <div style={{ fontSize: '0.74rem', color: '#b91c1c', marginTop: '0.2rem' }}>
+                              <div className="muted">
                                 Rechazo: {v.rejectionReason}
                               </div>
                             )}
                           </td>
-                          <td style={tdStyle}>
-                            <span style={{ fontWeight: 700, fontSize: '0.76rem' }}>
+                          <td>
+                            <span
+                              className={`badge ${badgeClassForStatus(
+                                v.status,
+                              )}`}
+                            >
                               {v.status}
                             </span>
                           </td>
-                          <td style={tdStyle}>
-                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          <td>
+                            <div className="btn-group">
                               {isReceptor && v.status === 'SOLICITADO' && (
                                 <>
                                   <button
                                     type="button"
+                                    className="btn btn--sm"
                                     onClick={() => handleApproveVoucher(v.id)}
-                                    style={successButtonStyle}
                                   >
-                                    ✅ Aprobar
+                                    Aprobar
                                   </button>
                                   <button
                                     type="button"
+                                    className="btn btn--danger btn--sm"
                                     onClick={() => handleRejectVoucher(v.id)}
-                                    style={dangerButtonStyle}
                                   >
-                                    ❌ Rechazar
+                                    Rechazar
                                   </button>
                                 </>
                               )}
@@ -745,27 +938,27 @@ export function PettyCashAndReportsPanel({
                                 <>
                                   <button
                                     type="button"
+                                    className="btn btn--sm"
                                     onClick={() => handleDisburseVoucher(v.id)}
-                                    style={successButtonStyle}
                                   >
-                                    💸 Desembolsar
+                                    Desembolsar
                                   </button>
                                   <button
                                     type="button"
+                                    className="btn btn--danger btn--sm"
                                     onClick={() => handleRejectVoucher(v.id)}
-                                    style={dangerButtonStyle}
                                   >
-                                    ❌ Rechazar
+                                    Rechazar
                                   </button>
                                 </>
                               )}
                               {isGenerador && v.status === 'DESEMBOLSADO' && (
                                 <button
                                   type="button"
+                                  className="btn btn--sm"
                                   onClick={() => handleSettleVoucher(v.id)}
-                                  style={primaryButtonStyle}
                                 >
-                                  🧾 Rendir con Comprobante
+                                  Rendir con comprobante
                                 </button>
                               )}
                               {((isGenerador &&
@@ -776,10 +969,10 @@ export function PettyCashAndReportsPanel({
                                     v.status === 'RENDIDO'))) && (
                                 <button
                                   type="button"
+                                  className="btn btn--danger btn--sm"
                                   onClick={() => handleAnnulVoucher(v.id)}
-                                  style={dangerButtonStyle}
                                 >
-                                  🚫 Anular
+                                  Anular
                                 </button>
                               )}
                             </div>
@@ -788,109 +981,30 @@ export function PettyCashAndReportsPanel({
                       ))}
                     </tbody>
                   </table>
-                )}
+                </div>
               </div>
-            );
-          })}
-        </section>
-      ))}
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
 
-const cardStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  padding: '1.1rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #cbd5e1',
-  boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04)',
-};
-
-const subTitleStyle: React.CSSProperties = {
-  margin: '0 0 0.65rem',
-  fontSize: '0.96rem',
-  color: '#0f172a',
-};
-
-const stackFormStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  gap: '0.5rem',
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: '0.42rem 0.6rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #94a3b8',
-  fontSize: '0.84rem',
-};
-
-const primaryButtonStyle: React.CSSProperties = {
-  padding: '0.45rem 0.75rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#1e3a8a',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.82rem',
-  cursor: 'pointer',
-};
-
-const secondaryButtonStyle: React.CSSProperties = {
-  padding: '0.35rem 0.65rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #1e40af',
-  backgroundColor: '#eff6ff',
-  color: '#1e3a8a',
-  fontWeight: 600,
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-};
-
-const successButtonStyle: React.CSSProperties = {
-  padding: '0.35rem 0.65rem',
-  borderRadius: '0.35rem',
-  border: 'none',
-  backgroundColor: '#047857',
-  color: '#ffffff',
-  fontWeight: 600,
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-};
-
-const dangerButtonStyle: React.CSSProperties = {
-  padding: '0.35rem 0.65rem',
-  borderRadius: '0.35rem',
-  border: '1px solid #dc2626',
-  backgroundColor: '#fef2f2',
-  color: '#b91c1c',
-  fontWeight: 600,
-  fontSize: '0.78rem',
-  cursor: 'pointer',
-};
-
-const tableStyle: React.CSSProperties = {
-  width: '100%',
-  borderCollapse: 'collapse',
-  fontSize: '0.82rem',
-  backgroundColor: '#ffffff',
-};
-
-const theadRowStyle: React.CSSProperties = {
-  backgroundColor: '#f1f5f9',
-  textAlign: 'left',
-  borderBottom: '2px solid #cbd5e1',
-};
-
-const thStyle: React.CSSProperties = {
-  padding: '0.45rem',
-  color: '#334155',
-};
-
-const trStyle: React.CSSProperties = {
-  borderBottom: '1px solid #e2e8f0',
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: '0.45rem',
-};
+function badgeClassForStatus(status: string): string {
+  switch (status) {
+    case 'ACTIVA':
+    case 'ABIERTO':
+    case 'APROBADO':
+    case 'DESEMBOLSADO':
+    case 'RENDIDO':
+      return 'badge--ok';
+    case 'SOLICITADO':
+      return 'badge--warn';
+    case 'RECHAZADO':
+    case 'ANULADO':
+      return 'badge--alert';
+    default:
+      return 'badge--plain';
+  }
+}

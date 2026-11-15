@@ -1,0 +1,1036 @@
+/* ============================================================================
+   Sistema de Control de Pagos y Asignaciones (USD) — Design System
+   Universidad de Carabobo · FACYT · Sistemas de Información
+   Identidad: "instrumento de laboratorio / libro mayor". Ver /DESIGN.md.
+   ========================================================================== */
+
+/* 1. TOKENS ---------------------------------------------------------------- */
+:root {
+  /* Superficies */
+  --paper: #eef1f0;
+  --paper-line: rgba(23, 32, 42, 0.05);
+  --surface: #ffffff;
+  --surface-alt: #f6f8f7;
+  --surface-sunk: #e9edec;
+
+  /* Tinta */
+  --ink: #17202a;
+  --ink-2: #3c4a54;
+  --ink-3: #5f6c76;
+  --ink-inv: #f4f7f6;
+
+  /* Líneas */
+  --line: #d4dcda;
+  --line-strong: #a6b3b0;
+
+  /* Acento (verdigris) */
+  --accent: #0b6b5b;
+  --accent-ink: #064b40;
+  --accent-soft: #e2efec;
+
+  /* Semántica financiera */
+  --ok: #0b6b5b;
+  --ok-soft: #e2efec;
+  --alert: #9b2c2c;
+  --alert-soft: #f8e8e6;
+  --warn: #8a5a00;
+  --warn-soft: #fbf2dd;
+
+  /* Áreas científicas */
+  --area-fisica: #2f4c7e;
+  --area-quimica: #1d6b72;
+  --area-biologia: #4a6b2a;
+
+  /* Tipografía */
+  --font-display: 'Spectral', 'Iowan Old Style', Georgia, serif;
+  --font-ui: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.8125rem;
+  --fs-base: 0.9375rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.25rem;
+  --fs-xl: 1.75rem;
+  --fs-2xl: 2.25rem;
+
+  /* Espaciado */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 24px;
+  --s-6: 32px;
+  --s-7: 48px;
+
+  /* Formas */
+  --r-sm: 3px;
+  --r-md: 5px;
+  --rail: 252px;
+
+  --ease: cubic-bezier(0.2, 0.6, 0.3, 1);
+}
+
+/* 2. BASE ------------------------------------------------------------------ */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  color: var(--ink);
+  background-color: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+  color: var(--ink);
+}
+
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent-ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.muted {
+  color: var(--ink-3);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 3. ESTRUCTURA: RIEL + ÁREA DE TRABAJO ----------------------------------- */
+.shell {
+  display: grid;
+  grid-template-columns: var(--rail) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  padding: var(--s-5) var(--s-4);
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+
+.brand {
+  padding-bottom: var(--s-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand__org {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  line-height: 1.35;
+}
+
+.brand__name {
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  margin-top: var(--s-2);
+}
+
+.brand__sub {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nav__label {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-bottom: var(--s-2);
+}
+
+.nav__item {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: var(--s-2);
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  padding: 9px var(--s-2) 9px 0;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  line-height: 1.35;
+  cursor: pointer;
+  transition: background 120ms var(--ease), color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.nav__item:hover {
+  background: var(--surface-alt);
+  color: var(--ink);
+}
+
+.nav__item[aria-current='page'] {
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.nav__index {
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  text-align: right;
+  padding-right: 2px;
+}
+
+.nav__item[aria-current='page'] .nav__index {
+  color: var(--accent);
+}
+
+.rail__foot {
+  margin-top: auto;
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* 4. CABECERA DEL ÁREA DE TRABAJO ----------------------------------------- */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ws-head {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding: var(--s-5) var(--s-6) var(--s-4);
+  background: rgba(238, 241, 240, 0.92);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid var(--line);
+}
+
+.ws-title {
+  font-size: var(--fs-xl);
+  line-height: 1.3;
+}
+
+.ws-lead {
+  max-width: 62ch;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin-top: var(--s-1);
+}
+
+.ws-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+
+.ws-body {
+  padding: var(--s-5) var(--s-6) var(--s-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-width: 0;
+}
+
+/* 5. PLIEGO / SECCIÓN ----------------------------------------------------- */
+.sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  min-width: 0;
+}
+
+.sheet__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-4);
+  flex-wrap: wrap;
+  padding: var(--s-4) var(--s-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.sheet__title {
+  font-size: 1.08rem;
+}
+
+.sheet__hint {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  margin-top: 2px;
+  max-width: 68ch;
+}
+
+.sheet__body {
+  padding: var(--s-4) var(--s-5) var(--s-5);
+  min-width: 0;
+}
+
+.sheet__body--flush {
+  padding: 0;
+}
+
+.sheet + .sheet {
+  margin-top: 0;
+}
+
+.subsheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-4);
+}
+
+.subsheet__title {
+  font-size: 1rem;
+  margin-bottom: var(--s-3);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--line);
+}
+
+.divider {
+  height: 1px;
+  background: var(--line);
+  border: 0;
+  margin: var(--s-4) 0;
+}
+
+/* 6. LIBRO MAYOR (RESUMEN) ------------------------------------------------- */
+.ledger {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--ink);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  display: grid;
+  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr);
+}
+
+.ledger__figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-right: 1px solid var(--line);
+}
+
+.figure {
+  padding: var(--s-5);
+  border-left: 1px solid var(--line);
+  min-width: 0;
+}
+
+.figure:first-child {
+  border-left: 0;
+}
+
+.figure__label {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.figure__value {
+  font-size: var(--fs-2xl);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  margin-top: var(--s-2);
+  word-break: break-word;
+}
+
+.figure__value--debt {
+  color: var(--alert);
+}
+
+.figure__note {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-top: var(--s-2);
+  line-height: 1.4;
+}
+
+.ledger__side {
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  justify-content: center;
+}
+
+.ledger__side-title {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.ledger__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  font-size: var(--fs-md);
+}
+
+.ledger__count strong {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+}
+
+/* 7. TABLAS --------------------------------------------------------------- */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+  min-width: 640px;
+}
+
+.table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.01em;
+  color: var(--ink-2);
+  padding: var(--s-3) var(--s-3);
+  border-bottom: 1px solid var(--line-strong);
+  white-space: nowrap;
+  background: var(--surface-alt);
+}
+
+.table td {
+  padding: 11px var(--s-3);
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.table tbody tr:hover td {
+  background: var(--surface-alt);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table .num,
+.table th.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.table__strong {
+  font-weight: 600;
+}
+
+.table__empty td {
+  color: var(--ink-3);
+  padding: var(--s-5) var(--s-3);
+  text-align: center;
+}
+
+/* 8. ETIQUETAS / INSIGNIAS ------------------------------------------------ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--surface-alt);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+
+.badge--ok {
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-color: rgba(11, 107, 91, 0.24);
+}
+.badge--ok::before {
+  background: var(--ok);
+}
+
+.badge--alert {
+  color: var(--alert);
+  background: var(--alert-soft);
+  border-color: rgba(155, 44, 44, 0.24);
+}
+.badge--alert::before {
+  background: var(--alert);
+}
+
+.badge--warn {
+  color: var(--warn);
+  background: var(--warn-soft);
+  border-color: rgba(138, 90, 0, 0.24);
+}
+.badge--warn::before {
+  background: var(--warn);
+}
+
+.badge--plain::before {
+  display: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--ink-2);
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.chip strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Áreas científicas */
+.area {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.area::before {
+  content: '';
+  width: 3px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--ink-3);
+}
+
+.area--fisica::before {
+  background: var(--area-fisica);
+}
+.area--quimica::before {
+  background: var(--area-quimica);
+}
+.area--biologia::before {
+  background: var(--area-biologia);
+}
+
+/* 9. CONTROLES ------------------------------------------------------------ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: var(--r-sm);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms var(--ease), color 120ms var(--ease),
+    border-color 120ms var(--ease);
+}
+
+.btn:hover {
+  background: var(--accent-ink);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--ghost {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+
+.btn--ghost:hover {
+  background: var(--surface-alt);
+  border-color: var(--ink-3);
+}
+
+.btn--danger {
+  background: transparent;
+  border-color: rgba(155, 44, 44, 0.4);
+  color: var(--alert);
+}
+
+.btn--danger:hover {
+  background: var(--alert-soft);
+}
+
+.btn--sm {
+  min-height: 28px;
+  padding: 3px 10px;
+  font-size: var(--fs-xs);
+}
+
+.btn--block {
+  width: 100%;
+}
+
+.btn-group {
+  display: flex;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Formularios */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.field__label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.input,
+.select,
+.textarea {
+  min-height: 36px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  width: 100%;
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease);
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--s-3);
+  align-items: end;
+}
+
+.form-row {
+  display: flex;
+  gap: var(--s-3);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.form-row .field {
+  flex: 1 1 170px;
+}
+
+/* Controles dentro de la cabecera del área de trabajo */
+.ws-tools .select {
+  width: auto;
+  min-width: 190px;
+}
+
+.field--inline {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.field--inline .field__label {
+  white-space: nowrap;
+}
+
+.ws-head .form-row {
+  flex-basis: 100%;
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+
+.ws-login .field {
+  flex: 1 1 220px;
+}
+
+.rail__foot-label {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+
+.rail__session {
+  font-weight: 600;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+
+/* 10. AVISOS Y ESTADOS ---------------------------------------------------- */
+.notice {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: 10px var(--s-4) 10px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+}
+
+.notice::before {
+  content: '';
+  position: absolute;
+  left: 9px;
+  top: 15px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+}
+
+.notice--ok {
+  border-color: rgba(11, 107, 91, 0.32);
+  background: var(--ok-soft);
+  color: var(--accent-ink);
+}
+
+.notice--ok::before {
+  background: var(--ok);
+}
+
+.notice--error {
+  border-color: rgba(155, 44, 44, 0.32);
+  background: var(--alert-soft);
+  color: var(--alert);
+}
+
+.notice--error::before {
+  background: var(--alert);
+}
+
+.notice__close {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: inherit;
+  font-size: var(--fs-sm);
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  padding: var(--s-5);
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  background: var(--surface-alt);
+}
+
+.empty strong {
+  display: block;
+  color: var(--ink-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  margin-bottom: var(--s-1);
+}
+
+/* 11. SUB-PESTAÑAS INTERNAS ----------------------------------------------- */
+.subtabs {
+  display: flex;
+  gap: var(--s-4);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: var(--s-4);
+  overflow-x: auto;
+}
+
+.subtab {
+  border: 0;
+  background: transparent;
+  padding: 8px 2px 9px;
+  border-bottom: 2px solid transparent;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.subtab:hover {
+  color: var(--ink);
+}
+
+.subtab[aria-selected='true'] {
+  color: var(--accent-ink);
+  border-bottom-color: var(--accent);
+}
+
+/* 12. UTILIDADES DE LAYOUT ------------------------------------------------ */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.stack--lg {
+  gap: var(--s-5);
+}
+
+.row {
+  display: flex;
+  gap: var(--s-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.row--between {
+  justify-content: space-between;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s-4);
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--s-3);
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.text-right {
+  text-align: right;
+}
+
+/* 13. RESPONSIVE ---------------------------------------------------------- */
+@media (max-width: 1080px) {
+  .ledger {
+    grid-template-columns: 1fr;
+  }
+  .ledger__figures {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .rail {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--s-3);
+    padding: var(--s-3) var(--s-4);
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .brand {
+    border-bottom: 0;
+    padding-bottom: 0;
+    min-width: 150px;
+  }
+
+  .brand__org,
+  .brand__sub,
+  .nav__label {
+    display: none;
+  }
+
+  .brand__name {
+    font-size: 1rem;
+    margin-top: 0;
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: var(--s-1);
+  }
+
+  .nav__item {
+    grid-template-columns: auto;
+    border-left: 0;
+    border-bottom: 2px solid transparent;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+
+  .nav__item[aria-current='page'] {
+    border-bottom-color: var(--accent);
+  }
+
+  .nav__index {
+    display: none;
+  }
+
+  .rail__foot {
+    display: none;
+  }
+
+  .ws-head {
+    position: static;
+    padding: var(--s-4);
+  }
+
+  .ws-body {
+    padding: var(--s-4) var(--s-4) var(--s-6);
+  }
+
+  .ledger__figures {
+    grid-template-columns: 1fr;
+  }
+
+  .figure {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+    padding: var(--s-4);
+  }
+
+  .figure:first-child {
+    border-top: 0;
+  }
+
+  .figure__value {
+    font-size: 1.75rem;
+  }
+
+  .sheet__body {
+    padding: var(--s-3) var(--s-4) var(--s-4);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
