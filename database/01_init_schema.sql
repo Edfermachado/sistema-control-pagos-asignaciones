@@ -285,6 +285,7 @@ CREATE TABLE IF NOT EXISTS "petty_cash_vouchers" (
     "returned_amount" NUMERIC(12, 2),
     "invoice_reference" VARCHAR(120),
     "attachment_url" VARCHAR(500),
+    "rejection_reason" TEXT,
     "status" "PettyCashVoucherStatus" NOT NULL DEFAULT 'SOLICITADO',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

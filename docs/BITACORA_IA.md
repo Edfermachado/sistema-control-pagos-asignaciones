@@ -210,3 +210,34 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * **Frontend (Vitest):** 5 suites / `25/25` tests en verde + `vite build` exitoso.
   * **Docker Compose:** stack completo levantado desde volumen limpio.
   * **UI (Chromium headless):** dashboard, catálogos, motor financiero, cajas chicas, usuarios y auditoría sin errores de consola.
+
+---
+
+### Interacción #12 — Cierre de Pendientes del PDF: Anulaciones, Parámetros, Caja Chica, Comprobantes, Auditoría y PDFs
+* **Fecha:** Noviembre 2026
+* **Herramienta / Modelo:** DeepSeek V4.1 Flash (OpenCode)
+* **Indicación (Prompt) del Usuario:**
+  > *"Hazme las preguntas necesarias para llevar a cabo los pendientes del proyecto, por supuesto los pendientes siempre tienen que estar basados en el contenido del pdf."*
+* **Decisiones acordadas con el usuario:**
+  1. Anulaciones para todas las entidades del modelo.
+  2. CRUD genérico clave-valor para parámetros del sistema.
+  3. Separar aprobación y desembolso de vales, agregando rechazo y cierre de caja.
+  4. Pago FIFO limitado a los ítems de la solicitud aprobada.
+  5. Carga real de archivo de comprobante + referencia.
+  6. Triggers PostgreSQL + auditoría de negocio.
+  7. Marca de agua y bloques de firma en PDFs.
+  8. Trabajo en rama local, sin push a `main`.
+* **Implementación:**
+  1. **Anulaciones (`AnnulmentsService` / `AnnulmentsController`):** nuevas anulaciones de lote de causación, solicitud de pago y vale de caja chica; reapertura de solicitud al anular el último pago; validación de causaciones incluidas en solicitudes activas; auditoría y motivo obligatorio.
+  2. **Parámetros (`ParametersModule`):** CRUD `GET/POST/PATCH/DELETE /api/parameters` con RBAC y pantalla en el workspace ADMIN.
+  3. **Caja chica (`PettyCashService`):** endpoints separados de aprobar, rechazar, desembolsar y cerrar caja; campo `rejection_reason`; validación de comprobante obligatorio.
+  4. **Integridad de pagos (`PaymentRequestsService` / `PaymentsService`):** bloqueo de causaciones duplicadas en solicitudes activas; pago FIFO exclusivo sobre ítems de la solicitud y control de saldo pendiente de la solicitud.
+  5. **Comprobantes (`UploadsModule`):** endpoint multipart `/api/uploads`, validación PDF/PNG/JPEG hasta 5 MB, servido estático en `/uploads` y descarga desde la UI.
+  6. **Auditoría (`database/03_audit_triggers.sql`):** triggers sobre tablas del dominio, bloqueo append-only de `audit_logs` y auditoría de negocio existente.
+  7. **PDFs (`pdf-document.builder.ts`):** marca de agua rotada para anulados y bloques de firma del receptor/beneficiario y generador/aprobador.
+  8. **Prueba de humo:** ampliada a 59 verificaciones end-to-end.
+* **Verificación final:**
+  * **Backend (Jest):** 29 suites / `215/215` tests en verde + `nest build` exitoso.
+  * **Frontend (Vitest):** 5 suites / `27/27` tests en verde + `vite build` exitoso.
+  * **Smoke test API:** `59/59` verificaciones en verde.
+  * **UI (Chromium headless):** sin errores de consola; parámetros, lotes, caja chica y flujos segregados visibles.

@@ -9,6 +9,7 @@ import {
 import {
   FinancialEnginePanel,
   LiveAccrual,
+  LiveAccrualBatch,
   LivePayment,
   LivePaymentRequest,
 } from './components/FinancialEnginePanel';
@@ -18,6 +19,7 @@ import {
 } from './components/PettyCashAndReportsPanel';
 import {
   LiveAuditRecord,
+  LiveSystemParameter,
   LiveUser,
   UsersAndAuditWorkspace,
 } from './components/UsersAndAuditWorkspace';
@@ -207,12 +209,14 @@ export function App(): React.ReactElement {
   );
   const [assignments, setAssignments] = useState<LiveAssignment[]>([]);
   const [accruals, setAccruals] = useState<LiveAccrual[]>(FALLBACK_ACCRUALS);
+  const [accrualBatches, setAccrualBatches] = useState<LiveAccrualBatch[]>([]);
   const [paymentRequests, setPaymentRequests] = useState<LivePaymentRequest[]>(
     [],
   );
   const [payments, setPayments] = useState<LivePayment[]>([]);
   const [pettyCashes, setPettyCashes] = useState<LivePettyCash[]>([]);
   const [users, setUsers] = useState<LiveUser[]>([]);
+  const [parameters, setParameters] = useState<LiveSystemParameter[]>([]);
   const [auditLogs, setAuditLogs] = useState<LiveAuditRecord[]>([]);
   const [summary, setSummary] = useState<ExecutiveSummaryData | null>(null);
   const [summaryProjectFilter, setSummaryProjectFilter] = useState<string>('');
@@ -249,21 +253,28 @@ export function App(): React.ReactElement {
         }
 
         if (role === UserRole.GENERADOR || role === UserRole.RECEPTOR) {
-          const [accRes, reqRes, payRes, pcRes, sumRes] = await Promise.all([
-            apiRequest<LiveAccrual[]>('/accruals', { token: authToken }),
-            apiRequest<LivePaymentRequest[]>('/payment-requests', {
-              token: authToken,
-            }),
-            apiRequest<LivePayment[]>('/payments', { token: authToken }),
-            apiRequest<LivePettyCash[]>('/petty-cashes', { token: authToken }),
-            apiRequest<ExecutiveSummaryData>(
-              summaryProjectFilter
-                ? `/reports/summary?projectId=${summaryProjectFilter}`
-                : '/reports/summary',
-              { token: authToken },
-            ),
-          ]);
+          const [accRes, batchRes, reqRes, payRes, pcRes, sumRes] =
+            await Promise.all([
+              apiRequest<LiveAccrual[]>('/accruals', { token: authToken }),
+              apiRequest<LiveAccrualBatch[]>('/accruals/batches', {
+                token: authToken,
+              }),
+              apiRequest<LivePaymentRequest[]>('/payment-requests', {
+                token: authToken,
+              }),
+              apiRequest<LivePayment[]>('/payments', { token: authToken }),
+              apiRequest<LivePettyCash[]>('/petty-cashes', {
+                token: authToken,
+              }),
+              apiRequest<ExecutiveSummaryData>(
+                summaryProjectFilter
+                  ? `/reports/summary?projectId=${summaryProjectFilter}`
+                  : '/reports/summary',
+                { token: authToken },
+              ),
+            ]);
           setAccruals(accRes);
+          setAccrualBatches(batchRes);
           setPaymentRequests(reqRes);
           setPayments(payRes);
           setPettyCashes(pcRes);
@@ -271,10 +282,14 @@ export function App(): React.ReactElement {
         }
 
         if (role === UserRole.ADMIN) {
-          const usersRes = await apiRequest<LiveUser[]>('/users', {
-            token: authToken,
-          });
+          const [usersRes, parametersRes] = await Promise.all([
+            apiRequest<LiveUser[]>('/users', { token: authToken }),
+            apiRequest<LiveSystemParameter[]>('/parameters', {
+              token: authToken,
+            }),
+          ]);
           setUsers(usersRes);
+          setParameters(parametersRes);
         }
 
         if (role === UserRole.ADMIN || role === UserRole.RECEPTOR) {
@@ -709,6 +724,7 @@ export function App(): React.ReactElement {
             paymentGroups={paymentGroups}
             beneficiaries={beneficiaries}
             accruals={accruals}
+            accrualBatches={accrualBatches}
             paymentRequests={paymentRequests}
             payments={payments}
             onRefresh={refreshData}
@@ -734,6 +750,7 @@ export function App(): React.ReactElement {
             token={token}
             activeRole={activeRole}
             users={users}
+            parameters={parameters}
             auditLogs={auditLogs}
             onRefresh={refreshData}
             onNotify={handleNotify}

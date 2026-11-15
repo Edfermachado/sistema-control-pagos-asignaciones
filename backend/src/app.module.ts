@@ -8,10 +8,12 @@ import { BeneficiariesModule } from './modules/beneficiaries/beneficiaries.modul
 import { HealthModule } from './modules/health/health.module';
 import { PaymentGroupsModule } from './modules/payment-groups/payment-groups.module';
 import { PaymentRequestsModule } from './modules/payment-requests/payment-requests.module';
+import { ParametersModule } from './modules/parameters/parameters.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { PettyCashModule } from './modules/petty-cash/petty-cash.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
 import { UsersModule } from './modules/users/users.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -30,8 +32,10 @@ import { PrismaModule } from './prisma/prisma.module';
     PaymentRequestsModule,
     PaymentsModule,
     AnnulmentsModule,
+    ParametersModule,
     PettyCashModule,
     ReportsModule,
+    UploadsModule,
   ],
 })
 export class AppModule {}

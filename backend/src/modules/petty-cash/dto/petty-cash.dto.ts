@@ -1,4 +1,10 @@
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
+import { MIN_REJECTION_REASON_LENGTH } from '../../../common/constants/domain.enums';
 
 export class CreatePettyCashDto {
   @IsString()
@@ -51,7 +57,19 @@ export class SettleVoucherDto {
   @IsNotEmpty({ message: 'La referencia de factura o comprobante es obligatoria.' })
   invoiceReference!: string;
 
-  @IsOptional()
   @IsString()
-  attachmentUrl?: string;
+  @IsNotEmpty({
+    message:
+      '[RN-CAJA-03] El archivo del comprobante es obligatorio para rendir el vale.',
+  })
+  attachmentUrl!: string;
+}
+
+export class RejectVoucherDto {
+  @IsString()
+  @IsNotEmpty({ message: 'El motivo de rechazo del vale es obligatorio.' })
+  @MinLength(MIN_REJECTION_REASON_LENGTH, {
+    message: `[RN-CAJA-03] El motivo de rechazo debe tener al menos ${MIN_REJECTION_REASON_LENGTH} caracteres.`,
+  })
+  reason!: string;
 }

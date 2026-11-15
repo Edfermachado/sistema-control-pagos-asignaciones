@@ -21,6 +21,7 @@ const ALLOWED_TRANSITIONS: Record<PaymentRequestStatus, PaymentRequestStatus[]> 
   [PaymentRequestStatus.ENTREGADA]: [
     PaymentRequestStatus.ENTREGADA,
     PaymentRequestStatus.CERRADA,
+    PaymentRequestStatus.ANULADA,
   ],
   [PaymentRequestStatus.CERRADA]: [],
   [PaymentRequestStatus.ANULADA]: [],

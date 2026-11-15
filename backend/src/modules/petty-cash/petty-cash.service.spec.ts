@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import {
   PettyCashPeriodStatus,
+  PettyCashStatus,
   PettyCashVoucherStatus,
   UserRole,
 } from '../../common/constants/domain.enums';
@@ -16,7 +17,12 @@ import { PettyCashService } from './petty-cash.service';
 describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre de Saldo)', () => {
   let service: PettyCashService;
   let prismaMock: {
-    pettyCash: { findUnique: jest.Mock; findMany: jest.Mock; create: jest.Mock };
+    pettyCash: {
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      create: jest.Mock;
+      update: jest.Mock;
+    };
     pettyCashPeriod: {
       findFirst: jest.Mock;
       findUnique: jest.Mock;
@@ -48,7 +54,12 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
 
   beforeEach(() => {
     prismaMock = {
-      pettyCash: { findUnique: jest.fn(), findMany: jest.fn(), create: jest.fn() },
+      pettyCash: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       pettyCashPeriod: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
@@ -140,15 +151,45 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
     });
   });
 
-  describe('approvePeriodOpening, requestVoucher & approveAndDisburseVoucher', () => {
-    it('debe permitir al RECEPTOR aprobar y desembolsar un vale descontando del saldo disponible (Happy Path)', async () => {
+  describe('approvePeriodOpening, requestVoucher & flujo de vales', () => {
+    it('debe aprobar un vale SOLICITADO sin mover el saldo disponible (Happy Path)', async () => {
       // Arrange
       prismaMock.pettyCashVoucher.findUnique.mockResolvedValueOnce({
         id: 'v-1',
         periodId: 'per-1',
         requestedAmount: '80.00',
         status: PettyCashVoucherStatus.SOLICITADO,
-        period: { id: 'per-1', availableBalance: '200.00' },
+        period: {
+          id: 'per-1',
+          status: PettyCashPeriodStatus.ABIERTO,
+          availableBalance: '200.00',
+        },
+      });
+      prismaMock.pettyCashVoucher.update.mockResolvedValueOnce({
+        id: 'v-1',
+        status: PettyCashVoucherStatus.APROBADO,
+      });
+
+      // Act
+      const approved = await service.approveVoucher('v-1', receptorActor);
+
+      // Assert
+      expect(approved.status).toBe(PettyCashVoucherStatus.APROBADO);
+      expect(prismaMock.pettyCashPeriod.update).not.toHaveBeenCalled();
+    });
+
+    it('debe desembolsar un vale APROBADO descontando del saldo disponible (Happy Path)', async () => {
+      // Arrange
+      prismaMock.pettyCashVoucher.findUnique.mockResolvedValueOnce({
+        id: 'v-1',
+        periodId: 'per-1',
+        requestedAmount: '80.00',
+        status: PettyCashVoucherStatus.APROBADO,
+        period: {
+          id: 'per-1',
+          status: PettyCashPeriodStatus.ABIERTO,
+          availableBalance: '200.00',
+        },
       });
       prismaMock.pettyCashVoucher.update.mockResolvedValueOnce({
         id: 'v-1',
@@ -157,14 +198,38 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       prismaMock.pettyCashPeriod.update.mockResolvedValueOnce({});
 
       // Act
-      const result = await service.approveAndDisburseVoucher(
-        'v-1',
-        receptorActor,
-      );
+      const result = await service.disburseVoucher('v-1', receptorActor);
 
       // Assert
       expect(result.voucher.status).toBe(PettyCashVoucherStatus.DESEMBOLSADO);
       expect(result.newAvailableBalance).toBe('120.00');
+    });
+
+    it('debe rechazar un vale APROBADO con motivo válido (Edge Case)', async () => {
+      // Arrange
+      prismaMock.pettyCashVoucher.findUnique.mockResolvedValueOnce({
+        id: 'v-1',
+        status: PettyCashVoucherStatus.APROBADO,
+        period: {
+          id: 'per-1',
+          status: PettyCashPeriodStatus.ABIERTO,
+          availableBalance: '200.00',
+        },
+      });
+      prismaMock.pettyCashVoucher.update.mockResolvedValueOnce({
+        id: 'v-1',
+        status: PettyCashVoucherStatus.RECHAZADO,
+      });
+
+      // Act
+      const rejected = await service.rejectVoucher(
+        'v-1',
+        'Soporte insuficiente del gasto',
+        receptorActor,
+      );
+
+      // Assert
+      expect(rejected.status).toBe(PettyCashVoucherStatus.RECHAZADO);
     });
 
     it('debe aprobar la apertura mensual cambiando el estado de SOLICITADO a ABIERTO (Edge Case)', async () => {
@@ -273,7 +338,24 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       await expect(
         service.settleVoucher(
           'v-1',
-          { settledAmount: '50.00', invoiceReference: '   ' },
+          {
+            settledAmount: '50.00',
+            invoiceReference: '   ',
+            attachmentUrl: '/uploads/comprobante.pdf',
+          },
+          generadorActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      // Act & Assert (Rendir sin archivo de comprobante)
+      await expect(
+        service.settleVoucher(
+          'v-1',
+          {
+            settledAmount: '50.00',
+            invoiceReference: 'FACT-001',
+            attachmentUrl: '   ',
+          },
           generadorActor,
         ),
       ).rejects.toThrow(BadRequestException);
@@ -289,6 +371,44 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       await expect(
         service.closeMonthlyPeriod('per-1', receptorActor),
       ).rejects.toThrow('[RN-CAJA-04]');
+    });
+  });
+
+  describe('closePettyCash', () => {
+    it('debe cerrar definitivamente una caja chica sin períodos activos (Happy Path)', async () => {
+      // Arrange
+      prismaMock.pettyCash.findUnique.mockResolvedValueOnce({
+        id: 'pc-1',
+        status: PettyCashStatus.ACTIVA,
+        periods: [{ id: 'per-1', status: PettyCashPeriodStatus.CERRADO }],
+      });
+      prismaMock.pettyCash.update.mockResolvedValueOnce({
+        id: 'pc-1',
+        status: PettyCashStatus.CERRADA,
+      });
+
+      // Act
+      const closed = await service.closePettyCash('pc-1', receptorActor);
+
+      // Assert
+      expect(closed.status).toBe(PettyCashStatus.CERRADA);
+      expect(auditMock.recordLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('debe bloquear el cierre si existe un período ABIERTO (Edge Case)', async () => {
+      // Arrange
+      prismaMock.pettyCash.findUnique.mockResolvedValueOnce({
+        id: 'pc-1',
+        status: PettyCashStatus.ACTIVA,
+        periods: [
+          { id: 'per-1', yearMonth: '2026-11', status: PettyCashPeriodStatus.ABIERTO },
+        ],
+      });
+
+      // Act & Assert
+      await expect(
+        service.closePettyCash('pc-1', receptorActor),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

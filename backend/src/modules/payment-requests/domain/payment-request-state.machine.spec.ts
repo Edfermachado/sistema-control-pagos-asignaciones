@@ -48,6 +48,16 @@ describe('payment-request-state.machine (RN-PAG-01 Flujo de Estados)', () => {
       ).not.toThrow();
     });
 
+    it('debe permitir anular una solicitud ENTREGADA cuyos pagos fueron revertidos (RN-GLOB-04)', () => {
+      // Arrange & Act & Assert
+      expect(() =>
+        assertValidPaymentRequestTransition(
+          PaymentRequestStatus.ENTREGADA,
+          PaymentRequestStatus.ANULADA,
+        ),
+      ).not.toThrow();
+    });
+
     it('debe lanzar BadRequestException si se intenta saltar de CREADA a APROBADA o modificar una solicitud RECHAZADA/CERRADA (Violación RN-PAG-01)', () => {
       // Arrange & Act & Assert
       expect(() =>

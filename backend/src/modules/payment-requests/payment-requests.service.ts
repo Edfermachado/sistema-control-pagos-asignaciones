@@ -61,6 +61,29 @@ export class PaymentRequestsService {
       );
     }
 
+    const activeRequestItem = await this.prisma.paymentRequestItem.findFirst({
+      where: {
+        accrualId: { in: dto.accrualIds },
+        paymentRequest: {
+          status: {
+            in: [
+              PaymentRequestStatus.CREADA,
+              PaymentRequestStatus.ENVIADA,
+              PaymentRequestStatus.APROBADA,
+              PaymentRequestStatus.ENTREGADA,
+            ],
+          },
+        },
+      },
+      select: { id: true, paymentRequestId: true },
+    });
+
+    if (activeRequestItem) {
+      throw new ConflictException(
+        '[RN-PAG-01] Una o más causaciones ya están incluidas en otra solicitud de pago activa.',
+      );
+    }
+
     let totalRequested = new Decimal('0.00');
     for (const acc of accruals) {
       totalRequested = totalRequested.plus(toUsdDecimal(acc.balanceDue.toString()));

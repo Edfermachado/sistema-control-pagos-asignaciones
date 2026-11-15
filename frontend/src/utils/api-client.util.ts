@@ -94,6 +94,49 @@ export async function apiRequest<T>(
   return parsed as T;
 }
 
+export interface UploadedFileInfo {
+  url: string;
+  originalName: string;
+  mimeType: string;
+  size: number;
+}
+
+/**
+ * Sube un comprobante como multipart/form-data autenticado con JWT.
+ */
+export async function uploadAuthenticatedFile(
+  path: string,
+  file: File,
+  token: string,
+  baseUrl: string = DEFAULT_API_BASE_URL,
+): Promise<UploadedFileInfo> {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${baseUrl}${normalizedPath}`, {
+    method: 'POST',
+    headers: buildAuthHeaders(token, false),
+    body: formData,
+  });
+
+  const text = await response.text();
+  let parsed: unknown = null;
+  if (text.length > 0) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = { message: text };
+    }
+  }
+
+  if (!response.ok) {
+    throw new Error(extractApiErrorMessage(parsed, response.status));
+  }
+
+  return parsed as UploadedFileInfo;
+}
+
 /**
  * Descarga un archivo binario PDF autenticado con JWT desde el backend y dispara su guardado en el navegador.
  */

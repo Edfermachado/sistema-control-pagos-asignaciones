@@ -20,6 +20,10 @@ export interface IndividualReceiptData {
   }>;
 }
 
+export interface PdfDocumentOptions {
+  watermark?: string;
+}
+
 export interface ConsolidatedRequestData {
   requestCode: string;
   projectCode: string;
@@ -60,6 +64,7 @@ export function buildSimplePdfBuffer(
   title: string,
   subtitle: string,
   bodyLines: string[],
+  options: PdfDocumentOptions = {},
 ): Buffer {
   const cleanTitle = sanitizePdfText(title).trim();
   if (!cleanTitle) {
@@ -94,6 +99,18 @@ export function buildSimplePdfBuffer(
   }
 
   streamCommands.push('ET');
+
+  const cleanWatermark = sanitizePdfText(options.watermark ?? '').trim();
+  if (cleanWatermark) {
+    streamCommands.push(
+      'q',
+      '0.82 0.82 0.82 rg',
+      '/F1 58 Tf',
+      '0.7071 0.7071 -0.7071 0.7071 120 260 Tm',
+      `(${cleanWatermark}) Tj`,
+      'Q',
+    );
+  }
   const contentStream = streamCommands.join('\n');
 
   const objects: string[] = [
@@ -157,6 +174,14 @@ export function formatIndividualPaymentReceiptLines(
     );
   }
 
+  lines.push(
+    '--------------------------------------------------------------------------------',
+    'FIRMA DEL RECEPTOR: ______________________________',
+    `Nombre: ${data.deliveredByName}`,
+    'FIRMA DEL BENEFICIARIO: __________________________',
+    `Nombre: ${data.beneficiaryName} (DNI: ${data.beneficiaryDni})`,
+  );
+
   return lines;
 }
 
@@ -183,6 +208,14 @@ export function formatConsolidatedRequestLines(
       ` * ${item.beneficiaryName} (${item.beneficiaryDni}) | Periodo ${item.periodStart} a ${item.periodEnd}: $${reqAmt} USD`,
     );
   }
+
+  lines.push(
+    '--------------------------------------------------------------------------------',
+    'FIRMA DEL GENERADOR: _____________________________',
+    `Nombre: ${data.createdByName}`,
+    'FIRMA DEL APROBADOR: _____________________________',
+    `Nombre: ${data.reviewedByName ?? 'Pendiente de Revision'}`,
+  );
 
   return lines;
 }

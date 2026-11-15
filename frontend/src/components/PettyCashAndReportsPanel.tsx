@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { UserRole } from '../types/domain.types';
-import { apiRequest } from '../utils/api-client.util';
+import {
+  apiRequest,
+  DEFAULT_API_BASE_URL,
+  uploadAuthenticatedFile,
+} from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 import { calculatePettyCashUtilizationPercent } from '../utils/petty-cash.util';
 import { LiveProject } from './CatalogsAndAssignmentsWorkspace';
@@ -15,6 +19,8 @@ export interface LivePettyCashVoucher {
   settledAmount?: string | number | null;
   returnedAmount: string | number;
   invoiceReference?: string | null;
+  attachmentUrl?: string | null;
+  rejectionReason?: string | null;
   status: string;
 }
 
@@ -82,9 +88,18 @@ export function PettyCashAndReportsPanel({
   );
   const [voucherAmount, setVoucherAmount] = useState('45.00');
 
-  // 4. Rendición de Vale con Factura
+  // 4. Rendición de Vale con Factura y archivo de comprobante
   const [settleAmount, setSettleAmount] = useState('40.00');
   const [settleInvoice, setSettleInvoice] = useState('FACT-SENIAT-009841');
+  const [settleFile, setSettleFile] = useState<File | null>(null);
+
+  // 5. Motivos de rechazo/anulación
+  const [voucherRejectionReason, setVoucherRejectionReason] = useState(
+    'Soporte insuficiente del gasto presentado',
+  );
+  const [voucherAnnulReason, setVoucherAnnulReason] = useState(
+    'Anulación justificada autorizada por Gerencia Administrativa',
+  );
 
   const handleCreatePettyCash = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -194,6 +209,40 @@ export function PettyCashAndReportsPanel({
     }
   };
 
+  const handleApproveVoucher = async (voucherId: string) => {
+    try {
+      await apiRequest(`/petty-cashes/vouchers/${voucherId}/approve`, {
+        method: 'PATCH',
+        token,
+      });
+      onNotify('success', 'Vale APROBADO por Gerencia. Aún no se mueve saldo.');
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleRejectVoucher = async (voucherId: string) => {
+    if (!voucherRejectionReason || voucherRejectionReason.trim().length < 5) {
+      onNotify(
+        'error',
+        'Ingrese un motivo de rechazo de al menos 5 caracteres (RN-CAJA-03).',
+      );
+      return;
+    }
+    try {
+      await apiRequest(`/petty-cashes/vouchers/${voucherId}/reject`, {
+        method: 'PATCH',
+        token,
+        body: { reason: voucherRejectionReason },
+      });
+      onNotify('success', 'Vale RECHAZADO con motivo registrado.');
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
   const handleDisburseVoucher = async (voucherId: string) => {
     try {
       await apiRequest(`/petty-cashes/vouchers/${voucherId}/disburse`, {
@@ -202,7 +251,7 @@ export function PettyCashAndReportsPanel({
       });
       onNotify(
         'success',
-        'Vale aprobado y desembolsado. Saldo disponible descontado en tiempo real (RN-CAJA-02).',
+        'Vale desembolsado. Saldo disponible descontado en tiempo real (RN-CAJA-02).',
       );
       await onRefresh();
     } catch (err) {
@@ -211,19 +260,67 @@ export function PettyCashAndReportsPanel({
   };
 
   const handleSettleVoucher = async (voucherId: string) => {
+    if (!settleFile) {
+      onNotify(
+        'error',
+        'Adjunte el archivo del comprobante antes de rendir el vale (RN-CAJA-03).',
+      );
+      return;
+    }
     try {
+      const uploaded = await uploadAuthenticatedFile(
+        '/uploads',
+        settleFile,
+        token ?? '',
+      );
       await apiRequest(`/petty-cashes/vouchers/${voucherId}/settle`, {
         method: 'PATCH',
         token,
         body: {
           settledAmount: settleAmount,
           invoiceReference: settleInvoice,
+          attachmentUrl: uploaded.url,
         },
       });
       onNotify(
         'success',
-        `Vale rendido con factura '${settleInvoice}'. El vuelto sobrante retornó al disponible de la caja (RN-CAJA-03).`,
+        `Vale rendido con comprobante '${settleInvoice}'. El vuelto sobrante retornó al disponible de la caja (RN-CAJA-03).`,
       );
+      setSettleFile(null);
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleAnnulVoucher = async (voucherId: string) => {
+    if (!voucherAnnulReason || voucherAnnulReason.trim().length < 10) {
+      onNotify(
+        'error',
+        'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
+      );
+      return;
+    }
+    try {
+      await apiRequest(`/annulments/petty-cash-vouchers/${voucherId}`, {
+        method: 'POST',
+        token,
+        body: { reason: voucherAnnulReason },
+      });
+      onNotify('success', 'Vale anulado y saldo revertido según su estado.');
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleClosePettyCash = async (pettyCashId: string) => {
+    try {
+      await apiRequest(`/petty-cashes/${pettyCashId}/close`, {
+        method: 'PATCH',
+        token,
+      });
+      onNotify('success', 'Caja chica cerrada definitivamente.');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -235,6 +332,14 @@ export function PettyCashAndReportsPanel({
       .filter((per) => per.status === 'ABIERTO')
       .map((per) => ({ ...per, boxCode: pc.code })),
   );
+
+  const resolveAttachmentUrl = (attachmentUrl: string): string => {
+    if (/^https?:\/\//i.test(attachmentUrl)) {
+      return attachmentUrl;
+    }
+    const backendOrigin = DEFAULT_API_BASE_URL.replace(/\/api\/?$/, '');
+    return `${backendOrigin}${attachmentUrl}`;
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
@@ -403,6 +508,33 @@ export function PettyCashAndReportsPanel({
                 style={{ ...inputStyle, width: '210px' }}
               />
             </label>
+            <label style={{ fontSize: '0.82rem' }}>
+              Archivo del Comprobante (PDF/PNG/JPEG):{' '}
+              <input
+                type="file"
+                accept="application/pdf,image/png,image/jpeg"
+                onChange={(e) => setSettleFile(e.target.files?.[0] ?? null)}
+                style={{ fontSize: '0.8rem' }}
+              />
+            </label>
+          </div>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+            <label style={{ fontSize: '0.82rem', flex: 1, minWidth: '260px' }}>
+              Motivo de Rechazo de Vale:{' '}
+              <input
+                value={voucherRejectionReason}
+                onChange={(e) => setVoucherRejectionReason(e.target.value)}
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </label>
+            <label style={{ fontSize: '0.82rem', flex: 1, minWidth: '260px' }}>
+              Motivo de Anulación de Vale:{' '}
+              <input
+                value={voucherAnnulReason}
+                onChange={(e) => setVoucherAnnulReason(e.target.value)}
+                style={{ ...inputStyle, width: '100%' }}
+              />
+            </label>
           </div>
         </section>
       )}
@@ -420,18 +552,29 @@ export function PettyCashAndReportsPanel({
                 <strong>{formatUsdCurrency(Number(box.authorizedAmount))}</strong>
               </span>
             </div>
-            <span
-              style={{
-                padding: '0.25rem 0.6rem',
-                borderRadius: '999px',
-                fontSize: '0.76rem',
-                fontWeight: 700,
-                backgroundColor: '#dcfce7',
-                color: '#065f46',
-              }}
-            >
-              {box.status}
-            </span>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <span
+                style={{
+                  padding: '0.25rem 0.6rem',
+                  borderRadius: '999px',
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  backgroundColor: '#dcfce7',
+                  color: '#065f46',
+                }}
+              >
+                {box.status}
+              </span>
+              {isReceptor && box.status === 'ACTIVA' && (
+                <button
+                  type="button"
+                  onClick={() => handleClosePettyCash(box.id)}
+                  style={dangerButtonStyle}
+                >
+                  Cerrar Caja Chica
+                </button>
+              )}
+            </div>
           </div>
 
           {box.periods.map((per) => {
@@ -556,6 +699,22 @@ export function PettyCashAndReportsPanel({
                           </td>
                           <td style={tdStyle}>
                             <code>{v.invoiceReference ?? 'Pendiente'}</code>
+                            {v.attachmentUrl && (
+                              <div style={{ fontSize: '0.76rem', marginTop: '0.2rem' }}>
+                                <a
+                                  href={resolveAttachmentUrl(v.attachmentUrl)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                >
+                                  Ver comprobante
+                                </a>
+                              </div>
+                            )}
+                            {v.rejectionReason && (
+                              <div style={{ fontSize: '0.74rem', color: '#b91c1c', marginTop: '0.2rem' }}>
+                                Rechazo: {v.rejectionReason}
+                              </div>
+                            )}
                           </td>
                           <td style={tdStyle}>
                             <span style={{ fontWeight: 700, fontSize: '0.76rem' }}>
@@ -563,24 +722,67 @@ export function PettyCashAndReportsPanel({
                             </span>
                           </td>
                           <td style={tdStyle}>
-                            {isReceptor && v.status === 'SOLICITADO' && (
-                              <button
-                                type="button"
-                                onClick={() => handleDisburseVoucher(v.id)}
-                                style={successButtonStyle}
-                              >
-                                💸 Desembolsar
-                              </button>
-                            )}
-                            {isGenerador && v.status === 'DESEMBOLSADO' && (
-                              <button
-                                type="button"
-                                onClick={() => handleSettleVoucher(v.id)}
-                                style={primaryButtonStyle}
-                              >
-                                🧾 Rendir con Factura
-                              </button>
-                            )}
+                            <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              {isReceptor && v.status === 'SOLICITADO' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleApproveVoucher(v.id)}
+                                    style={successButtonStyle}
+                                  >
+                                    ✅ Aprobar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectVoucher(v.id)}
+                                    style={dangerButtonStyle}
+                                  >
+                                    ❌ Rechazar
+                                  </button>
+                                </>
+                              )}
+                              {isReceptor && v.status === 'APROBADO' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDisburseVoucher(v.id)}
+                                    style={successButtonStyle}
+                                  >
+                                    💸 Desembolsar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRejectVoucher(v.id)}
+                                    style={dangerButtonStyle}
+                                  >
+                                    ❌ Rechazar
+                                  </button>
+                                </>
+                              )}
+                              {isGenerador && v.status === 'DESEMBOLSADO' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSettleVoucher(v.id)}
+                                  style={primaryButtonStyle}
+                                >
+                                  🧾 Rendir con Comprobante
+                                </button>
+                              )}
+                              {((isGenerador &&
+                                (v.status === 'SOLICITADO' ||
+                                  v.status === 'APROBADO')) ||
+                                (isReceptor &&
+                                  (v.status === 'DESEMBOLSADO' ||
+                                    v.status === 'RENDIDO'))) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAnnulVoucher(v.id)}
+                                  style={dangerButtonStyle}
+                                >
+                                  🚫 Anular
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -651,6 +853,17 @@ const successButtonStyle: React.CSSProperties = {
   border: 'none',
   backgroundColor: '#047857',
   color: '#ffffff',
+  fontWeight: 600,
+  fontSize: '0.78rem',
+  cursor: 'pointer',
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  padding: '0.35rem 0.65rem',
+  borderRadius: '0.35rem',
+  border: '1px solid #dc2626',
+  backgroundColor: '#fef2f2',
+  color: '#b91c1c',
   fontWeight: 600,
   fontSize: '0.78rem',
   cursor: 'pointer',

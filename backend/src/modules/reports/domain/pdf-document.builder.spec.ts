@@ -51,6 +51,18 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
       expect(textContent).toContain('RECIBO INDIVIDUAL DE PAGO');
     });
 
+    it('debe incluir una marca de agua gráfica rotada cuando se solicita (Happy Path)', () => {
+      // Arrange & Act
+      const buffer = buildSimplePdfBuffer('RECIBO ANULADO', 'Proyecto FIS', [], {
+        watermark: 'ANULADO',
+      });
+      const textContent = buffer.toString('utf8');
+
+      // Assert
+      expect(textContent).toContain('(ANULADO) Tj');
+      expect(textContent).toContain('0.7071 0.7071');
+    });
+
     it('debe generar un PDF válido incluso cuando subtitle y bodyLines están vacíos (Edge Case)', () => {
       // Arrange & Act
       const buffer = buildSimplePdfBuffer('DOCUMENTO VACIO', '', []);
@@ -100,6 +112,8 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
       expect(lines.join('\n')).toContain('ESTADO DEL RECIBO: VALIDO INMUTABLE');
       expect(lines.join('\n')).toContain('Abonado $300.00 USD');
       expect(lines.join('\n')).toContain('Saldo Restante: $200.00 USD');
+      expect(lines.join('\n')).toContain('FIRMA DEL RECEPTOR');
+      expect(lines.join('\n')).toContain('FIRMA DEL BENEFICIARIO');
     });
 
     it('debe incluir marca de agua textual de ANULADO cuando el pago fue anulado justificadamente (Edge Case)', () => {
@@ -146,6 +160,8 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
       // Assert
       expect(lines.join('\n')).toContain('TOTAL CONSOLIDADO SOLICITADO: $750.00 USD');
       expect(lines.join('\n')).toContain('Dr. Mendoza (V-18456789)');
+      expect(lines.join('\n')).toContain('FIRMA DEL GENERADOR');
+      expect(lines.join('\n')).toContain('FIRMA DEL APROBADOR');
     });
   });
 });

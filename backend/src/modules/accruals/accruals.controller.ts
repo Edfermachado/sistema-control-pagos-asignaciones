@@ -37,6 +37,12 @@ export class AccrualsController {
     return this.accrualsService.generateAccrualBatch(dto, actor);
   }
 
+  @Get('batches')
+  @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
+  async findAllBatches() {
+    return this.accrualsService.findAllBatches();
+  }
+
   @Get()
   @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
   async findAll() {

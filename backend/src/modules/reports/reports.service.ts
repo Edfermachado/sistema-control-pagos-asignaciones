@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import {
   AccrualStatus,
+  PaymentRequestStatus,
   PaymentStatus,
 } from '../../common/constants/domain.enums';
 import { toUsdDecimal } from '../../common/domain/money.helper';
@@ -149,6 +150,10 @@ export class ReportsService {
       `RECIBO INDIVIDUAL DE PAGO: ${payment.receiptCode}`,
       `Proyecto: ${payment.paymentRequest.project.code} - Moneda: USD`,
       lines,
+      {
+        watermark:
+          payment.status === PaymentStatus.ANULADO ? 'ANULADO' : undefined,
+      },
     );
 
     return {
@@ -205,6 +210,12 @@ export class ReportsService {
       `SOLICITUD CONSOLIDADA DE PAGO: ${request.code}`,
       `Proyecto: ${request.project.code} (${request.project.area})`,
       lines,
+      {
+        watermark:
+          request.status === PaymentRequestStatus.ANULADA
+            ? 'ANULADA'
+            : undefined,
+      },
     );
 
     return {

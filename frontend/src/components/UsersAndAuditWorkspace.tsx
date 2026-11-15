@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { UserRole } from '../types/domain.types';
 import { apiRequest } from '../utils/api-client.util';
 
@@ -9,6 +9,14 @@ export interface LiveUser {
   role: UserRole;
   isActive: boolean;
   createdAt?: string;
+}
+
+export interface LiveSystemParameter {
+  id: string;
+  key: string;
+  value: string;
+  description: string;
+  updatedAt?: string;
 }
 
 export interface LiveAuditRecord {
@@ -28,6 +36,7 @@ interface UsersAndAuditProps {
   token: string | null;
   activeRole: UserRole;
   users: LiveUser[];
+  parameters: LiveSystemParameter[];
   auditLogs: LiveAuditRecord[];
   onRefresh: () => Promise<void>;
   onNotify: (type: 'success' | 'error', message: string) => void;
@@ -37,6 +46,7 @@ export function UsersAndAuditWorkspace({
   token,
   activeRole,
   users,
+  parameters,
   auditLogs,
   onRefresh,
   onNotify,
@@ -47,6 +57,70 @@ export function UsersAndAuditWorkspace({
   const [newName, setNewName] = useState('Lic. Ricardo Gómez (FACYT)');
   const [newPassword, setNewPassword] = useState('PasswordUC2026!');
   const [newRole, setNewRole] = useState<UserRole>(UserRole.GENERADOR);
+
+  const [paramKey, setParamKey] = useState('NEW_PARAMETER');
+  const [paramValue, setParamValue] = useState('valor');
+  const [paramDescription, setParamDescription] = useState(
+    'Descripción del parámetro global',
+  );
+  const [parameterValues, setParameterValues] = useState<Record<string, string>>(
+    {},
+  );
+
+  useEffect(() => {
+    setParameterValues(
+      Object.fromEntries(parameters.map((parameter) => [parameter.id, parameter.value])),
+    );
+  }, [parameters]);
+
+  const handleCreateParameter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiRequest('/parameters', {
+        method: 'POST',
+        token,
+        body: {
+          key: paramKey,
+          value: paramValue,
+          description: paramDescription,
+        },
+      });
+      onNotify('success', `Parámetro '${paramKey}' creado.`);
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleUpdateParameter = async (parameter: LiveSystemParameter) => {
+    try {
+      await apiRequest(`/parameters/${parameter.id}`, {
+        method: 'PATCH',
+        token,
+        body: {
+          value: parameterValues[parameter.id] ?? parameter.value,
+          description: parameter.description,
+        },
+      });
+      onNotify('success', `Parámetro '${parameter.key}' actualizado.`);
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleDeleteParameter = async (parameter: LiveSystemParameter) => {
+    try {
+      await apiRequest(`/parameters/${parameter.id}`, {
+        method: 'DELETE',
+        token,
+      });
+      onNotify('success', `Parámetro '${parameter.key}' eliminado.`);
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,6 +256,93 @@ export function UsersAndAuditWorkspace({
         </section>
       )}
 
+      {isAdmin && (
+        <section style={cardStyle}>
+          <h2 style={{ margin: '0 0 0.6rem', fontSize: '1.08rem', color: '#0f172a' }}>
+            2. Parámetros Globales del Sistema (Exclusivo ADMIN — RF 2.1)
+          </h2>
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
+            Configuración clave-valor que gobierna reglas operativas del sistema.
+          </p>
+
+          <form onSubmit={handleCreateParameter} style={formGridStyle}>
+            <input
+              value={paramKey}
+              onChange={(e) => setParamKey(e.target.value)}
+              placeholder="CLAVE_PARAMETRO"
+              required
+              style={inputStyle}
+            />
+            <input
+              value={paramValue}
+              onChange={(e) => setParamValue(e.target.value)}
+              placeholder="Valor"
+              required
+              style={inputStyle}
+            />
+            <input
+              value={paramDescription}
+              onChange={(e) => setParamDescription(e.target.value)}
+              placeholder="Descripción"
+              required
+              style={inputStyle}
+            />
+            <button type="submit" style={primaryButtonStyle}>
+              + Crear Parámetro
+            </button>
+          </form>
+
+          <table style={tableStyle}>
+            <thead>
+              <tr style={theadRowStyle}>
+                <th style={thStyle}>Clave</th>
+                <th style={thStyle}>Valor</th>
+                <th style={thStyle}>Descripción</th>
+                <th style={thStyle}>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {parameters.map((parameter) => (
+                <tr key={parameter.id} style={trStyle}>
+                  <td style={{ ...tdStyle, fontWeight: 700 }}>
+                    <code>{parameter.key}</code>
+                  </td>
+                  <td style={tdStyle}>
+                    <input
+                      value={parameterValues[parameter.id] ?? parameter.value}
+                      onChange={(e) =>
+                        setParameterValues((current) => ({
+                          ...current,
+                          [parameter.id]: e.target.value,
+                        }))
+                      }
+                      style={{ ...inputStyle, width: '150px' }}
+                    />
+                  </td>
+                  <td style={tdStyle}>{parameter.description}</td>
+                  <td style={{ ...tdStyle, display: 'flex', gap: '0.4rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleUpdateParameter(parameter)}
+                      style={secondaryButtonStyle}
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteParameter(parameter)}
+                      style={dangerButtonStyle}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
       <section
         style={{
           backgroundColor: '#0f172a',
@@ -192,7 +353,7 @@ export function UsersAndAuditWorkspace({
         }}
       >
         <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.08rem', color: '#38bdf8' }}>
-          2. Bitácora Forense Inmutable — Tabla audit_log (RN-AUD-03)
+          3. Bitácora Forense Inmutable — Tabla audit_log (RN-AUD-03)
         </h2>
         <p style={{ margin: '0 0 0.85rem', fontSize: '0.82rem', color: '#94a3b8' }}>
           Registro automático append-only en PostgreSQL con instantáneas JSONB previas y nuevas.
@@ -295,6 +456,17 @@ const secondaryButtonStyle: React.CSSProperties = {
   color: '#1e3a8a',
   fontWeight: 600,
   fontSize: '0.78rem',
+  cursor: 'pointer',
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  padding: '0.3rem 0.6rem',
+  borderRadius: '0.3rem',
+  border: '1px solid #dc2626',
+  backgroundColor: '#fef2f2',
+  color: '#b91c1c',
+  fontSize: '0.78rem',
+  fontWeight: 600,
   cursor: 'pointer',
 };
 

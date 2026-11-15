@@ -407,6 +407,52 @@ async function main(): Promise<void> {
       status: PettyCashVoucherStatus.RENDIDO,
     },
   });
+
+  // Parámetros globales del sistema (RF 2.1)
+  const parameters = [
+    {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffff01',
+      key: 'SYSTEM_CURRENCY',
+      value: 'USD',
+      description:
+        'Moneda única del sistema, sin deducciones ni conversiones (RN-GLOB-01)',
+    },
+    {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffff02',
+      key: 'PAYMENT_REQUEST_SCOPE',
+      value: 'REQUEST_ITEMS',
+      description:
+        'Alcance del pago FIFO: solo causaciones incluidas en la solicitud aprobada',
+    },
+    {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffff03',
+      key: 'MAX_UPLOAD_SIZE_MB',
+      value: '5',
+      description:
+        'Tamaño máximo permitido para comprobantes adjuntos en MB',
+    },
+    {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffff04',
+      key: 'PETTY_CASH_REQUIRE_ATTACHMENT',
+      value: 'true',
+      description:
+        'Exigir archivo de comprobante al rendir un vale de caja chica',
+    },
+    {
+      id: 'ffffffff-ffff-4fff-8fff-ffffffffff05',
+      key: 'AUDIT_RETENTION_DAYS',
+      value: '365',
+      description: 'Días de retención de la bitácora de auditoría',
+    },
+  ];
+
+  for (const parameter of parameters) {
+    await prisma.systemParameter.upsert({
+      where: { key: parameter.key },
+      update: {},
+      create: { ...parameter, updatedById: USERS.admin },
+    });
+  }
 }
 
 main()

@@ -19,12 +19,15 @@ Sistema cliente-servidor con arquitectura modular en capas para la gestión, cau
 * **Ciclo de Solicitudes, Pagos Parciales FIFO e Inmutabilidad:**
   * Flujo de estados controlado: `Creada` $\rightarrow$ `Enviada` $\rightarrow$ `Aprobada / Rechazada` $\rightarrow$ `Entrega de Fondos` $\rightarrow$ `Cerrada`.
   * Aplicación automática **FIFO (Primero en Entrar, Primero en Salir)** de pagos parciales sobre las deudas pendientes más antiguas.
-  * **Inmutabilidad Financiera:** Prohibición de borrado o edición directa de registros financieros; corrección exclusiva mediante **Anulaciones Justificadas** con reversión transaccional.
+  * **Inmutabilidad Financiera:** Prohibición de borrado o edición directa de registros financieros; corrección exclusiva mediante **Anulaciones Justificadas** con reversión transaccional para pagos, causaciones, lotes, solicitudes y vales.
+  * **Integridad de solicitudes:** una causación no puede estar en dos solicitudes activas y el pago FIFO solo aplica a los ítems de la solicitud aprobada.
 * **Control de Cajas Chicas por Proyecto:**
-  * Gestión de múltiples cajas chicas asignables a proyectos, con apertura mensual, solicitud de vales, aprobación por gerencia, desembolso, rendición con comprobante y arrastre automático de saldo al mes siguiente.
+  * Gestión de múltiples cajas chicas asignables a proyectos, con apertura mensual, solicitud de vales, aprobación/rechazo por gerencia, desembolso separado, rendición con archivo de comprobante y arrastre automático de saldo al mes siguiente.
+* **Parámetros Globales del Sistema:**
+  * CRUD clave-valor exclusivo del `ADMIN` para reglas operativas configurables.
 * **Reportes PDF y Auditoría (`audit_log`):**
-  * Exportación en PDF de **Recibos Individuales** y **Solicitudes Consolidadas**.
-  * Bitácora de auditoría inmutable (`audit_log`) en base de datos que registra quién, cuándo y qué cambió (`old_values` vs. `new_values` en `JSONB`).
+  * Exportación en PDF de **Recibos Individuales** y **Solicitudes Consolidadas**, con bloques de firma y marca de agua para documentos anulados.
+  * Bitácora de auditoría inmutable (`audit_log`) con registro de negocio y **triggers PostgreSQL** que capturan los cambios reales de la base de datos (`old_values` vs. `new_values` en `JSONB`).
 
 ---
 
@@ -106,6 +109,7 @@ El script crea datos de prueba con un sufijo único y valida autenticación, RBA
 createdb scpa_db
 psql -d scpa_db -f database/01_init_schema.sql
 psql -d scpa_db -f database/02_seed_data.sql
+psql -d scpa_db -f database/03_audit_triggers.sql
 
 # Copiar variables de entorno del backend (ajustar DATABASE_URL si es necesario)
 cp backend/.env.example backend/.env
@@ -114,14 +118,14 @@ cp backend/.env.example backend/.env
 npm --prefix backend install
 npm --prefix backend run prisma:generate
 
-# 2. Ejecutar las 27 suites de Pruebas Unitarias 1:1 en Backend (188 tests con patrón AAA)
+# 2. Ejecutar las 29 suites de Pruebas Unitarias 1:1 en Backend (215 tests con patrón AAA)
 npm --prefix backend test -- --runInBand
 
 # 3. Poblar datos iniciales de prueba completos (catálogos, asignaciones,
 #    causaciones, solicitud, pago FIFO y caja chica con arrastre)
 npm --prefix backend run prisma:seed
 
-# 4. Instalar dependencias y ejecutar las 5 suites de Pruebas Unitarias en Frontend (25 tests en Vitest)
+# 4. Instalar dependencias y ejecutar las 5 suites de Pruebas Unitarias en Frontend (27 tests en Vitest)
 npm --prefix frontend install
 npm --prefix frontend test
 
@@ -149,16 +153,17 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 ## 7. Resumen de Endpoints REST Principales (`/api`)
 
 * **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`, `GET /api/auth/me`
-* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`
+* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`, `GET/POST /api/parameters`, `PATCH/DELETE /api/parameters/:id`
 * **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `PATCH /api/projects/:id/status`, `GET/POST /api/payment-groups`, `GET/POST /api/beneficiaries`, `PATCH /api/beneficiaries/:id`, `GET/POST /api/assignments`, `PATCH /api/assignments/:id/deactivate`
 * **Motor Financiero (`GENERADOR` / `RECEPTOR`):**
-  * `POST /api/accruals/batches/preview`, `POST /api/accruals/batches`, `GET /api/accruals/beneficiary/:beneficiaryId/pending`
+  * `POST /api/accruals/batches/preview`, `POST /api/accruals/batches`, `GET /api/accruals/batches`, `GET /api/accruals/beneficiary/:beneficiaryId/pending`
   * `GET/POST /api/payment-requests`, `PATCH /api/payment-requests/:id/send`, `PATCH /api/payment-requests/:id/review`, `PATCH /api/payment-requests/:id/close`
   * `GET/POST /api/payments`
-  * `POST /api/annulments/payments/:paymentId`, `POST /api/annulments/accruals/:accrualId`, `GET /api/annulments`
+  * `POST /api/annulments/payments/:paymentId`, `POST /api/annulments/accruals/:accrualId`, `POST /api/annulments/accrual-batches/:batchId`, `POST /api/annulments/payment-requests/:paymentRequestId`, `POST /api/annulments/petty-cash-vouchers/:voucherId`, `GET /api/annulments`
 * **Cajas Chicas y Reportes PDF (`GENERADOR` / `RECEPTOR`):**
-  * `POST /api/petty-cashes`, `POST /api/petty-cashes/:pettyCashId/periods`, `PATCH /api/petty-cashes/periods/:periodId/approve`, `PATCH /api/petty-cashes/periods/:periodId/close`
-  * `POST /api/petty-cashes/periods/:periodId/vouchers`, `PATCH /api/petty-cashes/vouchers/:voucherId/disburse`, `PATCH /api/petty-cashes/vouchers/:voucherId/settle`
+  * `POST /api/petty-cashes`, `POST /api/petty-cashes/:pettyCashId/periods`, `PATCH /api/petty-cashes/periods/:periodId/approve`, `PATCH /api/petty-cashes/periods/:periodId/close`, `PATCH /api/petty-cashes/:pettyCashId/close`
+  * `POST /api/petty-cashes/periods/:periodId/vouchers`, `PATCH /api/petty-cashes/vouchers/:voucherId/approve`, `PATCH /api/petty-cashes/vouchers/:voucherId/reject`, `PATCH /api/petty-cashes/vouchers/:voucherId/disburse`, `PATCH /api/petty-cashes/vouchers/:voucherId/settle`
+  * `POST /api/uploads` (comprobantes PDF/PNG/JPEG, hasta 5 MB)
   * `GET /api/reports/summary`, `GET /api/reports/payments/:paymentId/pdf`, `GET /api/reports/payment-requests/:paymentRequestId/pdf`
 
 ---

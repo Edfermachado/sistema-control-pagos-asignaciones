@@ -6,6 +6,7 @@
 export const CURRENCY_CODE = 'USD' as const;
 export const DECIMAL_PLACES = 2 as const;
 export const MIN_ANNULMENT_REASON_LENGTH = 10 as const;
+export const MIN_REJECTION_REASON_LENGTH = 5 as const;
 
 export enum UserRole {
   ADMIN = 'ADMIN',
@@ -34,6 +35,11 @@ export enum Periodicity {
   SEMANAL = 'SEMANAL',
   QUINCENAL = 'QUINCENAL',
   MENSUAL = 'MENSUAL',
+}
+
+export enum AccrualBatchStatus {
+  GENERADO = 'GENERADO',
+  ANULADO = 'ANULADO',
 }
 
 export enum AccrualStatus {

@@ -18,6 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   CreatePettyCashDto,
   OpenPettyCashPeriodDto,
+  RejectVoucherDto,
   RequestVoucherDto,
   SettleVoucherDto,
 } from './dto/petty-cash.dto';
@@ -72,13 +73,32 @@ export class PettyCashController {
     return this.pettyCashService.requestVoucher(periodId, dto, actor);
   }
 
+  @Patch('vouchers/:voucherId/approve')
+  @Roles(UserRole.RECEPTOR)
+  async approveVoucher(
+    @Param('voucherId') voucherId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.pettyCashService.approveVoucher(voucherId, actor);
+  }
+
+  @Patch('vouchers/:voucherId/reject')
+  @Roles(UserRole.RECEPTOR)
+  async rejectVoucher(
+    @Param('voucherId') voucherId: string,
+    @Body() dto: RejectVoucherDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.pettyCashService.rejectVoucher(voucherId, dto.reason, actor);
+  }
+
   @Patch('vouchers/:voucherId/disburse')
   @Roles(UserRole.RECEPTOR)
   async disburseVoucher(
     @Param('voucherId') voucherId: string,
     @CurrentUser() actor: AuthenticatedUser,
   ) {
-    return this.pettyCashService.approveAndDisburseVoucher(voucherId, actor);
+    return this.pettyCashService.disburseVoucher(voucherId, actor);
   }
 
   @Patch('vouchers/:voucherId/settle')
@@ -98,5 +118,14 @@ export class PettyCashController {
     @CurrentUser() actor: AuthenticatedUser,
   ) {
     return this.pettyCashService.closeMonthlyPeriod(periodId, actor);
+  }
+
+  @Patch(':pettyCashId/close')
+  @Roles(UserRole.RECEPTOR)
+  async closePettyCash(
+    @Param('pettyCashId') pettyCashId: string,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.pettyCashService.closePettyCash(pettyCashId, actor);
   }
 }

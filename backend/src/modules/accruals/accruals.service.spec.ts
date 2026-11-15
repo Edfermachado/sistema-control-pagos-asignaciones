@@ -18,7 +18,11 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
   let prismaMock: {
     project: { findUnique: jest.Mock };
     assignment: { findMany: jest.Mock };
-    accrualBatch: { findUnique: jest.Mock; create: jest.Mock };
+    accrualBatch: {
+      findUnique: jest.Mock;
+      findMany: jest.Mock;
+      create: jest.Mock;
+    };
     accrual: { findMany: jest.Mock; create: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -35,7 +39,11 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
     prismaMock = {
       project: { findUnique: jest.fn() },
       assignment: { findMany: jest.fn() },
-      accrualBatch: { findUnique: jest.fn(), create: jest.fn() },
+      accrualBatch: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+      },
       accrual: { findMany: jest.fn(), create: jest.fn() },
       $transaction: jest.fn((cb) => cb(prismaMock)),
     };
@@ -276,6 +284,27 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
       const callArg = prismaMock.accrual.findMany.mock.calls[0][0];
       expect(callArg.where.status.in).not.toContain(AccrualStatus.PAGADO);
       expect(callArg.where.status.in).not.toContain(AccrualStatus.ANULADO);
+    });
+  });
+
+  describe('findAllBatches', () => {
+    it('debe listar los lotes con proyecto, grupo y causaciones (Happy Path)', async () => {
+      // Arrange
+      prismaMock.accrualBatch.findMany.mockResolvedValueOnce([{ id: 'batch-1' }]);
+
+      // Act
+      const result = await service.findAllBatches();
+
+      // Assert
+      expect(result).toHaveLength(1);
+      expect(prismaMock.accrualBatch.findMany).toHaveBeenCalledWith({
+        include: {
+          project: true,
+          paymentGroup: true,
+          accruals: true,
+        },
+        orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
+      });
     });
   });
 

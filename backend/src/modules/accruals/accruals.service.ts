@@ -234,6 +234,20 @@ export class AccrualsService {
   }
 
   /**
+   * Lista todos los lotes de causación con su proyecto, grupo y causaciones.
+   */
+  async findAllBatches() {
+    return this.prisma.accrualBatch.findMany({
+      include: {
+        project: true,
+        paymentGroup: true,
+        accruals: true,
+      },
+      orderBy: [{ periodStart: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  /**
    * Lista todas las causaciones del libro mayor con relaciones a beneficiario, proyecto y lote.
    */
   async findAllAccruals() {

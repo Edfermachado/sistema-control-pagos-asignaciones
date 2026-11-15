@@ -80,24 +80,35 @@ describe('PaymentsService (RN-PAG-02 Registro de Pagos con Cola FIFO)', () => {
         id: 'req-1',
         projectId: 'proj-1',
         status: PaymentRequestStatus.APROBADA,
+        totalAmount: '600.00',
         paidAmount: '0.00',
+        items: [
+          {
+            id: 'item-1',
+            accrual: {
+              id: 'acc-1',
+              beneficiaryId: 'ben-1',
+              periodStart: new Date('2026-01-01T00:00:00Z'),
+              createdAt: new Date('2026-01-16T00:00:00Z'),
+              paidAmount: '0.00',
+              balanceDue: '300.00',
+              status: AccrualStatus.PENDIENTE,
+            },
+          },
+          {
+            id: 'item-2',
+            accrual: {
+              id: 'acc-2',
+              beneficiaryId: 'ben-1',
+              periodStart: new Date('2026-02-01T00:00:00Z'),
+              createdAt: new Date('2026-02-16T00:00:00Z'),
+              paidAmount: '0.00',
+              balanceDue: '300.00',
+              status: AccrualStatus.PENDIENTE,
+            },
+          },
+        ],
       });
-      prismaMock.accrual.findMany.mockResolvedValueOnce([
-        {
-          id: 'acc-1',
-          periodStart: new Date('2026-01-01T00:00:00Z'),
-          createdAt: new Date('2026-01-16T00:00:00Z'),
-          paidAmount: '0.00',
-          balanceDue: '300.00',
-        },
-        {
-          id: 'acc-2',
-          periodStart: new Date('2026-02-01T00:00:00Z'),
-          createdAt: new Date('2026-02-16T00:00:00Z'),
-          paidAmount: '0.00',
-          balanceDue: '300.00',
-        },
-      ]);
       prismaMock.payment.create.mockImplementationOnce(({ data }) =>
         Promise.resolve({ id: 'pay-1', ...data }),
       );
@@ -176,6 +187,45 @@ describe('PaymentsService (RN-PAG-02 Registro de Pagos con Cola FIFO)', () => {
           receptorActor,
         ),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe rechazar un pago que supere el saldo pendiente de la solicitud (Edge Case)', async () => {
+      // Arrange
+      prismaMock.payment.findUnique.mockResolvedValueOnce(null);
+      prismaMock.paymentRequest.findUnique.mockResolvedValueOnce({
+        id: 'req-1',
+        status: PaymentRequestStatus.APROBADA,
+        totalAmount: '300.00',
+        paidAmount: '250.00',
+        items: [
+          {
+            id: 'item-1',
+            accrual: {
+              id: 'acc-1',
+              beneficiaryId: 'ben-1',
+              periodStart: new Date('2026-01-01T00:00:00Z'),
+              createdAt: new Date('2026-01-16T00:00:00Z'),
+              paidAmount: '0.00',
+              balanceDue: '300.00',
+              status: AccrualStatus.PENDIENTE,
+            },
+          },
+        ],
+      });
+
+      // Act & Assert
+      await expect(
+        service.registerPayment(
+          {
+            receiptCode: 'REC-OVER-REQ',
+            paymentRequestId: 'req-1',
+            beneficiaryId: 'ben-1',
+            amount: '100.00',
+            paymentDate: '2026-11-09',
+          },
+          receptorActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('debe lanzar BadRequestException si la solicitud no ha sido APROBADA (Violación RN-PAG-01)', async () => {

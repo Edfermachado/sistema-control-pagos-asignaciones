@@ -1,13 +1,19 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { AnnulledEntityType } from '@prisma/client';
 import {
+  AccrualBatchStatus,
   AccrualStatus,
+  PaymentRequestStatus,
   PaymentStatus,
+  PettyCashPeriodStatus,
+  PettyCashVoucherStatus,
+  UserRole,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import {
@@ -16,7 +22,15 @@ import {
 } from '../../common/domain/money.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { assertValidPaymentRequestTransition } from '../payment-requests/domain/payment-request-state.machine';
 import { calculateAccrualStateAfterPaymentReversal } from './domain/annulment-reversal.calculator';
+
+const ACTIVE_PAYMENT_REQUEST_STATUSES: PaymentRequestStatus[] = [
+  PaymentRequestStatus.CREADA,
+  PaymentRequestStatus.ENVIADA,
+  PaymentRequestStatus.APROBADA,
+  PaymentRequestStatus.ENTREGADA,
+];
 
 @Injectable()
 export class AnnulmentsService {
@@ -80,10 +94,17 @@ export class AnnulmentsService {
         currentRequestPaid.minus(paymentDec),
       );
 
+      // RN-PAG-01 / RN-PAG-03: si el pago era el único que sostenía la
+      // solicitud, esta vuelve a APROBADA para permitir un nuevo pago.
+      const reopenedStatus = toUsdDecimal(updatedRequestPaid).eq(0)
+        ? PaymentRequestStatus.APROBADA
+        : PaymentRequestStatus.ENTREGADA;
+
       await tx.paymentRequest.update({
         where: { id: payment.paymentRequestId },
         data: {
           paidAmount: updatedRequestPaid,
+          status: reopenedStatus,
         },
       });
 
@@ -111,10 +132,12 @@ export class AnnulmentsService {
           oldValues: {
             status: PaymentStatus.VALIDO,
             amount: payment.amount.toString(),
+            requestStatus: payment.paymentRequest.status,
           },
           newValues: {
             status: PaymentStatus.ANULADO,
             reason: cleanReason,
+            requestStatus: reopenedStatus,
             annulmentId: annulmentRecord.id,
           },
         },
@@ -156,6 +179,8 @@ export class AnnulmentsService {
         '[RN-GLOB-03] No se puede anular directamente una causación que ya posee pagos aplicados; primero debe anularse el pago correspondiente.',
       );
     }
+
+    await this.assertAccrualsAreNotInActiveRequests([accrualId]);
 
     return this.prisma.$transaction(async (tx) => {
       const updatedAccrual = await tx.accrual.update({
@@ -200,6 +225,290 @@ export class AnnulmentsService {
   }
 
   /**
+   * Anula un lote completo de causación cuando ninguna de sus causaciones tiene pagos.
+   * Cumple RN-GLOB-03, RN-GLOB-04 y RN-CAUS-04.
+   */
+  async annulAccrualBatch(
+    batchId: string,
+    rawReason: string,
+    actor: AuthenticatedUser,
+  ) {
+    const cleanReason = validateAnnulmentReason(rawReason);
+
+    const batch = await this.prisma.accrualBatch.findUnique({
+      where: { id: batchId },
+      include: { accruals: true },
+    });
+
+    if (!batch) {
+      throw new NotFoundException(
+        `El lote de causación con ID '${batchId}' no existe.`,
+      );
+    }
+
+    if (batch.status === AccrualBatchStatus.ANULADO) {
+      throw new ConflictException(
+        `[RN-GLOB-04] El lote '${batch.code}' ya fue anulado previamente.`,
+      );
+    }
+
+    const paidAccrual = batch.accruals.find((accrual) =>
+      toUsdDecimal(accrual.paidAmount.toString()).gt(0),
+    );
+
+    if (paidAccrual) {
+      throw new BadRequestException(
+        '[RN-GLOB-03] No se puede anular un lote con causaciones que ya poseen pagos aplicados; primero deben anularse los pagos.',
+      );
+    }
+
+    await this.assertAccrualsAreNotInActiveRequests(
+      batch.accruals.map((accrual) => accrual.id),
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedBatch = await tx.accrualBatch.update({
+        where: { id: batchId },
+        data: { status: AccrualBatchStatus.ANULADO },
+      });
+
+      await tx.accrual.updateMany({
+        where: { batchId },
+        data: {
+          status: AccrualStatus.ANULADO,
+          balanceDue: '0.00',
+        },
+      });
+
+      const annulmentRecord = await tx.annulment.create({
+        data: {
+          entityType: AnnulledEntityType.ACCRUAL_BATCH,
+          entityId: batchId,
+          reason: cleanReason,
+          annulledById: actor.id,
+        },
+      });
+
+      await this.auditService.recordLog(
+        {
+          userId: actor.id,
+          userRole: actor.role,
+          action: 'ANNUL_ACCRUAL_BATCH',
+          tableName: 'accrual_batches',
+          recordId: batchId,
+          oldValues: {
+            status: batch.status,
+            code: batch.code,
+            accrualCount: batch.accruals.length,
+            totalAmount: batch.totalAmount.toString(),
+          },
+          newValues: {
+            status: AccrualBatchStatus.ANULADO,
+            reason: cleanReason,
+          },
+        },
+        tx,
+      );
+
+      return { batch: updatedBatch, annulment: annulmentRecord };
+    });
+  }
+
+  /**
+   * Anula una solicitud de pago que no posea pagos válidos asociados.
+   * Cumple RN-GLOB-04 y RN-PAG-01.
+   */
+  async annulPaymentRequest(
+    paymentRequestId: string,
+    rawReason: string,
+    actor: AuthenticatedUser,
+  ) {
+    const cleanReason = validateAnnulmentReason(rawReason);
+
+    const request = await this.prisma.paymentRequest.findUnique({
+      where: { id: paymentRequestId },
+      include: { payments: true },
+    });
+
+    if (!request) {
+      throw new NotFoundException(
+        `La solicitud de pago con ID '${paymentRequestId}' no existe.`,
+      );
+    }
+
+    if (request.status === PaymentRequestStatus.ANULADA) {
+      throw new ConflictException(
+        `[RN-GLOB-04] La solicitud '${request.code}' ya fue anulada previamente.`,
+      );
+    }
+
+    if (request.status === PaymentRequestStatus.RECHAZADA) {
+      throw new BadRequestException(
+        '[RN-PAG-01] Una solicitud RECHAZADA es inmutable y no requiere anulación.',
+      );
+    }
+
+    const validPayment = request.payments.find(
+      (payment) => payment.status === PaymentStatus.VALIDO,
+    );
+
+    if (
+      validPayment ||
+      toUsdDecimal(request.paidAmount.toString()).gt(0)
+    ) {
+      throw new BadRequestException(
+        '[RN-GLOB-03] No se puede anular una solicitud con pagos válidos; primero deben anularse los pagos.',
+      );
+    }
+
+    assertValidPaymentRequestTransition(
+      request.status as unknown as PaymentRequestStatus,
+      PaymentRequestStatus.ANULADA,
+    );
+
+    return this.prisma.$transaction(async (tx) => {
+      const updatedRequest = await tx.paymentRequest.update({
+        where: { id: paymentRequestId },
+        data: { status: PaymentRequestStatus.ANULADA },
+      });
+
+      const annulmentRecord = await tx.annulment.create({
+        data: {
+          entityType: AnnulledEntityType.PAYMENT_REQUEST,
+          entityId: paymentRequestId,
+          reason: cleanReason,
+          annulledById: actor.id,
+        },
+      });
+
+      await this.auditService.recordLog(
+        {
+          userId: actor.id,
+          userRole: actor.role,
+          action: 'ANNUL_PAYMENT_REQUEST',
+          tableName: 'payment_requests',
+          recordId: paymentRequestId,
+          oldValues: {
+            status: request.status,
+            code: request.code,
+            totalAmount: request.totalAmount.toString(),
+          },
+          newValues: {
+            status: PaymentRequestStatus.ANULADA,
+            reason: cleanReason,
+          },
+        },
+        tx,
+      );
+
+      return { paymentRequest: updatedRequest, annulment: annulmentRecord };
+    });
+  }
+
+  /**
+   * Anula un vale de caja chica y revierte el impacto en el saldo disponible.
+   * El GENERADOR solo puede anular vales no desembolsados; el RECEPTOR puede
+   * anular también vales desembolsados o rendidos (RN-GLOB-04 / RN-CAJA-03).
+   */
+  async annulPettyCashVoucher(
+    voucherId: string,
+    rawReason: string,
+    actor: AuthenticatedUser,
+  ) {
+    const cleanReason = validateAnnulmentReason(rawReason);
+
+    const voucher = await this.prisma.pettyCashVoucher.findUnique({
+      where: { id: voucherId },
+      include: { period: true },
+    });
+
+    if (!voucher) {
+      throw new NotFoundException(`El vale '${voucherId}' no existe.`);
+    }
+
+    if (voucher.status === PettyCashVoucherStatus.ANULADO) {
+      throw new ConflictException(
+        `[RN-GLOB-04] El vale '${voucher.code}' ya fue anulado previamente.`,
+      );
+    }
+
+    if (voucher.status === PettyCashVoucherStatus.RECHAZADO) {
+      throw new BadRequestException(
+        '[RN-CAJA-03] Un vale rechazado no requiere anulación.',
+      );
+    }
+
+    if (voucher.period.status === PettyCashPeriodStatus.CERRADO) {
+      throw new BadRequestException(
+        '[RN-CAJA-04] No se puede anular un vale de un período ya cerrado.',
+      );
+    }
+
+    if (
+      actor.role === UserRole.GENERADOR &&
+      voucher.status !== PettyCashVoucherStatus.SOLICITADO &&
+      voucher.status !== PettyCashVoucherStatus.APROBADO
+    ) {
+      throw new ForbiddenException(
+        '[RN-SEG-02] El GENERADOR solo puede anular vales solicitados o aprobados, no desembolsados o rendidos.',
+      );
+    }
+
+    const reversalAmount = this.calculateVoucherAnnulmentReversal(voucher);
+    const newAvailableBalance = toUsdDecimal(
+      voucher.period.availableBalance.toString(),
+    )
+      .plus(reversalAmount)
+      .toFixed(2);
+
+    return this.prisma.$transaction(async (tx) => {
+      if (reversalAmount.gt(0)) {
+        await tx.pettyCashPeriod.update({
+          where: { id: voucher.periodId },
+          data: { availableBalance: newAvailableBalance },
+        });
+      }
+
+      const updatedVoucher = await tx.pettyCashVoucher.update({
+        where: { id: voucherId },
+        data: { status: PettyCashVoucherStatus.ANULADO },
+      });
+
+      const annulmentRecord = await tx.annulment.create({
+        data: {
+          entityType: AnnulledEntityType.PETTY_CASH_VOUCHER,
+          entityId: voucherId,
+          reason: cleanReason,
+          annulledById: actor.id,
+        },
+      });
+
+      await this.auditService.recordLog(
+        {
+          userId: actor.id,
+          userRole: actor.role,
+          action: 'ANNUL_PETTY_CASH_VOUCHER',
+          tableName: 'petty_cash_vouchers',
+          recordId: voucherId,
+          oldValues: {
+            status: voucher.status,
+            code: voucher.code,
+            availableBalance: voucher.period.availableBalance.toString(),
+          },
+          newValues: {
+            status: PettyCashVoucherStatus.ANULADO,
+            availableBalance: newAvailableBalance,
+            reason: cleanReason,
+          },
+        },
+        tx,
+      );
+
+      return { voucher: updatedVoucher, annulment: annulmentRecord };
+    });
+  }
+
+  /**
    * Lista todas las anulaciones justificadas registradas en el sistema.
    */
   async findAllAnnulments() {
@@ -211,6 +520,57 @@ export class AnnulmentsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  /**
+   * Verifica que ninguna causación esté incluida en una solicitud activa.
+   */
+  private async assertAccrualsAreNotInActiveRequests(
+    accrualIds: string[],
+  ): Promise<void> {
+    if (accrualIds.length === 0) {
+      return;
+    }
+
+    const activeItem = await this.prisma.paymentRequestItem.findFirst({
+      where: {
+        accrualId: { in: accrualIds },
+        paymentRequest: {
+          status: { in: ACTIVE_PAYMENT_REQUEST_STATUSES },
+        },
+      },
+      select: { id: true },
+    });
+
+    if (activeItem) {
+      throw new BadRequestException(
+        '[RN-PAG-01] No se puede anular una causación incluida en una solicitud de pago activa; primero debe anularse la solicitud.',
+      );
+    }
+  }
+
+  /**
+   * Calcula el monto que debe devolverse al saldo de la caja chica al anular un vale.
+   */
+  private calculateVoucherAnnulmentReversal(voucher: {
+    status: string;
+    requestedAmount: unknown;
+    disbursedAmount: unknown;
+    settledAmount: unknown;
+  }) {
+    if (voucher.status === PettyCashVoucherStatus.DESEMBOLSADO) {
+      return toUsdDecimal(
+        (voucher.disbursedAmount ?? voucher.requestedAmount) as string,
+      );
+    }
+
+    if (voucher.status === PettyCashVoucherStatus.RENDIDO) {
+      return toUsdDecimal(
+        (voucher.settledAmount ?? voucher.disbursedAmount) as string,
+      );
+    }
+
+    return toUsdDecimal('0.00');
   }
 }
 

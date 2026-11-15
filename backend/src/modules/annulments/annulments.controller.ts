@@ -45,6 +45,57 @@ export class AnnulmentsController {
     );
   }
 
+  /**
+   * RN-SEG-02 / RN-CAUS-04: el GENERADOR anula un lote completo no pagado.
+   */
+  @Post('accrual-batches/:batchId')
+  @Roles(UserRole.GENERADOR)
+  async annulAccrualBatch(
+    @Param('batchId') batchId: string,
+    @Body() dto: AnnulRecordDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.annulmentsService.annulAccrualBatch(
+      batchId,
+      dto.reason,
+      actor,
+    );
+  }
+
+  /**
+   * RN-SEG-02 / RN-PAG-01: el GENERADOR anula una solicitud sin pagos válidos.
+   */
+  @Post('payment-requests/:paymentRequestId')
+  @Roles(UserRole.GENERADOR)
+  async annulPaymentRequest(
+    @Param('paymentRequestId') paymentRequestId: string,
+    @Body() dto: AnnulRecordDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.annulmentsService.annulPaymentRequest(
+      paymentRequestId,
+      dto.reason,
+      actor,
+    );
+  }
+
+  /**
+   * RN-GLOB-04 / RN-CAJA-03: anulación de vales según estado y rol.
+   */
+  @Post('petty-cash-vouchers/:voucherId')
+  @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
+  async annulPettyCashVoucher(
+    @Param('voucherId') voucherId: string,
+    @Body() dto: AnnulRecordDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.annulmentsService.annulPettyCashVoucher(
+      voucherId,
+      dto.reason,
+      actor,
+    );
+  }
+
   @Get()
   @Roles(UserRole.ADMIN, UserRole.GENERADOR, UserRole.RECEPTOR)
   async findAll() {

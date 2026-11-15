@@ -37,6 +37,7 @@ coverage/
 # Archivos locales de almacenamiento temporal (uploads en desarrollo)
 uploads/*
 !uploads/.gitkeep
+backend/uploads/
 
 # Instaladores locales ajenos al repositorio del proyecto
 Antigravity.tar.gz

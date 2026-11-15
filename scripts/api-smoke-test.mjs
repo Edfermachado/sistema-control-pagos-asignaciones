@@ -260,6 +260,12 @@ async function main() {
   });
   check('anular pago con motivo (RECEPTOR)', annulRes.status === 201, `HTTP ${annulRes.status} ${JSON.stringify(annulRes.payload)}`);
 
+  const annulledReceiptPdf = await fetch(`${API_URL}/reports/payments/${partialPayRes.payload.payment.id}/pdf`, {
+    headers: { Authorization: `Bearer ${receptorToken}` },
+  });
+  const annulledReceiptText = Buffer.from(await annulledReceiptPdf.arrayBuffer()).toString('latin1');
+  check('PDF de recibo anulado incluye marca de agua', annulledReceiptPdf.ok && annulledReceiptText.includes('ANULADO') && annulledReceiptText.includes('0.7071'), `HTTP ${annulledReceiptPdf.status}`);
+
   const accrualsAfterAnnul = await request('/accruals', { token: receptorToken });
   const restoredAccrual = accrualsAfterAnnul.payload?.find((a) => a.id === accrual.id);
   check('anulación revierte saldo a 450.00 y estado PENDIENTE', restoredAccrual?.balanceDue === '450' && restoredAccrual?.status === 'PENDIENTE', `${restoredAccrual?.balanceDue} / ${restoredAccrual?.status}`);
@@ -297,7 +303,63 @@ async function main() {
   const requestBytes = Buffer.from(await requestPdf.arrayBuffer());
   check('PDF de solicitud consolidada', requestPdf.ok && requestBytes.subarray(0, 4).toString() === '%PDF', `HTTP ${requestPdf.status}`);
 
-  // 7. Caja chica
+  // 7. Anulación de lote y solicitud
+  const batch2Body = {
+    code: `LOTE-SMK2-${stamp}`,
+    projectId: project.id,
+    paymentGroupId: group.id,
+    periodStart: '2026-11-16',
+    periodEnd: '2026-11-30',
+  };
+  const batch2Res = await request('/accruals/batches', {
+    method: 'POST',
+    token: generadorToken,
+    body: batch2Body,
+  });
+  check('generar segundo lote para anulación', batch2Res.status === 201, `HTTP ${batch2Res.status}`);
+  const accrual2 = batch2Res.payload?.accruals?.[0];
+
+  const request2Res = await request('/payment-requests', {
+    method: 'POST',
+    token: generadorToken,
+    body: {
+      code: `SOL-ANNUL-${stamp}`,
+      projectId: project.id,
+      accrualIds: [accrual2.id],
+    },
+  });
+  check('crear solicitud para anulación', request2Res.status === 201, `HTTP ${request2Res.status}`);
+
+  const send2 = await request(`/payment-requests/${request2Res.payload.id}/send`, {
+    method: 'PATCH',
+    token: generadorToken,
+  });
+  check('enviar solicitud antes de anular', send2.ok, `HTTP ${send2.status}`);
+
+  const annulRequestRes = await request(`/annulments/payment-requests/${request2Res.payload.id}`, {
+    method: 'POST',
+    token: generadorToken,
+    body: { reason: 'Solicitud creada por duplicado en la prueba de humo' },
+  });
+  check('anular solicitud sin pagos', annulRequestRes.status === 201 && annulRequestRes.payload?.paymentRequest?.status === 'ANULADA', `HTTP ${annulRequestRes.status} ${JSON.stringify(annulRequestRes.payload)}`);
+
+  const annulledRequestPdf = await fetch(`${API_URL}/reports/payment-requests/${request2Res.payload.id}/pdf`, {
+    headers: { Authorization: `Bearer ${receptorToken}` },
+  });
+  const annulledRequestText = Buffer.from(await annulledRequestPdf.arrayBuffer()).toString('latin1');
+  check('PDF de solicitud anulada incluye marca de agua', annulledRequestPdf.ok && annulledRequestText.includes('ANULADA') && annulledRequestText.includes('0.7071'), `HTTP ${annulledRequestPdf.status}`);
+
+  const annulBatchRes = await request(`/annulments/accrual-batches/${batch2Res.payload.batch.id}`, {
+    method: 'POST',
+    token: generadorToken,
+    body: { reason: 'Lote de prueba anulado para validar inmutabilidad' },
+  });
+  check('anular lote de causación completo', annulBatchRes.status === 201 && annulBatchRes.payload?.batch?.status === 'ANULADO', `HTTP ${annulBatchRes.status} ${JSON.stringify(annulBatchRes.payload)}`);
+
+  const batchesList = await request('/accruals/batches', { token: generadorToken });
+  check('listar lotes de causación', batchesList.ok && Array.isArray(batchesList.payload), `HTTP ${batchesList.status}`);
+
+  // 8. Caja chica
   const pettyCashRes = await request('/petty-cashes', {
     method: 'POST',
     token: generadorToken,
@@ -338,18 +400,81 @@ async function main() {
   check('solicitar vale de caja chica', voucherRes.status === 201, `HTTP ${voucherRes.status} ${JSON.stringify(voucherRes.payload)}`);
   const voucher = voucherRes.payload;
 
+  const approveVoucherRes = await request(`/petty-cashes/vouchers/${voucher.id}/approve`, {
+    method: 'PATCH',
+    token: receptorToken,
+  });
+  check('aprobar vale sin mover saldo', approveVoucherRes.ok && approveVoucherRes.payload?.status === 'APROBADO', `HTTP ${approveVoucherRes.status}`);
+
   const disburseRes = await request(`/petty-cashes/vouchers/${voucher.id}/disburse`, {
     method: 'PATCH',
     token: receptorToken,
   });
   check('desembolsar vale y descontar saldo', disburseRes.ok && Number(disburseRes.payload?.newAvailableBalance) === 150, `HTTP ${disburseRes.status} ${JSON.stringify(disburseRes.payload)}`);
 
+  const uploadForm = new FormData();
+  uploadForm.append(
+    'file',
+    new Blob(['%PDF-1.4 comprobante de prueba'], { type: 'application/pdf' }),
+    'comprobante.pdf',
+  );
+  const uploadRes = await fetch(`${API_URL}/uploads`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${generadorToken}` },
+    body: uploadForm,
+  });
+  const uploadPayload = await uploadRes.json();
+  check('subir comprobante PDF', uploadRes.ok && String(uploadPayload?.url ?? '').startsWith('/uploads/'), `HTTP ${uploadRes.status} ${JSON.stringify(uploadPayload)}`);
+
   const settleRes = await request(`/petty-cashes/vouchers/${voucher.id}/settle`, {
     method: 'PATCH',
     token: generadorToken,
-    body: { settledAmount: '40.00', invoiceReference: `FACT-SMK-${stamp}` },
+    body: {
+      settledAmount: '40.00',
+      invoiceReference: `FACT-SMK-${stamp}`,
+      attachmentUrl: uploadPayload.url,
+    },
   });
-  check('rendir vale con factura y vuelto de 10.00', settleRes.ok && Number(settleRes.payload?.newAvailableBalance) === 160, `HTTP ${settleRes.status} ${JSON.stringify(settleRes.payload)}`);
+  check('rendir vale con comprobante y vuelto de 10.00', settleRes.ok && Number(settleRes.payload?.newAvailableBalance) === 160, `HTTP ${settleRes.status} ${JSON.stringify(settleRes.payload)}`);
+
+  const voucher2Res = await request(`/petty-cashes/periods/${period.id}/vouchers`, {
+    method: 'POST',
+    token: generadorToken,
+    body: {
+      code: `VALE-SMK2-${stamp}`,
+      beneficiaryName: 'Responsable Smoke 2',
+      concept: 'Vale para probar anulación',
+      requestedAmount: '20.00',
+    },
+  });
+  const approveVoucher2 = await request(`/petty-cashes/vouchers/${voucher2Res.payload.id}/approve`, {
+    method: 'PATCH',
+    token: receptorToken,
+  });
+  check('aprobar segundo vale', approveVoucher2.ok, `HTTP ${approveVoucher2.status}`);
+  const annulVoucher2 = await request(`/annulments/petty-cash-vouchers/${voucher2Res.payload.id}`, {
+    method: 'POST',
+    token: receptorToken,
+    body: { reason: 'Vale de prueba anulado antes de desembolsar' },
+  });
+  check('anular vale aprobado sin mover saldo', annulVoucher2.status === 201 && annulVoucher2.payload?.voucher?.status === 'ANULADO', `HTTP ${annulVoucher2.status}`);
+
+  const voucher3Res = await request(`/petty-cashes/periods/${period.id}/vouchers`, {
+    method: 'POST',
+    token: generadorToken,
+    body: {
+      code: `VALE-SMK3-${stamp}`,
+      beneficiaryName: 'Responsable Smoke 3',
+      concept: 'Vale para probar rechazo',
+      requestedAmount: '15.00',
+    },
+  });
+  const rejectVoucher3 = await request(`/petty-cashes/vouchers/${voucher3Res.payload.id}/reject`, {
+    method: 'PATCH',
+    token: receptorToken,
+    body: { reason: 'Soporte insuficiente del gasto' },
+  });
+  check('rechazar vale con motivo', rejectVoucher3.ok && rejectVoucher3.payload?.status === 'RECHAZADO', `HTTP ${rejectVoucher3.status}`);
 
   const closePeriod = await request(`/petty-cashes/periods/${period.id}/close`, {
     method: 'PATCH',
@@ -357,7 +482,41 @@ async function main() {
   });
   check('cerrar período con saldo congelado 160.00', closePeriod.ok && Number(closePeriod.payload?.closingBalance) === 160, `HTTP ${closePeriod.status} ${JSON.stringify(closePeriod.payload)}`);
 
-  // 8. Administración y auditoría
+  const closeBox = await request(`/petty-cashes/${pettyCash.id}/close`, {
+    method: 'PATCH',
+    token: receptorToken,
+  });
+  check('cerrar caja chica definitivamente', closeBox.ok && closeBox.payload?.status === 'CERRADA', `HTTP ${closeBox.status} ${JSON.stringify(closeBox.payload)}`);
+
+  // 9. Parámetros del sistema
+  const parametersList = await request('/parameters', { token: adminToken });
+  check('listar parámetros globales', parametersList.ok && Array.isArray(parametersList.payload) && parametersList.payload.length >= 5, `HTTP ${parametersList.status}`);
+
+  const newParameter = await request('/parameters', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      key: `SMOKE_PARAM_${stamp}`,
+      value: 'A',
+      description: 'Parámetro de prueba de humo',
+    },
+  });
+  check('ADMIN crea parámetro', newParameter.status === 201, `HTTP ${newParameter.status} ${JSON.stringify(newParameter.payload)}`);
+
+  const updateParameter = await request(`/parameters/${newParameter.payload.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { value: 'B' },
+  });
+  check('ADMIN actualiza parámetro', updateParameter.ok && updateParameter.payload?.value === 'B', `HTTP ${updateParameter.status}`);
+
+  const deleteParameter = await request(`/parameters/${newParameter.payload.id}`, {
+    method: 'DELETE',
+    token: adminToken,
+  });
+  check('ADMIN elimina parámetro', deleteParameter.ok, `HTTP ${deleteParameter.status}`);
+
+  // 10. Administración y auditoría
   const userRes = await request('/users', {
     method: 'POST',
     token: adminToken,
@@ -370,8 +529,15 @@ async function main() {
   });
   check('ADMIN crea usuario', userRes.status === 201, `HTTP ${userRes.status} ${JSON.stringify(userRes.payload)}`);
 
-  const auditRes = await request('/audit-logs', { token: adminToken });
-  check('audit_log registra operaciones', auditRes.ok && Array.isArray(auditRes.payload) && auditRes.payload.length > 0, `HTTP ${auditRes.status}`);
+  const businessAudit = await request('/audit-logs?action=CREATE_PETTY_CASH&limit=10', {
+    token: adminToken,
+  });
+  check('audit_log registra operaciones de negocio', businessAudit.ok && Array.isArray(businessAudit.payload) && businessAudit.payload.length > 0, `HTTP ${businessAudit.status}`);
+
+  const triggerAudit = await request('/audit-logs?tableName=system_parameters&action=INSERT&limit=10', {
+    token: adminToken,
+  });
+  check('triggers PostgreSQL registran cambios de BD', triggerAudit.ok && Array.isArray(triggerAudit.payload) && triggerAudit.payload.length > 0, `HTTP ${triggerAudit.status}`);
 
   const summaryRes = await request('/reports/summary', { token: receptorToken });
   check('consulta clave de totales y deudas', summaryRes.ok && typeof summaryRes.payload?.totalAccruedUsd === 'string' && Array.isArray(summaryRes.payload?.beneficiaryBalances), `HTTP ${summaryRes.status}`);

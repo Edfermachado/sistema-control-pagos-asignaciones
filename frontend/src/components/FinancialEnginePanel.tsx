@@ -36,6 +36,21 @@ export interface LiveAccrual {
   batch?: { code: string };
 }
 
+export interface LiveAccrualBatch {
+  id: string;
+  code: string;
+  projectId: string;
+  paymentGroupId: string;
+  periodStart: string;
+  periodEnd: string;
+  totalDays: number;
+  totalAmount: string | number;
+  status: string;
+  project?: { code: string; name: string };
+  paymentGroup?: { name: string; periodicity: string };
+  accruals?: Array<{ id: string; paidAmount: string | number }>;
+}
+
 export interface LivePaymentRequest {
   id: string;
   code: string;
@@ -82,6 +97,7 @@ interface FinancialProps {
   paymentGroups: LivePaymentGroup[];
   beneficiaries: LiveBeneficiary[];
   accruals: LiveAccrual[];
+  accrualBatches: LiveAccrualBatch[];
   paymentRequests: LivePaymentRequest[];
   payments: LivePayment[];
   onRefresh: () => Promise<void>;
@@ -103,6 +119,7 @@ export function FinancialEnginePanel({
   paymentGroups,
   beneficiaries,
   accruals,
+  accrualBatches,
   paymentRequests,
   payments,
   onRefresh,
@@ -402,6 +419,48 @@ export function FinancialEnginePanel({
     }
   };
 
+  const handleAnnulBatch = async (batchId: string) => {
+    if (!annulReason || annulReason.trim().length < 10) {
+      onNotify(
+        'error',
+        'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
+      );
+      return;
+    }
+    try {
+      await apiRequest(`/annulments/accrual-batches/${batchId}`, {
+        method: 'POST',
+        token,
+        body: { reason: annulReason },
+      });
+      onNotify('success', 'Lote de causación anulado con justificación.');
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleAnnulRequest = async (requestId: string) => {
+    if (!annulReason || annulReason.trim().length < 10) {
+      onNotify(
+        'error',
+        'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
+      );
+      return;
+    }
+    try {
+      await apiRequest(`/annulments/payment-requests/${requestId}`, {
+        method: 'POST',
+        token,
+        body: { reason: annulReason },
+      });
+      onNotify('success', 'Solicitud de pago anulada con justificación.');
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
   const handleDownloadPdf = async (path: string, filename: string) => {
     if (!token) {
       onNotify('error', 'Inicie sesión en el backend para descargar el PDF.');
@@ -582,6 +641,59 @@ export function FinancialEnginePanel({
         </table>
       </section>
 
+      {/* BLOQUE 1B: LOTES DE CAUSACIÓN Y ANULACIÓN JUSTIFICADA */}
+      <section style={cardStyle}>
+        <h2 style={sectionTitleStyle}>
+          1B. Lotes de Causación Emitidos (RN-CAUS-04 / RN-GLOB-04)
+        </h2>
+        <table style={tableStyle}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={thStyle}>Lote</th>
+              <th style={thStyle}>Proyecto</th>
+              <th style={thStyle}>Período</th>
+              <th style={thStyle}>Total (USD)</th>
+              <th style={thStyle}>Estado</th>
+              {isGenerador && <th style={thStyle}>Acción</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {accrualBatches.map((batch) => (
+              <tr key={batch.id} style={trStyle}>
+                <td style={{ ...tdStyle, fontWeight: 700 }}>{batch.code}</td>
+                <td style={tdStyle}>
+                  <code>{batch.project?.code ?? batch.projectId}</code>
+                </td>
+                <td style={tdStyle}>
+                  {String(batch.periodStart).slice(0, 10)} al{' '}
+                  {String(batch.periodEnd).slice(0, 10)}
+                </td>
+                <td style={{ ...tdStyle, fontWeight: 600 }}>
+                  {formatUsdCurrency(Number(batch.totalAmount))}
+                </td>
+                <td style={tdStyle}>{batch.status}</td>
+                {isGenerador && (
+                  <td style={tdStyle}>
+                    {batch.status === 'GENERADO' &&
+                      !(batch.accruals ?? []).some(
+                        (accrual) => Number(accrual.paidAmount) > 0,
+                      ) && (
+                        <button
+                          type="button"
+                          onClick={() => handleAnnulBatch(batch.id)}
+                          style={dangerOutlineButtonStyle}
+                        >
+                          Anular Lote
+                        </button>
+                      )}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
       {/* BLOQUE 2: CICLO DE SOLICITUDES DE PAGO */}
       <section style={cardStyle}>
         <h2 style={sectionTitleStyle}>
@@ -753,6 +865,19 @@ export function FinancialEnginePanel({
                           style={secondaryButtonStyle}
                         >
                           🔒 Cerrar Solicitud
+                        </button>
+                      )}
+                    {isGenerador &&
+                      Number(req.paidAmount) === 0 &&
+                      req.status !== PaymentRequestStatus.CERRADA &&
+                      req.status !== PaymentRequestStatus.RECHAZADA &&
+                      req.status !== PaymentRequestStatus.ANULADA && (
+                        <button
+                          type="button"
+                          onClick={() => handleAnnulRequest(req.id)}
+                          style={dangerOutlineButtonStyle}
+                        >
+                          🚫 Anular Solicitud
                         </button>
                       )}
                     <button

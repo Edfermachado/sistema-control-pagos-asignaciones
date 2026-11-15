@@ -41,6 +41,11 @@ export class PaymentsService {
 
     const request = await this.prisma.paymentRequest.findUnique({
       where: { id: dto.paymentRequestId },
+      include: {
+        items: {
+          include: { accrual: true },
+        },
+      },
     });
 
     if (!request) {
@@ -60,14 +65,26 @@ export class PaymentsService {
       );
     }
 
-    const pendingAccruals = await this.prisma.accrual.findMany({
-      where: {
-        beneficiaryId: dto.beneficiaryId,
-        projectId: request.projectId,
-        status: { in: [AccrualStatus.PENDIENTE, AccrualStatus.PARCIAL] },
-      },
-      orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
-    });
+    const requestPendingAmount = toUsdDecimal(request.totalAmount.toString())
+      .minus(toUsdDecimal(request.paidAmount.toString()));
+
+    if (toUsdDecimal(dto.amount).gt(requestPendingAmount)) {
+      throw new BadRequestException(
+        `[RN-PAG-02] El pago ($${toUsdDecimal(dto.amount).toFixed(2)}) supera el saldo pendiente de la solicitud ($${requestPendingAmount.toFixed(2)}).`,
+      );
+    }
+
+    // RN-PAG-02: el pago aprobado se aplica exclusivamente a las causaciones
+    // incluidas en la solicitud y a favor del beneficiario seleccionado.
+    const pendingAccruals = request.items
+      .map((item) => item.accrual)
+      .filter(
+        (accrual) =>
+          accrual.beneficiaryId === dto.beneficiaryId &&
+          (accrual.status === AccrualStatus.PENDIENTE ||
+            accrual.status === AccrualStatus.PARCIAL) &&
+          toUsdDecimal(accrual.balanceDue.toString()).gt(0),
+      );
 
     const fifoPlan = allocatePaymentFifo(
       dto.amount,

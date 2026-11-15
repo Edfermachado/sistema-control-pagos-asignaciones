@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  MIN_REJECTION_REASON_LENGTH,
   PettyCashPeriodStatus,
   PettyCashStatus,
   PettyCashVoucherStatus,
@@ -250,9 +251,10 @@ export class PettyCashService {
   }
 
   /**
-   * Aprueba y desembolsa un vale por parte de Gerencia (RECEPTOR), descontando del saldo disponible (RN-CAJA-02 y RN-CAJA-03).
+   * Aprueba un vale solicitado por el GENERADOR. La aprobación no mueve saldo;
+   * el desembolso es una etapa posterior (RN-CAJA-03 / RN-SEG-02).
    */
-  async approveAndDisburseVoucher(voucherId: string, actor: AuthenticatedUser) {
+  async approveVoucher(voucherId: string, actor: AuthenticatedUser) {
     const voucher = await this.prisma.pettyCashVoucher.findUnique({
       where: { id: voucherId },
       include: { period: true },
@@ -264,7 +266,124 @@ export class PettyCashService {
 
     if (voucher.status !== PettyCashVoucherStatus.SOLICITADO) {
       throw new BadRequestException(
-        `[RN-CAJA-03] El vale debe estar en estado SOLICITADO para aprobarse y desembolsarse (actual: ${voucher.status}).`,
+        `[RN-CAJA-03] Solo se puede aprobar un vale en estado SOLICITADO (actual: ${voucher.status}).`,
+      );
+    }
+
+    if (voucher.period.status !== PettyCashPeriodStatus.ABIERTO) {
+      throw new BadRequestException(
+        '[RN-CAJA-02] Solo se pueden aprobar vales de un período mensual ABIERTO.',
+      );
+    }
+
+    const updated = await this.prisma.pettyCashVoucher.update({
+      where: { id: voucherId },
+      data: {
+        status: PettyCashVoucherStatus.APROBADO,
+        approvedById: actor.id,
+      },
+    });
+
+    await this.auditService.recordLog({
+      userId: actor.id,
+      userRole: actor.role,
+      action: 'APPROVE_PETTY_CASH_VOUCHER',
+      tableName: 'petty_cash_vouchers',
+      recordId: voucherId,
+      oldValues: { status: voucher.status },
+      newValues: { status: PettyCashVoucherStatus.APROBADO },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Rechaza un vale solicitado o aprobado antes de su desembolso (RN-CAJA-03).
+   */
+  async rejectVoucher(
+    voucherId: string,
+    reason: string,
+    actor: AuthenticatedUser,
+  ) {
+    const cleanReason = (reason ?? '').trim();
+    if (cleanReason.length < MIN_REJECTION_REASON_LENGTH) {
+      throw new BadRequestException(
+        `[RN-CAJA-03] El motivo de rechazo debe tener al menos ${MIN_REJECTION_REASON_LENGTH} caracteres.`,
+      );
+    }
+
+    const voucher = await this.prisma.pettyCashVoucher.findUnique({
+      where: { id: voucherId },
+      include: { period: true },
+    });
+
+    if (!voucher) {
+      throw new NotFoundException(`El vale '${voucherId}' no existe.`);
+    }
+
+    if (
+      voucher.status !== PettyCashVoucherStatus.SOLICITADO &&
+      voucher.status !== PettyCashVoucherStatus.APROBADO
+    ) {
+      throw new BadRequestException(
+        `[RN-CAJA-03] Solo se pueden rechazar vales SOLICITADO o APROBADO antes del desembolso (actual: ${voucher.status}).`,
+      );
+    }
+
+    if (voucher.period.status !== PettyCashPeriodStatus.ABIERTO) {
+      throw new BadRequestException(
+        '[RN-CAJA-02] Solo se pueden rechazar vales de un período mensual ABIERTO.',
+      );
+    }
+
+    const updated = await this.prisma.pettyCashVoucher.update({
+      where: { id: voucherId },
+      data: {
+        status: PettyCashVoucherStatus.RECHAZADO,
+        rejectionReason: cleanReason,
+        approvedById: actor.id,
+      },
+    });
+
+    await this.auditService.recordLog({
+      userId: actor.id,
+      userRole: actor.role,
+      action: 'REJECT_PETTY_CASH_VOUCHER',
+      tableName: 'petty_cash_vouchers',
+      recordId: voucherId,
+      oldValues: { status: voucher.status },
+      newValues: {
+        status: PettyCashVoucherStatus.RECHAZADO,
+        rejectionReason: cleanReason,
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Desembolsa un vale previamente APROBADO, descontando del saldo disponible
+   * (RN-CAJA-02 y RN-CAJA-03).
+   */
+  async disburseVoucher(voucherId: string, actor: AuthenticatedUser) {
+    const voucher = await this.prisma.pettyCashVoucher.findUnique({
+      where: { id: voucherId },
+      include: { period: true },
+    });
+
+    if (!voucher) {
+      throw new NotFoundException(`El vale '${voucherId}' no existe.`);
+    }
+
+    if (voucher.status !== PettyCashVoucherStatus.APROBADO) {
+      throw new BadRequestException(
+        `[RN-CAJA-03] El vale debe estar APROBADO para desembolsarse (actual: ${voucher.status}).`,
+      );
+    }
+
+    if (voucher.period.status !== PettyCashPeriodStatus.ABIERTO) {
+      throw new BadRequestException(
+        '[RN-CAJA-02] Solo se pueden desembolsar vales de un período mensual ABIERTO.',
       );
     }
 
@@ -278,7 +397,6 @@ export class PettyCashService {
         where: { id: voucherId },
         data: {
           status: PettyCashVoucherStatus.DESEMBOLSADO,
-          approvedById: actor.id,
           disbursedById: actor.id,
           disbursedAmount: voucher.requestedAmount.toString(),
         },
@@ -327,6 +445,13 @@ export class PettyCashService {
       );
     }
 
+    const cleanAttachment = (dto.attachmentUrl ?? '').trim();
+    if (!cleanAttachment) {
+      throw new BadRequestException(
+        '[RN-CAJA-03] El archivo del comprobante es obligatorio para rendir el vale.',
+      );
+    }
+
     const voucher = await this.prisma.pettyCashVoucher.findUnique({
       where: { id: voucherId },
       include: { period: true },
@@ -356,7 +481,7 @@ export class PettyCashService {
           settledAmount: String(dto.settledAmount),
           returnedAmount: settlement.returnedChange,
           invoiceReference: cleanInvoice,
-          attachmentUrl: dto.attachmentUrl ?? null,
+          attachmentUrl: cleanAttachment,
         },
       });
 
@@ -441,6 +566,58 @@ export class PettyCashService {
     });
 
     return closed;
+  }
+
+  /**
+   * Cierra definitivamente una caja chica cuando no posee períodos activos
+   * (RN-CAJA-01 / RN-CAJA-04).
+   */
+  async closePettyCash(pettyCashId: string, actor: AuthenticatedUser) {
+    const pettyCash = await this.prisma.pettyCash.findUnique({
+      where: { id: pettyCashId },
+      include: { periods: true },
+    });
+
+    if (!pettyCash) {
+      throw new NotFoundException(
+        `La caja chica con ID '${pettyCashId}' no existe.`,
+      );
+    }
+
+    if (pettyCash.status === PettyCashStatus.CERRADA) {
+      throw new BadRequestException(
+        '[RN-CAJA-04] La caja chica ya se encuentra CERRADA.',
+      );
+    }
+
+    const activePeriod = pettyCash.periods.find(
+      (period) =>
+        period.status === PettyCashPeriodStatus.SOLICITADO ||
+        period.status === PettyCashPeriodStatus.ABIERTO,
+    );
+
+    if (activePeriod) {
+      throw new BadRequestException(
+        `[RN-CAJA-04] No se puede cerrar la caja chica mientras el período ${activePeriod.yearMonth} esté SOLICITADO o ABIERTO.`,
+      );
+    }
+
+    const updated = await this.prisma.pettyCash.update({
+      where: { id: pettyCashId },
+      data: { status: PettyCashStatus.CERRADA },
+    });
+
+    await this.auditService.recordLog({
+      userId: actor.id,
+      userRole: actor.role,
+      action: 'CLOSE_PETTY_CASH',
+      tableName: 'petty_cashes',
+      recordId: pettyCashId,
+      oldValues: { status: pettyCash.status },
+      newValues: { status: PettyCashStatus.CERRADA },
+    });
+
+    return updated;
   }
 
   /**

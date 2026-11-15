@@ -98,3 +98,13 @@ INSERT INTO "petty_cash_vouchers" ("id", "code", "period_id", "requested_by_id",
 VALUES
   ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'VALE-FIS-2026-10', 'cccccccc-cccc-4ccc-8ccc-cccccccccc01', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103', 'TSU. Luis Herrera', 'Compra de insumos ópticos y guantes de nitrilo', 134.50, 134.50, 134.50, 0.00, 'FACT-FIS-2026-1042', 'RENDIDO')
 ON CONFLICT ("code") DO NOTHING;
+
+-- 9. Parámetros globales del sistema (RF 2.1: gestión exclusiva del ADMIN)
+INSERT INTO "system_parameters" ("id", "key", "value", "description", "updated_by_id")
+VALUES
+  ('ffffffff-ffff-4fff-8fff-ffffffffff01', 'SYSTEM_CURRENCY', 'USD', 'Moneda única del sistema, sin deducciones ni conversiones (RN-GLOB-01)', '11111111-1111-4111-8111-111111111101'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffff02', 'PAYMENT_REQUEST_SCOPE', 'REQUEST_ITEMS', 'Alcance del pago FIFO: solo causaciones incluidas en la solicitud aprobada', '11111111-1111-4111-8111-111111111101'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffff03', 'MAX_UPLOAD_SIZE_MB', '5', 'Tamaño máximo permitido para comprobantes adjuntos en MB', '11111111-1111-4111-8111-111111111101'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffff04', 'PETTY_CASH_REQUIRE_ATTACHMENT', 'true', 'Exigir archivo de comprobante al rendir un vale de caja chica', '11111111-1111-4111-8111-111111111101'),
+  ('ffffffff-ffff-4fff-8fff-ffffffffff05', 'AUDIT_RETENTION_DAYS', '365', 'Días de retención de la bitácora de auditoría', '11111111-1111-4111-8111-111111111101')
+ON CONFLICT ("key") DO NOTHING;

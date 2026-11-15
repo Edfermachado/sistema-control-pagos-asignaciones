@@ -23,6 +23,7 @@ describe('PaymentRequestsService (RN-PAG-01 Ciclo de Solicitudes de Pago)', () =
       findMany: jest.Mock;
     };
     accrual: { findMany: jest.Mock };
+    paymentRequestItem: { findFirst: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditMock: { recordLog: jest.Mock };
@@ -50,6 +51,7 @@ describe('PaymentRequestsService (RN-PAG-01 Ciclo de Solicitudes de Pago)', () =
         findMany: jest.fn(),
       },
       accrual: { findMany: jest.fn() },
+      paymentRequestItem: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((cb) => cb(prismaMock)),
     };
     auditMock = {
@@ -99,6 +101,30 @@ describe('PaymentRequestsService (RN-PAG-01 Ciclo de Solicitudes de Pago)', () =
         service.createPaymentRequest(
           {
             code: 'SOL-DUP',
+            projectId: 'proj-1',
+            accrualIds: ['acc-1'],
+          },
+          generadorActor,
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('debe impedir incluir una causación que ya pertenece a otra solicitud activa (Edge Case)', async () => {
+      // Arrange
+      prismaMock.paymentRequest.findUnique.mockResolvedValueOnce(null);
+      prismaMock.accrual.findMany.mockResolvedValueOnce([
+        { id: 'acc-1', balanceDue: '300.00', status: AccrualStatus.PENDIENTE },
+      ]);
+      prismaMock.paymentRequestItem.findFirst.mockResolvedValueOnce({
+        id: 'item-1',
+        paymentRequestId: 'req-activa',
+      });
+
+      // Act & Assert
+      await expect(
+        service.createPaymentRequest(
+          {
+            code: 'SOL-DUP-ACCRUAL',
             projectId: 'proj-1',
             accrualIds: ['acc-1'],
           },

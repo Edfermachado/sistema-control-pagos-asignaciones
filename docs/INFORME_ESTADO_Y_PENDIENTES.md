@@ -63,13 +63,13 @@ Con los contenedores levantados:
 node scripts/api-smoke-test.mjs
 ```
 
-El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, cierre, PDFs, caja chica completa, usuarios y auditoría. **Resultado actual: 40/40 verificaciones en verde.**
+El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, anulación de lote/solicitud/vale, cierre, PDFs con marca de agua, carga de comprobantes, caja chica completa, parámetros, usuarios y auditoría con triggers. **Resultado actual: 59/59 verificaciones en verde.**
 
 ### 2.4 Pruebas unitarias
 
 ```bash
-npm --prefix backend test -- --runInBand   # 27 suites / 188 tests
-npm --prefix frontend test                 # 5 suites / 25 tests
+npm --prefix backend test -- --runInBand   # 29 suites / 215 tests
+npm --prefix frontend test                 # 5 suites / 27 tests
 ```
 
 ### 2.5 Ejecución manual (sin Docker)
@@ -106,12 +106,12 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | :--- | :--- |
 | `backend` compila (`nest build`) | ✅ |
 | `frontend` compila (`tsc -b && vite build`) | ✅ |
-| Backend: 27 suites / 188 pruebas | ✅ 188/188 |
-| Frontend: 5 suites / 25 pruebas | ✅ 25/25 |
+| Backend: 29 suites / 215 pruebas | ✅ 215/215 |
+| Frontend: 5 suites / 27 pruebas | ✅ 27/27 |
 | `docker compose up -d --build` | ✅ |
 | Login de los 3 roles con el seed SQL | ✅ |
 | Health check con conexión a PostgreSQL | ✅ |
-| Prueba de humo API end-to-end | ✅ 40/40 |
+| Prueba de humo API end-to-end | ✅ 59/59 |
 | Verificación de UI en navegador (Chromium headless) | ✅ Sin errores de consola |
 | Dashboard, catálogos, motor financiero, caja chica, usuarios y auditoría | ✅ Cargan datos reales de la API |
 | Cambio de rol GENERADOR → ADMIN → RECEPTOR con JWT automático | ✅ |
@@ -179,12 +179,12 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | Causación por lote | ✅ Implementado | Con control de duplicidad. |
 | Flujo de solicitudes y pagos | ✅ Implementado | Estados y transiciones probados. |
 | Pagos parciales FIFO | ✅ Implementado | Con `payment_allocations`. |
-| Inmutabilidad y anulaciones justificadas | ⚠️ Parcial | Pagos y causaciones sí; faltan anulaciones de lote, solicitud y vale. |
-| Cajas chicas múltiples por proyecto | ✅ Implementado | Apertura, vales, desembolso, rendición y arrastre. |
-| PDF de recibo y solicitud consolidada | ✅ Implementado | PDF 1.4 nativo, sin librerías externas. |
-| `audit_log` con quién/cuándo/qué | ⚠️ Parcial | Registro por servicio; no hay trigger de BD ni interceptor global. |
-| Parámetros del sistema | ❌ No implementado | El modelo `SystemParameter` existe, pero no hay API ni UI. |
-| Adjuntar comprobante de rendición | ⚠️ Parcial | Se exige referencia de factura, pero no hay carga real de archivo. |
+| Inmutabilidad y anulaciones justificadas | ✅ Implementado | Anulación de pagos, causaciones, lotes, solicitudes y vales con reversión y motivo obligatorio. |
+| Cajas chicas múltiples por proyecto | ✅ Implementado | Apertura, aprobación, rechazo, desembolso separado, rendición con archivo y arrastre. |
+| PDF de recibo y solicitud consolidada | ✅ Implementado | PDF 1.4 nativo con bloques de firma y marca de agua para anulados. |
+| `audit_log` con quién/cuándo/qué | ✅ Implementado | Registro de negocio por servicio + triggers PostgreSQL y bloqueo append-only. |
+| Parámetros del sistema | ✅ Implementado | CRUD clave-valor con API y pantalla exclusiva del ADMIN. |
+| Adjuntar comprobante de rendición | ✅ Implementado | Carga real de PDF/PNG/JPEG hasta 5 MB y referencia obligatoria. |
 | Seed ficticio completo | ✅ Implementado | SQL y Prisma, con datos financieros y de caja chica. |
 | README de instalación/ejecución | ✅ Implementado | Actualizado y validado. |
 | Bitácora de uso de IA | ✅ Implementado | Ver `docs/BITACORA_IA.md`. |
@@ -193,52 +193,31 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ## 6. Pendientes y riesgos priorizados
 
-### Prioridad alta (completar antes de la defensa)
+### Pendientes del PDF resueltos en esta iteración
 
-1. **Módulo de parámetros del sistema (`SystemParameter`)**
-   - El enunciado indica que el Administrador gestiona parámetros. Hoy solo existe la tabla.
-   - Falta API (`GET/PATCH /api/parameters`) y pantalla en el workspace ADMIN.
-
-2. **Completar el ciclo de anulaciones**
-   - Faltan endpoints/servicios para anular:
-     - lote de causación (`ACCRUAL_BATCH`),
-     - solicitud de pago (`PAYMENT_REQUEST`),
-     - vale de caja chica (`PETTY_CASH_VOUCHER`).
-   - Los tipos ya existen en el enum, pero no se usan.
-
-3. **Rechazo y anulación de vales de caja chica**
-   - El estado `RECHAZADO` existe, pero no hay endpoint para rechazar un vale.
-   - Tampoco hay cierre definitivo de la caja chica (`PettyCashStatus.CERRADA`).
-
-4. **Integridad de la solicitud de pago**
-   - Una misma causación puede incluirse en dos solicitudes activas simultáneas.
-   - El pago FIFO se aplica sobre todas las causaciones pendientes del beneficiario/proyecto, no solo sobre los ítems de la solicitud; esto puede hacer que `paidAmount` supere `totalAmount` de la solicitud.
-   - Al anular un pago de una solicitud ya `CERRADA`, la solicitud no se reabre y queda inconsistente.
-
-5. **Carga real de comprobantes**
-   - El campo `attachment_url` existe, pero no hay endpoint de subida ni control de archivo en la UI.
-   - El directorio `uploads/` está montado, pero sin uso.
+1. ✅ **Parámetros globales del sistema:** CRUD clave-valor (`GET/POST/PATCH/DELETE /api/parameters`) y pantalla exclusiva del ADMIN.
+2. ✅ **Anulaciones completas:** pagos, causaciones, lotes de causación, solicitudes de pago y vales de caja chica, con motivo obligatorio, reversión contable y auditoría.
+3. ✅ **Flujo de caja chica:** aprobación y desembolso separados, rechazo de vales con motivo y cierre definitivo de la caja.
+4. ✅ **Integridad de solicitudes/pagos:** bloqueo de causaciones duplicadas en solicitudes activas, pago FIFO limitado a los ítems de la solicitud y reapertura de la solicitud al anular un pago.
+5. ✅ **Comprobantes adjuntos:** endpoint `/api/uploads` con validación de tipo/tamaño y carga desde la UI.
+6. ✅ **Auditoría a nivel de BD:** triggers PostgreSQL sobre las tablas del dominio y bloqueo append-only de `audit_logs`.
+7. ✅ **PDF formales:** marca de agua gráfica para documentos anulados y bloques de firma/trazabilidad.
 
 ### Prioridad media
 
-6. **Auditoría a nivel de base de datos**
-   - Hoy la auditoría se escribe manualmente en cada servicio.
-   - Para cumplir estrictamente “qué cambió en la base de datos”, conviene agregar triggers PostgreSQL o un interceptor global de Prisma.
-   - También conviene impedir `UPDATE`/`DELETE` sobre `audit_logs` a nivel de BD (tabla append-only real).
-
-7. **Documentación de API**
+8. **Documentación de API**
    - No hay Swagger/OpenAPI. Agregar `@nestjs/swagger` facilitaría pruebas manuales y defensa.
 
-8. **Pruebas de integración y CI**
-   - Las 188 + 25 pruebas son unitarias con mocks.
+9. **Pruebas de integración y CI**
+   - Las 215 + 27 pruebas son unitarias con mocks.
    - El script `scripts/api-smoke-test.mjs` cubre el flujo real, pero no está integrado en CI.
    - No hay pipeline (GitHub Actions) que ejecute tests, build y smoke test.
 
-9. **Gestión de sesión y contraseñas**
-   - No hay logout, refresh token, cambio de contraseña ni recuperación.
-   - El JWT se guarda solo en memoria (correcto para seguridad), pero al recargar se vuelve a autenticar automáticamente con credenciales demo.
+10. **Gestión de sesión y contraseñas**
+    - No hay logout, refresh token, cambio de contraseña ni recuperación.
+    - El JWT se guarda solo en memoria (correcto para seguridad), pero al recargar se vuelve a autenticar automáticamente con credenciales demo.
 
-10. **CRUD incompleto desde UI**
+11. **CRUD incompleto desde UI**
     - Proyectos: no hay edición de nombre/fechas, solo cambio de estado.
     - Beneficiarios: la API permite actualizar, pero la UI solo crea.
     - Grupos de pago: solo creación y listado.
@@ -246,20 +225,16 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ### Prioridad baja / endurecimiento
 
-11. **Migraciones formales**
+12. **Migraciones formales**
     - El despliegue depende de scripts SQL de inicialización. No hay carpeta `prisma/migrations`.
     - Para producción conviene generar migraciones versionadas.
 
-12. **Seguridad de despliegue**
+13. **Seguridad de despliegue**
     - `app.enableCors()` está abierto a cualquier origen.
     - Secretos JWT y de BD tienen valores por defecto en `docker-compose.yml`.
     - Los contenedores corren como `root`.
     - No hay rate limiting ni protección de fuerza bruta en `/auth/login`.
     - Backend y frontend no tienen healthcheck en Compose.
-
-13. **PDF**
-    - El estado `ANULADO` se muestra como banner de texto, no como marca de agua gráfica.
-    - Las “firmas” son nombres/trazabilidad, no firma digital.
 
 14. **Fechas y zonas horarias**
     - Se usan `new Date('YYYY-MM-DD')` (UTC). Conviene estandarizar el manejo de fechas para evitar corrimientos según la zona horaria del servidor.
@@ -268,6 +243,6 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ## 7. Conclusión
 
-El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por pruebas unitarias y por la prueba de humo agregada.
+El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 215 pruebas de backend, 27 de frontend y una prueba de humo end-to-end.
 
-Los pendientes más importantes para cerrar el alcance académico son: **parámetros del sistema, anulaciones faltantes, rechazo/cierre de cajas chicas, integridad de solicitudes/pagos y carga de comprobantes**. Los demás puntos son mejoras de robustez, seguridad y experiencia de usuario.
+Los pendientes funcionales del PDF identificados en la primera auditoría **ya fueron implementados**: parámetros, anulaciones completas, flujo de caja chica, integridad de solicitudes/pagos, comprobantes adjuntos, auditoría con triggers y PDFs formales. Lo que resta son mejoras de robustez, documentación de API, CI, migraciones versionadas, seguridad de despliegue y CRUD extendido de la interfaz.
