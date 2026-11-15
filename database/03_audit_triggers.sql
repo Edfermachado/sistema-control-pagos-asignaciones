@@ -58,6 +58,7 @@ DECLARE
         'beneficiaries',
         'projects',
         'payment_groups',
+        'payment_group_periods',
         'assignments',
         'accrual_batches',
         'accruals',

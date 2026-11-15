@@ -63,12 +63,12 @@ Con los contenedores levantados:
 node scripts/api-smoke-test.mjs
 ```
 
-El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, anulación de lote/solicitud/vale, cierre, PDFs con marca de agua, carga de comprobantes, caja chica completa, parámetros, usuarios y auditoría con triggers. **Resultado actual: 59/59 verificaciones en verde.**
+El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, anulación de lote/solicitud/vale, cierre, PDFs con marca de agua, carga de comprobantes, caja chica completa, parámetros, usuarios y auditoría con triggers. **Resultado actual: 68/68 verificaciones en verde.**
 
 ### 2.4 Pruebas unitarias
 
 ```bash
-npm --prefix backend test -- --runInBand   # 29 suites / 215 tests
+npm --prefix backend test -- --runInBand   # 30 suites / 225 tests
 npm --prefix frontend test                 # 5 suites / 27 tests
 ```
 
@@ -106,12 +106,12 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | :--- | :--- |
 | `backend` compila (`nest build`) | ✅ |
 | `frontend` compila (`tsc -b && vite build`) | ✅ |
-| Backend: 29 suites / 215 pruebas | ✅ 215/215 |
+| Backend: 30 suites / 225 pruebas | ✅ 225/225 |
 | Frontend: 5 suites / 27 pruebas | ✅ 27/27 |
 | `docker compose up -d --build` | ✅ |
 | Login de los 3 roles con el seed SQL | ✅ |
 | Health check con conexión a PostgreSQL | ✅ |
-| Prueba de humo API end-to-end | ✅ 59/59 |
+| Prueba de humo API end-to-end | ✅ 68/68 |
 | Verificación de UI en navegador (Chromium headless) | ✅ Sin errores de consola |
 | Dashboard, catálogos, motor financiero, caja chica, usuarios y auditoría | ✅ Cargan datos reales de la API |
 | Cambio de rol GENERADOR → ADMIN → RECEPTOR con JWT automático | ✅ |
@@ -172,8 +172,8 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | :--- | :--- | :--- |
 | 3 roles con segregación de funciones | ✅ Implementado | RBAC verificado en API y UI. |
 | Beneficiarios sin usuario | ✅ Implementado | Tabla separada y sin credenciales. |
-| Proyectos con área, ámbito y vigencia | ✅ Implementado | Falta edición completa desde UI. |
-| Grupos de pago con periodicidad y cortes | ✅ Implementado | Solo creación y listado. |
+| Proyectos con área, ámbito y vigencia | ✅ Implementado | Creación, edición y cambio de estado desde UI. |
+| Grupos de pago con periodicidad y cortes | ✅ Implementado | CRUD, fechas de corte automáticas y cortes personalizados. |
 | Asignaciones persona-proyecto-grupo | ✅ Implementado | Con bloqueo de solapamientos. |
 | Prorrateo exacto por días | ✅ Implementado | `Decimal.js`, `ROUND_HALF_UP`, probado. |
 | Causación por lote | ✅ Implementado | Con control de duplicidad. |
@@ -202,17 +202,20 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 5. ✅ **Comprobantes adjuntos:** endpoint `/api/uploads` con validación de tipo/tamaño y carga desde la UI.
 6. ✅ **Auditoría a nivel de BD:** triggers PostgreSQL sobre las tablas del dominio y bloqueo append-only de `audit_logs`.
 7. ✅ **PDF formales:** marca de agua gráfica para documentos anulados y bloques de firma/trazabilidad.
+8. ✅ **ADMIN y catálogos:** proyectos y beneficiarios gestionables por ADMIN y GENERADOR; grupos y cortes por ADMIN, manteniendo la segregación de dinero.
+9. ✅ **Fechas de corte adaptables:** generación automática de períodos estándar, gestión de cortes personalizados y validación del período al causar.
+10. ✅ **CRUD de catálogos en UI:** edición y activación/desactivación de proyectos, grupos, beneficiarios y períodos.
 
 ### Brechas residuales frente al PDF (revisión final)
 
-1. **Alcance del ADMIN sobre catálogos**
-   - El PDF dice que el Administrador “gestiona usuarios, parámetros y catálogos”.
-   - Hoy el ADMIN administra usuarios, parámetros y grupos de pago, pero proyectos y beneficiarios son gestionados por el GENERADOR (el ADMIN solo los consulta).
-   - Es una decisión de segregación documentada en `REGLAS_DE_NEGOCIO.md`, pero conviene confirmarla con el profesor o ampliar permisos del ADMIN para evitar una observación literal.
+1. ✅ **Alcance del ADMIN sobre catálogos (resuelto)**
+   - El ADMIN ahora puede crear y editar proyectos, beneficiarios y grupos de pago, además de gestionar sus fechas de corte.
+   - Se mantiene la prohibición de participar en operaciones de dinero.
 
-2. **Fechas de corte adaptables**
-   - Los grupos de pago guardan `cutoffRules` como texto, pero el sistema no genera automáticamente los períodos a partir de esa regla; el Generador introduce `periodStart` y `periodEnd` al crear el lote.
-   - Funcionalmente permite cortes adaptables, pero la regla no está automatizada ni validada estructuralmente.
+2. ✅ **Fechas de corte adaptables (resuelto)**
+   - Los grupos de pago generan automáticamente sus períodos estándar para el año actual y el siguiente.
+   - El ADMIN puede agregar o eliminar cortes personalizados.
+   - La creación de lotes valida que el período coincida con una fecha de corte configurada cuando el grupo posee períodos.
 
 3. **Inmutabilidad a nivel de base de datos**
    - La aplicación no expone endpoints de edición/borrado de registros financieros y las correcciones se hacen por anulación.
@@ -226,9 +229,10 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
    - Se implementó, por decisión del equipo, que el pago se aplique solo a las causaciones incluidas en la solicitud aprobada.
    - El PDF dice “sobre la deuda pendiente”; si el profesor espera que el FIFO recorra toda la deuda del beneficiario/proyecto, habría que ajustar esa regla.
 
-6. **CRUD de catálogos en la interfaz**
-   - Proyectos y grupos de pago no tienen edición completa desde la UI; beneficiarios permiten actualización por API pero no desde pantalla.
-   - No es un bloqueo para la demo, pero “gestionar catálogos” puede implicar editar/desactivar, no solo crear.
+6. ✅ **CRUD de catálogos en la interfaz (resuelto)**
+   - Proyectos, grupos de pago y beneficiarios tienen edición y activación/desactivación desde la UI.
+   - Los grupos de pago incluyen gestión de períodos y cortes.
+   - El ADMIN y el GENERADOR pueden gestionar proyectos y beneficiarios; el ADMIN gestiona grupos y cortes.
 
 7. **Recibos**
    - No existe una tabla separada de “recibos”: el recibo se representa con `payments.receipt_code` y su PDF.
@@ -240,7 +244,7 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
    - No hay Swagger/OpenAPI. Agregar `@nestjs/swagger` facilitaría pruebas manuales y defensa.
 
 9. **Pruebas de integración y CI**
-   - Las 215 + 27 pruebas son unitarias con mocks.
+   - Las 225 + 27 pruebas son unitarias con mocks.
    - El script `scripts/api-smoke-test.mjs` cubre el flujo real, pero no está integrado en CI.
    - No hay pipeline (GitHub Actions) que ejecute tests, build y smoke test.
 
@@ -274,6 +278,6 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ## 7. Conclusión
 
-El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 215 pruebas de backend, 27 de frontend y una prueba de humo end-to-end.
+El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 225 pruebas de backend, 27 de frontend y una prueba de humo end-to-end.
 
-Los pendientes funcionales del PDF identificados en la primera auditoría **ya fueron implementados**: parámetros, anulaciones completas, flujo de caja chica, integridad de solicitudes/pagos, comprobantes adjuntos, auditoría con triggers y PDFs formales. Lo que resta son mejoras de robustez, documentación de API, CI, migraciones versionadas, seguridad de despliegue y CRUD extendido de la interfaz.
+Los pendientes funcionales del PDF identificados en la primera auditoría **ya fueron implementados**: parámetros, anulaciones completas, flujo de caja chica, integridad de solicitudes/pagos, comprobantes adjuntos, auditoría con triggers y PDFs formales. Las brechas 1, 3 y 5 de la revisión final también quedaron resueltas: catálogos gestionables por ADMIN, fechas de corte configurables y CRUD completo en la interfaz. Lo que resta son mejoras de robustez, documentación de API, CI, migraciones versionadas, seguridad de despliegue y las brechas 3, 4, 5 y 7 de interpretación/endurecimiento.

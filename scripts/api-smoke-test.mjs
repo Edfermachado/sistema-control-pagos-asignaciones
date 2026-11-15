@@ -115,6 +115,75 @@ async function main() {
   check('crear grupo de pago como ADMIN', groupRes.status === 201, `HTTP ${groupRes.status} ${JSON.stringify(groupRes.payload)}`);
   const group = groupRes.payload;
 
+  const groupPeriods = await request(`/payment-groups/${group.id}/periods`, {
+    token: generadorToken,
+  });
+  check('grupo genera fechas de corte automáticas', groupPeriods.ok && Array.isArray(groupPeriods.payload) && groupPeriods.payload.length > 0, `HTTP ${groupPeriods.status}`);
+
+  const updatedGroup = await request(`/payment-groups/${group.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { cutoffRules: `Corte ajustado ${stamp}` },
+  });
+  check('ADMIN actualiza grupo de pago', updatedGroup.ok && String(updatedGroup.payload?.cutoffRules).includes(stamp), `HTTP ${updatedGroup.status}`);
+
+  const customPeriod = await request(`/payment-groups/${group.id}/periods`, {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      periodStart: '2030-01-01',
+      periodEnd: '2030-01-15',
+      label: 'Corte personalizado de prueba',
+    },
+  });
+  check('ADMIN agrega fecha de corte personalizada', customPeriod.status === 201, `HTTP ${customPeriod.status} ${JSON.stringify(customPeriod.payload)}`);
+
+  const deleteCustomPeriod = await request(
+    `/payment-groups/${group.id}/periods/${customPeriod.payload.id}`,
+    { method: 'DELETE', token: adminToken },
+  );
+  check('ADMIN elimina fecha de corte personalizada', deleteCustomPeriod.ok, `HTTP ${deleteCustomPeriod.status}`);
+
+  const adminProjectRes = await request('/projects', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      code: `ADM-${stamp}`,
+      name: `Proyecto Admin ${stamp}`,
+      area: 'BIOLOGIA',
+      scope: 'EXTERNO',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+    },
+  });
+  check('ADMIN crea proyecto (catálogo)', adminProjectRes.status === 201, `HTTP ${adminProjectRes.status} ${JSON.stringify(adminProjectRes.payload)}`);
+
+  const adminProjectUpdate = await request(`/projects/${adminProjectRes.payload.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { name: `Proyecto Admin Editado ${stamp}`, area: 'QUIMICA' },
+  });
+  check('ADMIN edita proyecto (catálogo)', adminProjectUpdate.ok && String(adminProjectUpdate.payload?.name).includes('Editado'), `HTTP ${adminProjectUpdate.status}`);
+
+  const adminBeneficiaryRes = await request('/beneficiaries', {
+    method: 'POST',
+    token: adminToken,
+    body: {
+      dni: `ADM-${stamp}`,
+      fullName: `Beneficiario Admin ${stamp}`,
+      email: `admin.benef.${stamp.toLowerCase()}@uc.edu.ve`,
+      bankInfo: 'Zelle Admin',
+    },
+  });
+  check('ADMIN crea beneficiario (catálogo)', adminBeneficiaryRes.status === 201, `HTTP ${adminBeneficiaryRes.status} ${JSON.stringify(adminBeneficiaryRes.payload)}`);
+
+  const adminBeneficiaryUpdate = await request(`/beneficiaries/${adminBeneficiaryRes.payload.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { fullName: `Beneficiario Admin Editado ${stamp}`, isActive: false },
+  });
+  check('ADMIN edita/desactiva beneficiario (catálogo)', adminBeneficiaryUpdate.ok && adminBeneficiaryUpdate.payload?.isActive === false, `HTTP ${adminBeneficiaryUpdate.status}`);
+
   const beneficiaryRes = await request('/beneficiaries', {
     method: 'POST',
     token: generadorToken,
@@ -164,6 +233,17 @@ async function main() {
     periodStart: '2026-11-01',
     periodEnd: '2026-11-15',
   };
+
+  const invalidPeriodPreview = await request('/accruals/batches/preview', {
+    method: 'POST',
+    token: generadorToken,
+    body: {
+      ...batchBody,
+      periodStart: '2026-11-02',
+      periodEnd: '2026-11-16',
+    },
+  });
+  check('rechaza período fuera de las fechas de corte (RN-CAT-03)', invalidPeriodPreview.status === 400, `HTTP ${invalidPeriodPreview.status}`);
 
   const previewRes = await request('/accruals/batches/preview', {
     method: 'POST',

@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS "payment_groups" (
     CONSTRAINT "payment_groups_name_key" UNIQUE ("name")
 );
 
+-- 5.1 Fechas de Corte Configurables por Grupo de Pago (RN-CAT-03)
+CREATE TABLE IF NOT EXISTS "payment_group_periods" (
+    "id" UUID NOT NULL DEFAULT gen_random_uuid(),
+    "payment_group_id" UUID NOT NULL,
+    "period_start" DATE NOT NULL,
+    "period_end" DATE NOT NULL,
+    "label" VARCHAR(100),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "payment_group_periods_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "payment_group_periods_unique_pair" UNIQUE ("payment_group_id", "period_start", "period_end"),
+    CONSTRAINT "payment_group_periods_valid_dates_chk" CHECK ("period_end" >= "period_start"),
+    CONSTRAINT "payment_group_periods_group_fkey" FOREIGN KEY ("payment_group_id") REFERENCES "payment_groups"("id") ON DELETE RESTRICT
+);
+
+CREATE INDEX IF NOT EXISTS "payment_group_periods_group_start_idx" ON "payment_group_periods"("payment_group_id", "period_start");
+
 -- 6. Tabla de Asignaciones (Cruce Persona x Proyecto x Grupo de Pago: RN-CAT-04)
 CREATE TABLE IF NOT EXISTS "assignments" (
     "id" UUID NOT NULL DEFAULT gen_random_uuid(),

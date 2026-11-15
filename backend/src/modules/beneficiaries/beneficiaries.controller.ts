@@ -31,7 +31,7 @@ export class BeneficiariesController {
    * RN-SEG-02: Solo GENERADOR crea o actualiza beneficiarios.
    */
   @Post()
-  @Roles(UserRole.GENERADOR)
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR)
   async create(
     @Body() dto: CreateBeneficiaryDto,
     @CurrentUser() actor: AuthenticatedUser,
@@ -49,7 +49,7 @@ export class BeneficiariesController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.GENERADOR)
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR)
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateBeneficiaryDto,

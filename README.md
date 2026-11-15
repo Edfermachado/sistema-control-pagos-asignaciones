@@ -21,6 +21,7 @@ Sistema cliente-servidor con arquitectura modular en capas para la gestión, cau
   * Aplicación automática **FIFO (Primero en Entrar, Primero en Salir)** de pagos parciales sobre las deudas pendientes más antiguas.
   * **Inmutabilidad Financiera:** Prohibición de borrado o edición directa de registros financieros; corrección exclusiva mediante **Anulaciones Justificadas** con reversión transaccional para pagos, causaciones, lotes, solicitudes y vales.
   * **Integridad de solicitudes:** una causación no puede estar en dos solicitudes activas y el pago FIFO solo aplica a los ítems de la solicitud aprobada.
+* **Catálogos Gestionables por el ADMIN:** proyectos, beneficiarios, grupos de pago y fechas de corte configurables desde la interfaz, con generación automática de períodos estándar.
 * **Control de Cajas Chicas por Proyecto:**
   * Gestión de múltiples cajas chicas asignables a proyectos, con apertura mensual, solicitud de vales, aprobación/rechazo por gerencia, desembolso separado, rendición con archivo de comprobante y arrastre automático de saldo al mes siguiente.
 * **Parámetros Globales del Sistema:**
@@ -118,7 +119,7 @@ cp backend/.env.example backend/.env
 npm --prefix backend install
 npm --prefix backend run prisma:generate
 
-# 2. Ejecutar las 29 suites de Pruebas Unitarias 1:1 en Backend (215 tests con patrón AAA)
+# 2. Ejecutar las 30 suites de Pruebas Unitarias 1:1 en Backend (225 tests con patrón AAA)
 npm --prefix backend test -- --runInBand
 
 # 3. Poblar datos iniciales de prueba completos (catálogos, asignaciones,
@@ -154,7 +155,7 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 
 * **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`, `GET /api/auth/me`
 * **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`, `GET/POST /api/parameters`, `PATCH/DELETE /api/parameters/:id`
-* **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `PATCH /api/projects/:id/status`, `GET/POST /api/payment-groups`, `GET/POST /api/beneficiaries`, `PATCH /api/beneficiaries/:id`, `GET/POST /api/assignments`, `PATCH /api/assignments/:id/deactivate`
+* **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `PATCH /api/projects/:id`, `PATCH /api/projects/:id/status`, `GET/POST /api/payment-groups`, `PATCH /api/payment-groups/:id`, `GET/POST /api/payment-groups/:id/periods`, `DELETE /api/payment-groups/:id/periods/:periodId`, `GET/POST /api/beneficiaries`, `PATCH /api/beneficiaries/:id`, `GET/POST /api/assignments`, `PATCH /api/assignments/:id/deactivate`
 * **Motor Financiero (`GENERADOR` / `RECEPTOR`):**
   * `POST /api/accruals/batches/preview`, `POST /api/accruals/batches`, `GET /api/accruals/batches`, `GET /api/accruals/beneficiary/:beneficiaryId/pending`
   * `GET/POST /api/payment-requests`, `PATCH /api/payment-requests/:id/send`, `PATCH /api/payment-requests/:id/review`, `PATCH /api/payment-requests/:id/close`

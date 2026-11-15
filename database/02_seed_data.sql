@@ -29,6 +29,56 @@ VALUES
   ('33333333-3333-4333-8333-333333333303', 'Mensual Directores de Laboratorio', 'MENSUAL', 'Corte el último día calendario del mes', true)
 ON CONFLICT ("name") DO NOTHING;
 
+-- 3.1 Fechas de corte automáticas para 2026 y 2027 (RN-CAT-03)
+DO $$
+DECLARE
+    grupo RECORD;
+    anio INTEGER;
+    mes INTEGER;
+    ultimo_dia INTEGER;
+    inicio_dia INTEGER;
+    fin_dia INTEGER;
+    numero_semana INTEGER;
+BEGIN
+    FOR grupo IN SELECT "id", "periodicity" FROM "payment_groups" LOOP
+        FOR anio IN 2026..2027 LOOP
+            FOR mes IN 1..12 LOOP
+                ultimo_dia := EXTRACT(
+                    DAY FROM (make_date(anio, mes, 1) + INTERVAL '1 month - 1 day')
+                )::INTEGER;
+
+                IF grupo."periodicity" = 'MENSUAL' THEN
+                    INSERT INTO "payment_group_periods" ("payment_group_id", "period_start", "period_end", "label")
+                    VALUES (grupo."id", make_date(anio, mes, 1), make_date(anio, mes, ultimo_dia), 'Mes ' || mes)
+                    ON CONFLICT ("payment_group_id", "period_start", "period_end") DO NOTHING;
+                ELSIF grupo."periodicity" = 'QUINCENAL' THEN
+                    INSERT INTO "payment_group_periods" ("payment_group_id", "period_start", "period_end", "label")
+                    VALUES
+                        (grupo."id", make_date(anio, mes, 1), make_date(anio, mes, 15), 'Quincena 1 - Mes ' || mes),
+                        (grupo."id", make_date(anio, mes, 16), make_date(anio, mes, ultimo_dia), 'Quincena 2 - Mes ' || mes)
+                    ON CONFLICT ("payment_group_id", "period_start", "period_end") DO NOTHING;
+                ELSE
+                    inicio_dia := 1;
+                    numero_semana := 1;
+                    WHILE inicio_dia <= ultimo_dia LOOP
+                        fin_dia := LEAST(inicio_dia + 6, ultimo_dia);
+                        INSERT INTO "payment_group_periods" ("payment_group_id", "period_start", "period_end", "label")
+                        VALUES (
+                            grupo."id",
+                            make_date(anio, mes, inicio_dia),
+                            make_date(anio, mes, fin_dia),
+                            'Semana ' || numero_semana || ' - Mes ' || mes
+                        )
+                        ON CONFLICT ("payment_group_id", "period_start", "period_end") DO NOTHING;
+                        inicio_dia := fin_dia + 1;
+                        numero_semana := numero_semana + 1;
+                    END LOOP;
+                END IF;
+            END LOOP;
+        END LOOP;
+    END LOOP;
+END $$;
+
 -- 4. Beneficiarios — Personal que cobra SIN usuario en el sistema (RN-SEG-01)
 INSERT INTO "beneficiaries" ("id", "dni", "full_name", "email", "phone", "bank_info", "is_active")
 VALUES

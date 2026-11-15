@@ -8,6 +8,7 @@ import {
   PettyCashVoucherStatus,
 } from '../src/common/constants/domain.enums';
 import { buildInitialSeedCatalog } from '../src/common/seed/seed-data.factory';
+import { buildDefaultPaymentPeriods } from '../src/modules/payment-groups/domain/payment-period.generator';
 
 const prisma = new PrismaClient();
 
@@ -83,6 +84,20 @@ async function main(): Promise<void> {
       where: { name: g.name },
       update: {},
       create: g,
+    });
+
+    const generatedPeriods = [2026, 2027].flatMap((year) =>
+      buildDefaultPaymentPeriods(g.periodicity, year).map((period) => ({
+        paymentGroupId: g.id,
+        periodStart: period.periodStart,
+        periodEnd: period.periodEnd,
+        label: period.label,
+      })),
+    );
+
+    await prisma.paymentGroupPeriod.createMany({
+      data: generatedPeriods,
+      skipDuplicates: true,
     });
   }
 

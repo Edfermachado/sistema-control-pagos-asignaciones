@@ -73,6 +73,27 @@ export class AccrualsService {
       periodEnd,
     );
 
+    const configuredPeriods = await this.prisma.paymentGroupPeriod.count({
+      where: { paymentGroupId: dto.paymentGroupId },
+    });
+
+    if (configuredPeriods > 0) {
+      const matchingPeriod = await this.prisma.paymentGroupPeriod.findFirst({
+        where: {
+          paymentGroupId: dto.paymentGroupId,
+          periodStart,
+          periodEnd,
+        },
+        select: { id: true },
+      });
+
+      if (!matchingPeriod) {
+        throw new BadRequestException(
+          '[RN-CAT-03] El período indicado no coincide con una fecha de corte configurada para el grupo de pago.',
+        );
+      }
+    }
+
     const assignments = await this.prisma.assignment.findMany({
       where: {
         projectId: dto.projectId,

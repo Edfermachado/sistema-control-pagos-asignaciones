@@ -235,9 +235,26 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   5. **Comprobantes (`UploadsModule`):** endpoint multipart `/api/uploads`, validación PDF/PNG/JPEG hasta 5 MB, servido estático en `/uploads` y descarga desde la UI.
   6. **Auditoría (`database/03_audit_triggers.sql`):** triggers sobre tablas del dominio, bloqueo append-only de `audit_logs` y auditoría de negocio existente.
   7. **PDFs (`pdf-document.builder.ts`):** marca de agua rotada para anulados y bloques de firma del receptor/beneficiario y generador/aprobador.
-  8. **Prueba de humo:** ampliada a 59 verificaciones end-to-end.
+  8. **Prueba de humo:** ampliada a 68 verificaciones end-to-end.
 * **Verificación final:**
-  * **Backend (Jest):** 29 suites / `215/215` tests en verde + `nest build` exitoso.
+  * **Backend (Jest):** 30 suites / `225/225` tests en verde + `nest build` exitoso.
   * **Frontend (Vitest):** 5 suites / `27/27` tests en verde + `vite build` exitoso.
-  * **Smoke test API:** `59/59` verificaciones en verde.
+  * **Smoke test API:** `68/68` verificaciones en verde.
   * **UI (Chromium headless):** sin errores de consola; parámetros, lotes, caja chica y flujos segregados visibles.
+
+---
+
+### Interacción #13 — Cierre de Brechas 1, 3 y 5: Catálogos del ADMIN, Fechas de Corte y CRUD de UI
+* **Fecha:** Noviembre 2026
+* **Herramienta / Modelo:** DeepSeek V4.1 Flash (OpenCode)
+* **Indicación (Prompt) del Usuario:**
+  > *"ok por ahora me gustaría que atiendas las brechas 1, brecha 3, brecha 5, una vez termine dime si con estos cambios se cubren los requisitos del pdf."*
+* **Implementación:**
+  1. **Brecha 1 — ADMIN y catálogos:** los endpoints de proyectos y beneficiarios ahora permiten `ADMIN` y `GENERADOR`; el ADMIN mantiene prohibición total sobre operaciones de dinero. La matriz `RN-SEG-02` fue actualizada.
+  2. **Brecha 3 — Fechas de corte:** nuevo modelo `PaymentGroupPeriod`, generador puro `buildDefaultPaymentPeriods`, generación automática de períodos para dos años, endpoints `GET/POST/DELETE /api/payment-groups/:id/periods` y validación del período al crear lotes de causación.
+  3. **Brecha 5 — CRUD de UI:** edición y activación/desactivación de proyectos, grupos de pago y beneficiarios; gestión visual de períodos/cortes; selector de fecha de corte en el motor de causación.
+* **Verificación final:**
+  * **Backend (Jest):** 30 suites / `225/225` tests en verde + `nest build` exitoso.
+  * **Frontend (Vitest):** 5 suites / `27/27` tests en verde + `vite build` exitoso.
+  * **Smoke test API:** `68/68` verificaciones en verde.
+  * **UI (Chromium headless):** ADMIN gestiona catálogos y cortes; GENERADOR selecciona períodos; sin errores de consola.

@@ -183,8 +183,25 @@ model PaymentGroup {
 
   assignments    Assignment[]
   accrualBatches AccrualBatch[]
+  periods        PaymentGroupPeriod[]
 
   @@map("payment_groups")
+}
+
+/// Fechas de corte configurables y adaptables por grupo de pago (RN-CAT-03).
+model PaymentGroupPeriod {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  paymentGroupId String       @map("payment_group_id") @db.Uuid
+  periodStart    DateTime     @map("period_start") @db.Date
+  periodEnd      DateTime     @map("period_end") @db.Date
+  label          String?      @db.VarChar(100)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  paymentGroup PaymentGroup @relation(fields: [paymentGroupId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentGroupId, periodStart, periodEnd])
+  @@index([paymentGroupId, periodStart])
+  @@map("payment_group_periods")
 }
 
 /// Cruce entre Beneficiario, Proyecto y Grupo de Pago con monto específico por período en USD.

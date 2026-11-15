@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AccrualStatus,
   PaymentRequestStatus,
@@ -16,6 +16,7 @@ import {
 import {
   LiveBeneficiary,
   LivePaymentGroup,
+  LivePaymentGroupPeriod,
   LiveProject,
 } from './CatalogsAndAssignmentsWorkspace';
 
@@ -134,8 +135,32 @@ export function FinancialEnginePanel({
   const [batchGroupId, setBatchGroupId] = useState('');
   const [periodStart, setPeriodStart] = useState('2026-02-01');
   const [periodEnd, setPeriodEnd] = useState('2026-02-15');
+  const [batchPeriods, setBatchPeriods] = useState<LivePaymentGroupPeriod[]>([]);
+  const [batchPeriodId, setBatchPeriodId] = useState('');
   const [previewResult, setPreviewResult] =
     useState<BatchPreviewResponse | null>(null);
+
+  const effectiveBatchGroupId = batchGroupId || paymentGroups[0]?.id || '';
+
+  useEffect(() => {
+    const loadBatchPeriods = async () => {
+      if (!effectiveBatchGroupId) {
+        setBatchPeriods([]);
+        return;
+      }
+      try {
+        const response = await apiRequest<LivePaymentGroupPeriod[]>(
+          `/payment-groups/${effectiveBatchGroupId}/periods`,
+          { token },
+        );
+        setBatchPeriods(response);
+      } catch {
+        setBatchPeriods([]);
+      }
+    };
+
+    void loadBatchPeriods();
+  }, [effectiveBatchGroupId, token]);
 
   // 2. Estado Nueva Solicitud de Pago
   const [reqCode, setReqCode] = useState('SOL-2026-0009');
@@ -508,13 +533,38 @@ export function FinancialEnginePanel({
             </select>
             <select
               value={batchGroupId}
-              onChange={(e) => setBatchGroupId(e.target.value)}
+              onChange={(e) => {
+                setBatchGroupId(e.target.value);
+                setBatchPeriodId('');
+              }}
               style={inputStyle}
             >
               <option value="">-- Grupo de Pago --</option>
               {paymentGroups.map((pg) => (
                 <option key={pg.id} value={pg.id}>
                   {pg.name} ({pg.periodicity})
+                </option>
+              ))}
+            </select>
+            <select
+              value={batchPeriodId}
+              onChange={(e) => {
+                const selected = batchPeriods.find(
+                  (period) => period.id === e.target.value,
+                );
+                setBatchPeriodId(e.target.value);
+                if (selected) {
+                  setPeriodStart(String(selected.periodStart).slice(0, 10));
+                  setPeriodEnd(String(selected.periodEnd).slice(0, 10));
+                }
+              }}
+              style={inputStyle}
+            >
+              <option value="">-- Fecha de Corte Configurada --</option>
+              {batchPeriods.map((period) => (
+                <option key={period.id} value={period.id}>
+                  {String(period.periodStart).slice(0, 10)} al{' '}
+                  {String(period.periodEnd).slice(0, 10)}
                 </option>
               ))}
             </select>

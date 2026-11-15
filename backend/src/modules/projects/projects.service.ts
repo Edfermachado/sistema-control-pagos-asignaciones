@@ -11,7 +11,10 @@ import { AuthenticatedUser } from '../../common/decorators/current-user.decorato
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { assertValidProjectDateRange } from './domain/project-validity.helper';
-import { CreateProjectDto } from './dto/create-project.dto';
+import {
+  CreateProjectDto,
+  UpdateProjectDto,
+} from './dto/create-project.dto';
 
 @Injectable()
 export class ProjectsService {
@@ -70,6 +73,62 @@ export class ProjectsService {
     });
 
     return created;
+  }
+
+  /**
+   * Actualiza los datos de un proyecto manteniendo la vigencia válida (RN-CAT-01).
+   */
+  async updateProject(
+    id: string,
+    dto: UpdateProjectDto,
+    actor: AuthenticatedUser,
+  ) {
+    const existing = await this.prisma.project.findUnique({ where: { id } });
+
+    if (!existing) {
+      throw new NotFoundException(`El proyecto con ID '${id}' no existe.`);
+    }
+
+    const startDate = dto.startDate
+      ? new Date(dto.startDate)
+      : existing.startDate;
+    const endDate = dto.endDate ? new Date(dto.endDate) : existing.endDate;
+    assertValidProjectDateRange(startDate, endDate);
+
+    const updated = await this.prisma.project.update({
+      where: { id },
+      data: {
+        ...(dto.name !== undefined ? { name: dto.name.trim() } : {}),
+        ...(dto.area !== undefined ? { area: dto.area } : {}),
+        ...(dto.scope !== undefined ? { scope: dto.scope } : {}),
+        ...(dto.startDate !== undefined ? { startDate } : {}),
+        ...(dto.endDate !== undefined ? { endDate } : {}),
+      },
+    });
+
+    await this.auditService.recordLog({
+      userId: actor.id,
+      userRole: actor.role,
+      action: 'UPDATE_PROJECT',
+      tableName: 'projects',
+      recordId: id,
+      oldValues: {
+        name: existing.name,
+        area: existing.area,
+        scope: existing.scope,
+        startDate: existing.startDate,
+        endDate: existing.endDate,
+      },
+      newValues: {
+        name: updated.name,
+        area: updated.area,
+        scope: updated.scope,
+        startDate: updated.startDate,
+        endDate: updated.endDate,
+      },
+    });
+
+    return updated;
   }
 
   /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Periodicity,
   ProjectArea,
@@ -26,6 +26,14 @@ export interface LivePaymentGroup {
   periodicity: Periodicity;
   cutoffRules: string;
   isActive: boolean;
+}
+
+export interface LivePaymentGroupPeriod {
+  id: string;
+  paymentGroupId: string;
+  periodStart: string;
+  periodEnd: string;
+  label?: string | null;
 }
 
 export interface LiveBeneficiary {
@@ -73,12 +81,15 @@ export function CatalogsAndAssignmentsWorkspace({
   onRefresh,
   onNotify,
 }: CatalogsProps): React.ReactElement {
-  const canManageProjects = activeRole === UserRole.GENERADOR;
+  const canManageProjects =
+    activeRole === UserRole.ADMIN || activeRole === UserRole.GENERADOR;
   const canManagePaymentGroups = activeRole === UserRole.ADMIN;
-  const canManageBeneficiaries = activeRole === UserRole.GENERADOR;
+  const canManageBeneficiaries =
+    activeRole === UserRole.ADMIN || activeRole === UserRole.GENERADOR;
   const canEditAssignments = activeRole === UserRole.GENERADOR;
 
   // Estado formulario Proyecto
+  const [editingProjectId, setEditingProjectId] = useState<string | null>(null);
   const [projCode, setProjCode] = useState('PROY-FIS-2026-09');
   const [projName, setProjName] = useState('Fotónica Aplicada FACYT');
   const [projArea, setProjArea] = useState<ProjectArea>(ProjectArea.FISICA);
@@ -87,6 +98,7 @@ export function CatalogsAndAssignmentsWorkspace({
   const [projEnd, setProjEnd] = useState('2026-12-31');
 
   // Estado formulario Grupo de Pago
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [pgName, setPgName] = useState('Semanal Asistentes Laboratorio');
   const [pgPeriodicity, setPgPeriodicity] = useState<Periodicity>(
     Periodicity.SEMANAL,
@@ -96,9 +108,13 @@ export function CatalogsAndAssignmentsWorkspace({
   );
 
   // Estado formulario Beneficiario (RN-SEG-01: sin usuario)
+  const [editingBeneficiaryId, setEditingBeneficiaryId] = useState<
+    string | null
+  >(null);
   const [benDni, setBenDni] = useState('V-24111222');
   const [benName, setBenName] = useState('Lic. Gabriela Rojas');
-  const [benEmail] = useState('grojas@uc.edu.ve');
+  const [benEmail, setBenEmail] = useState('grojas@uc.edu.ve');
+  const [benPhone, setBenPhone] = useState('+58-414-0000000');
   const [benBank, setBenBank] = useState('Zelle / Cuenta USD #9921');
 
   // Estado formulario Asignación (RN-CAT-04)
@@ -109,26 +125,84 @@ export function CatalogsAndAssignmentsWorkspace({
   const [asigStart, setAsigStart] = useState('2026-03-01');
   const [asigEnd, setAsigEnd] = useState('2026-12-31');
 
-  const handleCreateProject = async (e: React.FormEvent) => {
+  // Estado períodos/cortes de pago
+  const [periodGroupId, setPeriodGroupId] = useState('');
+  const [periods, setPeriods] = useState<LivePaymentGroupPeriod[]>([]);
+  const [newPeriodStart, setNewPeriodStart] = useState('2026-12-01');
+  const [newPeriodEnd, setNewPeriodEnd] = useState('2026-12-15');
+  const [newPeriodLabel, setNewPeriodLabel] = useState('Corte personalizado');
+
+  const effectivePeriodGroupId = periodGroupId || paymentGroups[0]?.id || '';
+
+  useEffect(() => {
+    const loadPeriods = async () => {
+      if (!effectivePeriodGroupId) {
+        setPeriods([]);
+        return;
+      }
+      try {
+        const response = await apiRequest<LivePaymentGroupPeriod[]>(
+          `/payment-groups/${effectivePeriodGroupId}/periods`,
+          { token },
+        );
+        setPeriods(response);
+      } catch {
+        setPeriods([]);
+      }
+    };
+
+    void loadPeriods();
+  }, [effectivePeriodGroupId, token, paymentGroups]);
+
+  const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiRequest('/projects', {
-        method: 'POST',
-        token,
-        body: {
-          code: projCode,
-          name: projName,
-          area: projArea,
-          scope: projScope,
-          startDate: projStart,
-          endDate: projEnd,
+      await apiRequest(
+        editingProjectId ? `/projects/${editingProjectId}` : '/projects',
+        {
+          method: editingProjectId ? 'PATCH' : 'POST',
+          token,
+          body: {
+            ...(editingProjectId ? {} : { code: projCode }),
+            name: projName,
+            area: projArea,
+            scope: projScope,
+            startDate: projStart,
+            endDate: projEnd,
+          },
         },
-      });
-      onNotify('success', `Proyecto '${projCode}' creado correctamente.`);
+      );
+      onNotify(
+        'success',
+        editingProjectId
+          ? `Proyecto '${projName}' actualizado.`
+          : `Proyecto '${projCode}' creado correctamente.`,
+      );
+      setEditingProjectId(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
+  };
+
+  const startEditingProject = (project: LiveProject) => {
+    setEditingProjectId(project.id);
+    setProjCode(project.code);
+    setProjName(project.name);
+    setProjArea(project.area);
+    setProjScope(project.scope);
+    setProjStart(String(project.startDate).slice(0, 10));
+    setProjEnd(String(project.endDate).slice(0, 10));
+  };
+
+  const cancelEditingProject = () => {
+    setEditingProjectId(null);
+    setProjCode('PROY-FIS-2026-09');
+    setProjName('Fotónica Aplicada FACYT');
+    setProjArea(ProjectArea.FISICA);
+    setProjScope(ProjectScope.INTERNO);
+    setProjStart('2026-01-01');
+    setProjEnd('2026-12-31');
   };
 
   const handleChangeProjectStatus = async (
@@ -148,43 +222,169 @@ export function CatalogsAndAssignmentsWorkspace({
     }
   };
 
-  const handleCreatePaymentGroup = async (e: React.FormEvent) => {
+  const handleSavePaymentGroup = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiRequest('/payment-groups', {
-        method: 'POST',
-        token,
-        body: {
-          name: pgName,
-          periodicity: pgPeriodicity,
-          cutoffRules: pgCutoffRules,
+      await apiRequest(
+        editingGroupId
+          ? `/payment-groups/${editingGroupId}`
+          : '/payment-groups',
+        {
+          method: editingGroupId ? 'PATCH' : 'POST',
+          token,
+          body: {
+            name: pgName,
+            periodicity: pgPeriodicity,
+            cutoffRules: pgCutoffRules,
+          },
         },
-      });
-      onNotify('success', `Grupo de pago '${pgName}' registrado.`);
+      );
+      onNotify(
+        'success',
+        editingGroupId
+          ? `Grupo de pago '${pgName}' actualizado.`
+          : `Grupo de pago '${pgName}' registrado con sus períodos de corte.`,
+      );
+      setEditingGroupId(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleCreateBeneficiary = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const startEditingGroup = (group: LivePaymentGroup) => {
+    setEditingGroupId(group.id);
+    setPgName(group.name);
+    setPgPeriodicity(group.periodicity);
+    setPgCutoffRules(group.cutoffRules);
+  };
+
+  const cancelEditingGroup = () => {
+    setEditingGroupId(null);
+    setPgName('Semanal Asistentes Laboratorio');
+    setPgPeriodicity(Periodicity.SEMANAL);
+    setPgCutoffRules('Ciclo de 7 días calendario');
+  };
+
+  const handleTogglePaymentGroup = async (group: LivePaymentGroup) => {
     try {
-      await apiRequest('/beneficiaries', {
-        method: 'POST',
+      await apiRequest(`/payment-groups/${group.id}`, {
+        method: 'PATCH',
         token,
-        body: {
-          dni: benDni,
-          fullName: benName,
-          email: benEmail,
-          bankInfo: benBank,
-        },
+        body: { isActive: !group.isActive },
       });
       onNotify(
         'success',
-        `Beneficiario '${benName}' registrado (sin cuenta de usuario según RN-SEG-01).`,
+        `Grupo '${group.name}' ${group.isActive ? 'desactivado' : 'activado'}.`,
       );
       await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleSaveBeneficiary = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await apiRequest(
+        editingBeneficiaryId
+          ? `/beneficiaries/${editingBeneficiaryId}`
+          : '/beneficiaries',
+        {
+          method: editingBeneficiaryId ? 'PATCH' : 'POST',
+          token,
+          body: {
+            ...(editingBeneficiaryId ? {} : { dni: benDni }),
+            fullName: benName,
+            email: benEmail,
+            phone: benPhone,
+            bankInfo: benBank,
+          },
+        },
+      );
+      onNotify(
+        'success',
+        editingBeneficiaryId
+          ? `Beneficiario '${benName}' actualizado.`
+          : `Beneficiario '${benName}' registrado (sin cuenta de usuario según RN-SEG-01).`,
+      );
+      setEditingBeneficiaryId(null);
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const startEditingBeneficiary = (beneficiary: LiveBeneficiary) => {
+    setEditingBeneficiaryId(beneficiary.id);
+    setBenDni(beneficiary.dni);
+    setBenName(beneficiary.fullName);
+    setBenEmail(beneficiary.email ?? '');
+    setBenPhone(beneficiary.phone ?? '');
+    setBenBank(beneficiary.bankInfo ?? '');
+  };
+
+  const cancelEditingBeneficiary = () => {
+    setEditingBeneficiaryId(null);
+    setBenDni('V-24111222');
+    setBenName('Lic. Gabriela Rojas');
+    setBenEmail('grojas@uc.edu.ve');
+    setBenPhone('+58-414-0000000');
+    setBenBank('Zelle / Cuenta USD #9921');
+  };
+
+  const handleToggleBeneficiary = async (beneficiary: LiveBeneficiary) => {
+    try {
+      await apiRequest(`/beneficiaries/${beneficiary.id}`, {
+        method: 'PATCH',
+        token,
+        body: { isActive: !beneficiary.isActive },
+      });
+      onNotify(
+        'success',
+        `Beneficiario '${beneficiary.fullName}' ${beneficiary.isActive ? 'desactivado' : 'activado'}.`,
+      );
+      await onRefresh();
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleCreatePaymentPeriod = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!effectivePeriodGroupId) {
+      onNotify('error', 'Seleccione un grupo de pago.');
+      return;
+    }
+    try {
+      await apiRequest(`/payment-groups/${effectivePeriodGroupId}/periods`, {
+        method: 'POST',
+        token,
+        body: {
+          periodStart: newPeriodStart,
+          periodEnd: newPeriodEnd,
+          label: newPeriodLabel,
+        },
+      });
+      onNotify('success', 'Fecha de corte agregada.');
+      const response = await apiRequest<LivePaymentGroupPeriod[]>(
+        `/payment-groups/${effectivePeriodGroupId}/periods`,
+        { token },
+      );
+      setPeriods(response);
+    } catch (err) {
+      onNotify('error', (err as Error).message);
+    }
+  };
+
+  const handleDeletePaymentPeriod = async (periodId: string) => {
+    try {
+      await apiRequest(
+        `/payment-groups/${effectivePeriodGroupId}/periods/${periodId}`,
+        { method: 'DELETE', token },
+      );
+      onNotify('success', 'Fecha de corte eliminada.');
+      setPeriods((current) => current.filter((period) => period.id !== periodId));
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
@@ -249,12 +449,13 @@ export function CatalogsAndAssignmentsWorkspace({
         </h2>
 
         {canManageProjects && (
-          <form onSubmit={handleCreateProject} style={formGridStyle}>
+          <form onSubmit={handleSaveProject} style={formGridStyle}>
             <input
               value={projCode}
               onChange={(e) => setProjCode(e.target.value)}
               placeholder="Código (ej. PROY-FIS-01)"
               required
+              disabled={Boolean(editingProjectId)}
               style={inputStyle}
             />
             <input
@@ -296,8 +497,17 @@ export function CatalogsAndAssignmentsWorkspace({
               style={inputStyle}
             />
             <button type="submit" style={primaryButtonStyle}>
-              + Crear Proyecto
+              {editingProjectId ? 'Actualizar Proyecto' : '+ Crear Proyecto'}
             </button>
+            {editingProjectId && (
+              <button
+                type="button"
+                onClick={cancelEditingProject}
+                style={secondaryButtonStyle}
+              >
+                Cancelar
+              </button>
+            )}
           </form>
         )}
 
@@ -342,20 +552,29 @@ export function CatalogsAndAssignmentsWorkspace({
                 </td>
                 {canManageProjects && (
                   <td style={tdStyle}>
-                    <select
-                      value={p.status}
-                      onChange={(e) =>
-                        handleChangeProjectStatus(
-                          p.id,
-                          e.target.value as ProjectStatus,
-                        )
-                      }
-                      style={{ ...inputStyle, padding: '0.25rem', fontSize: '0.8rem' }}
-                    >
-                      <option value={ProjectStatus.ACTIVO}>ACTIVO</option>
-                      <option value={ProjectStatus.INACTIVO}>INACTIVO</option>
-                      <option value={ProjectStatus.CERRADO}>CERRADO</option>
-                    </select>
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        onClick={() => startEditingProject(p)}
+                        style={secondaryButtonStyle}
+                      >
+                        Editar
+                      </button>
+                      <select
+                        value={p.status}
+                        onChange={(e) =>
+                          handleChangeProjectStatus(
+                            p.id,
+                            e.target.value as ProjectStatus,
+                          )
+                        }
+                        style={{ ...inputStyle, padding: '0.25rem', fontSize: '0.8rem' }}
+                      >
+                        <option value={ProjectStatus.ACTIVO}>ACTIVO</option>
+                        <option value={ProjectStatus.INACTIVO}>INACTIVO</option>
+                        <option value={ProjectStatus.CERRADO}>CERRADO</option>
+                      </select>
+                    </div>
                   </td>
                 )}
               </tr>
@@ -371,7 +590,7 @@ export function CatalogsAndAssignmentsWorkspace({
             2. Grupos de Pago y Periodicidades (RN-CAT-03)
           </h2>
           {canManagePaymentGroups && (
-            <form onSubmit={handleCreatePaymentGroup} style={formGridStyle}>
+            <form onSubmit={handleSavePaymentGroup} style={formGridStyle}>
               <input
                 value={pgName}
                 onChange={(e) => setPgName(e.target.value)}
@@ -396,8 +615,17 @@ export function CatalogsAndAssignmentsWorkspace({
                 style={inputStyle}
               />
               <button type="submit" style={primaryButtonStyle}>
-                + Crear Grupo
+                {editingGroupId ? 'Actualizar Grupo' : '+ Crear Grupo'}
               </button>
+              {editingGroupId && (
+                <button
+                  type="button"
+                  onClick={cancelEditingGroup}
+                  style={secondaryButtonStyle}
+                >
+                  Cancelar
+                </button>
+              )}
             </form>
           )}
           <table style={tableStyle}>
@@ -405,7 +633,9 @@ export function CatalogsAndAssignmentsWorkspace({
               <tr style={theadRowStyle}>
                 <th style={thStyle}>Grupo</th>
                 <th style={thStyle}>Periodicidad</th>
-                <th style={thStyle}>Descripción</th>
+                <th style={thStyle}>Regla de Corte</th>
+                <th style={thStyle}>Estado</th>
+                {canManagePaymentGroups && <th style={thStyle}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -416,6 +646,27 @@ export function CatalogsAndAssignmentsWorkspace({
                     <code>{pg.periodicity}</code>
                   </td>
                   <td style={tdStyle}>{pg.cutoffRules}</td>
+                  <td style={tdStyle}>{pg.isActive ? 'ACTIVO' : 'INACTIVO'}</td>
+                  {canManagePaymentGroups && (
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => startEditingGroup(pg)}
+                          style={secondaryButtonStyle}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleTogglePaymentGroup(pg)}
+                          style={dangerOutlineButtonStyle}
+                        >
+                          {pg.isActive ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -427,12 +678,13 @@ export function CatalogsAndAssignmentsWorkspace({
             3. Beneficiarios (Sin Cuenta de Usuario — RN-SEG-01)
           </h2>
           {canManageBeneficiaries && (
-            <form onSubmit={handleCreateBeneficiary} style={formGridStyle}>
+            <form onSubmit={handleSaveBeneficiary} style={formGridStyle}>
               <input
                 value={benDni}
                 onChange={(e) => setBenDni(e.target.value)}
                 placeholder="Cédula (ej. V-18456789)"
                 required
+                disabled={Boolean(editingBeneficiaryId)}
                 style={inputStyle}
               />
               <input
@@ -443,14 +695,37 @@ export function CatalogsAndAssignmentsWorkspace({
                 style={inputStyle}
               />
               <input
+                value={benEmail}
+                onChange={(e) => setBenEmail(e.target.value)}
+                placeholder="Correo"
+                style={inputStyle}
+              />
+              <input
+                value={benPhone}
+                onChange={(e) => setBenPhone(e.target.value)}
+                placeholder="Teléfono"
+                style={inputStyle}
+              />
+              <input
                 value={benBank}
                 onChange={(e) => setBenBank(e.target.value)}
                 placeholder="Datos de Pago / Zelle / Banco"
                 style={inputStyle}
               />
               <button type="submit" style={primaryButtonStyle}>
-                + Registrar Beneficiario
+                {editingBeneficiaryId
+                  ? 'Actualizar Beneficiario'
+                  : '+ Registrar Beneficiario'}
               </button>
+              {editingBeneficiaryId && (
+                <button
+                  type="button"
+                  onClick={cancelEditingBeneficiary}
+                  style={secondaryButtonStyle}
+                >
+                  Cancelar
+                </button>
+              )}
             </form>
           )}
           <table style={tableStyle}>
@@ -460,6 +735,8 @@ export function CatalogsAndAssignmentsWorkspace({
                 <th style={thStyle}>Beneficiario</th>
                 <th style={thStyle}>Correo</th>
                 <th style={thStyle}>Referencia Pago</th>
+                <th style={thStyle}>Estado</th>
+                {canManageBeneficiaries && <th style={thStyle}>Acciones</th>}
               </tr>
             </thead>
             <tbody>
@@ -469,6 +746,27 @@ export function CatalogsAndAssignmentsWorkspace({
                   <td style={tdStyle}>{b.fullName}</td>
                   <td style={tdStyle}>{b.email ?? '—'}</td>
                   <td style={tdStyle}>{b.bankInfo ?? '—'}</td>
+                  <td style={tdStyle}>{b.isActive ? 'ACTIVO' : 'INACTIVO'}</td>
+                  {canManageBeneficiaries && (
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => startEditingBeneficiary(b)}
+                          style={secondaryButtonStyle}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleBeneficiary(b)}
+                          style={dangerOutlineButtonStyle}
+                        >
+                          {b.isActive ? 'Desactivar' : 'Activar'}
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -476,10 +774,91 @@ export function CatalogsAndAssignmentsWorkspace({
         </section>
       </div>
 
-      {/* SECCIÓN 4: ASIGNACIONES CONTRACTUALES EN USD */}
+      {/* SECCIÓN 4: FECHAS DE CORTE CONFIGURABLES */}
       <section style={cardStyle}>
         <h2 style={sectionTitleStyle}>
-          4. Asignaciones Contractuales en USD por Proyecto y Grupo (RN-CAT-04)
+          4. Fechas de Corte y Períodos de Pago (RN-CAT-03)
+        </h2>
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
+          Los períodos estándar se generan automáticamente al crear el grupo.
+          El ADMIN puede agregar o eliminar cortes personalizados.
+        </p>
+        <select
+          value={effectivePeriodGroupId}
+          onChange={(e) => setPeriodGroupId(e.target.value)}
+          style={{ ...inputStyle, marginBottom: '0.75rem' }}
+        >
+          {paymentGroups.map((group) => (
+            <option key={group.id} value={group.id}>
+              {group.name} ({group.periodicity})
+            </option>
+          ))}
+        </select>
+
+        {canManagePaymentGroups && (
+          <form onSubmit={handleCreatePaymentPeriod} style={formGridStyle}>
+            <input
+              type="date"
+              value={newPeriodStart}
+              onChange={(e) => setNewPeriodStart(e.target.value)}
+              required
+              style={inputStyle}
+            />
+            <input
+              type="date"
+              value={newPeriodEnd}
+              onChange={(e) => setNewPeriodEnd(e.target.value)}
+              required
+              style={inputStyle}
+            />
+            <input
+              value={newPeriodLabel}
+              onChange={(e) => setNewPeriodLabel(e.target.value)}
+              placeholder="Etiqueta del corte"
+              style={inputStyle}
+            />
+            <button type="submit" style={primaryButtonStyle}>
+              + Agregar Corte
+            </button>
+          </form>
+        )}
+
+        <table style={tableStyle}>
+          <thead>
+            <tr style={theadRowStyle}>
+              <th style={thStyle}>Inicio</th>
+              <th style={thStyle}>Fin</th>
+              <th style={thStyle}>Etiqueta</th>
+              {canManagePaymentGroups && <th style={thStyle}>Acción</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {periods.map((period) => (
+              <tr key={period.id} style={trStyle}>
+                <td style={tdStyle}>{String(period.periodStart).slice(0, 10)}</td>
+                <td style={tdStyle}>{String(period.periodEnd).slice(0, 10)}</td>
+                <td style={tdStyle}>{period.label ?? '—'}</td>
+                {canManagePaymentGroups && (
+                  <td style={tdStyle}>
+                    <button
+                      type="button"
+                      onClick={() => handleDeletePaymentPeriod(period.id)}
+                      style={dangerOutlineButtonStyle}
+                    >
+                      Eliminar
+                    </button>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </section>
+
+      {/* SECCIÓN 5: ASIGNACIONES CONTRACTUALES EN USD */}
+      <section style={cardStyle}>
+        <h2 style={sectionTitleStyle}>
+          5. Asignaciones Contractuales en USD por Proyecto y Grupo (RN-CAT-04)
         </h2>
         <p style={{ margin: '0 0 0.75rem', fontSize: '0.84rem', color: '#475569' }}>
           Un beneficiario puede participar en múltiples proyectos distintos a la vez, pero el sistema bloquea asignaciones solapadas dentro del mismo proyecto.
@@ -658,6 +1037,17 @@ const primaryButtonStyle: React.CSSProperties = {
   color: '#ffffff',
   fontWeight: 600,
   fontSize: '0.85rem',
+  cursor: 'pointer',
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  padding: '0.35rem 0.65rem',
+  borderRadius: '0.3rem',
+  border: '1px solid #1e40af',
+  backgroundColor: '#eff6ff',
+  color: '#1e3a8a',
+  fontSize: '0.78rem',
+  fontWeight: 600,
   cursor: 'pointer',
 };
 

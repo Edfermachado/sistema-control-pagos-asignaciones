@@ -22,6 +22,7 @@ import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import {
   CreateProjectDto,
+  UpdateProjectDto,
   UpdateProjectStatusDto,
 } from './dto/create-project.dto';
 import { ProjectsService } from './projects.service';
@@ -32,7 +33,7 @@ export class ProjectsController {
   constructor(private readonly projectsService: ProjectsService) {}
 
   @Post()
-  @Roles(UserRole.GENERADOR)
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR)
   async create(
     @Body() dto: CreateProjectDto,
     @CurrentUser() actor: AuthenticatedUser,
@@ -49,8 +50,18 @@ export class ProjectsController {
     return this.projectsService.findAllProjects(area, status);
   }
 
+  @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR)
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateProjectDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.projectsService.updateProject(id, dto, actor);
+  }
+
   @Patch(':id/status')
-  @Roles(UserRole.GENERADOR)
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR)
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateProjectStatusDto,

@@ -31,9 +31,9 @@
 | Módulo / Acción | `ADMIN` (Administrador) | `GENERADOR` (Coordinador) | `RECEPTOR` (Gerente Admin.) |
 | :--- | :---: | :---: | :---: |
 | Gestionar Usuarios del Sistema (`users`) | ✅ Sí | ❌ No | ❌ No |
-| Configurar Parámetros y Grupos de Pago | ✅ Sí | 👁️ Solo lectura | 👁️ Solo lectura |
+| Configurar Parámetros, Grupos de Pago y Fechas de Corte | ✅ Sí | 👁️ Solo lectura | 👁️ Solo lectura |
 | Ver Bitácora de Auditoría (`audit_logs`) | ✅ Sí | ❌ No | ✅ Sí (consulta) |
-| Gestionar Proyectos y Beneficiarios | 👁️ Solo lectura | ✅ Sí (CRUD) | 👁️ Solo lectura |
+| Gestionar Proyectos y Beneficiarios (catálogos) | ✅ Sí (CRUD) | ✅ Sí (CRUD) | 👁️ Solo lectura |
 | Gestionar Asignaciones | ❌ No | ✅ Sí (CRUD) | 👁️ Solo lectura |
 | Ejecutar Motor de Causación por Lote | ❌ No | ✅ Sí | ❌ No |
 | Crear y Enviar Solicitudes de Pago | ❌ No | ✅ Sí | ❌ No |
@@ -52,7 +52,7 @@
 * **RN-CAT-02 (Efecto de la Vigencia del Proyecto):**
   * **Bloqueo de nuevas causaciones:** No se pueden generar nuevas causaciones ni crear nuevas asignaciones para fechas fuera del rango `[start_date, end_date]` del proyecto, ni si el proyecto está inactivo/cerrado.
   * **Liquidación de deudas previas permitida:** Aunque la fecha actual supere el `end_date` del proyecto, el sistema **SÍ permite** aprobar solicitudes y registrar pagos sobre causaciones que fueron generadas válidamente dentro del período de vigencia del proyecto.
-* **RN-CAT-03 (Grupos de Pago y Periodicidad):** Los grupos de pago definen la periodicidad (`SEMANAL`, `QUINCENAL`, `MENSUAL`) y las fechas de corte adaptables (períodos con `period_start` y `period_end` explícitos).
+* **RN-CAT-03 (Grupos de Pago y Periodicidad):** Los grupos de pago definen la periodicidad (`SEMANAL`, `QUINCENAL`, `MENSUAL`) y las fechas de corte adaptables. Al crear un grupo se generan automáticamente sus períodos estándar para el año actual y el siguiente; el ADMIN puede agregar o eliminar cortes personalizados. Si el grupo posee períodos configurados, todo lote de causación debe coincidir con uno de ellos (`period_start` y `period_end` explícitos).
 * **RN-CAT-04 (Multiplicidad y Unicidad de Asignaciones):**
   * Un mismo Beneficiario **SÍ puede tener múltiples asignaciones activas simultáneamente en DISTINTOS proyectos**.
   * Un Beneficiario **NO puede tener dos asignaciones activas solapadas en fechas dentro del MISMO proyecto**.

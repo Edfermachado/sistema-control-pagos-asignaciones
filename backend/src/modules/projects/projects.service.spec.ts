@@ -116,6 +116,65 @@ describe('ProjectsService (RN-CAT-01 y RN-CAT-02 Gestión de Proyectos)', () => 
     });
   });
 
+  describe('updateProject', () => {
+    it('debe actualizar nombre, área, ámbito y vigencia manteniendo fechas válidas (Happy Path)', async () => {
+      // Arrange
+      prismaMock.project.findUnique.mockResolvedValueOnce({
+        id: 'proj-1',
+        name: 'Proyecto anterior',
+        area: ProjectArea.FISICA,
+        scope: ProjectScope.INTERNO,
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        endDate: new Date('2026-12-31T00:00:00Z'),
+      });
+      prismaMock.project.update.mockResolvedValueOnce({
+        id: 'proj-1',
+        name: 'Proyecto actualizado',
+        area: ProjectArea.QUIMICA,
+        scope: ProjectScope.EXTERNO,
+        startDate: new Date('2026-02-01T00:00:00Z'),
+        endDate: new Date('2026-11-30T00:00:00Z'),
+      });
+
+      // Act
+      const updated = await service.updateProject(
+        'proj-1',
+        {
+          name: 'Proyecto actualizado',
+          area: ProjectArea.QUIMICA,
+          scope: ProjectScope.EXTERNO,
+          startDate: '2026-02-01',
+          endDate: '2026-11-30',
+        },
+        generadorActor,
+      );
+
+      // Assert
+      expect(updated.name).toBe('Proyecto actualizado');
+      expect(auditMock.recordLog).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'UPDATE_PROJECT' }),
+      );
+    });
+
+    it('debe lanzar BadRequestException si la nueva vigencia es inválida (Violación RN-CAT-01)', async () => {
+      // Arrange
+      prismaMock.project.findUnique.mockResolvedValueOnce({
+        id: 'proj-1',
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        endDate: new Date('2026-12-31T00:00:00Z'),
+      });
+
+      // Act & Assert
+      await expect(
+        service.updateProject(
+          'proj-1',
+          { startDate: '2026-12-31', endDate: '2026-01-01' },
+          generadorActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   describe('findAllProjects', () => {
     it('debe retornar todos los proyectos cuando no se especifican filtros (Happy Path)', async () => {
       // Arrange

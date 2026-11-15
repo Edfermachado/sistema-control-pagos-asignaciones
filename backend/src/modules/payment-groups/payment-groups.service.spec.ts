@@ -12,7 +12,18 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
       findUnique: jest.Mock;
       create: jest.Mock;
       findMany: jest.Mock;
+      update: jest.Mock;
     };
+    paymentGroupPeriod: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      findUnique: jest.Mock;
+      createMany: jest.Mock;
+      create: jest.Mock;
+      delete: jest.Mock;
+    };
+    accrualBatch: { findFirst: jest.Mock };
+    $transaction: jest.Mock;
   };
   let auditMock: { recordLog: jest.Mock };
 
@@ -29,7 +40,18 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         findMany: jest.fn(),
+        update: jest.fn(),
       },
+      paymentGroupPeriod: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        findUnique: jest.fn(),
+        createMany: jest.fn(),
+        create: jest.fn(),
+        delete: jest.fn(),
+      },
+      accrualBatch: { findFirst: jest.fn() },
+      $transaction: jest.fn((callback) => callback(prismaMock)),
     };
     auditMock = {
       recordLog: jest.fn().mockResolvedValue({ id: 'audit-1' }),
@@ -47,6 +69,9 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
       prismaMock.paymentGroup.create.mockImplementationOnce(({ data }) =>
         Promise.resolve({ id: 'pg-1', ...data }),
       );
+      prismaMock.paymentGroupPeriod.createMany.mockResolvedValueOnce({
+        count: 48,
+      });
 
       // Act
       const created = await service.createPaymentGroup(
@@ -61,6 +86,7 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
       // Assert
       expect(created.name).toBe('Quincenal Investigadores');
       expect(created.periodicity).toBe(Periodicity.QUINCENAL);
+      expect(prismaMock.paymentGroupPeriod.createMany).toHaveBeenCalled();
       expect(auditMock.recordLog).toHaveBeenCalledTimes(1);
     });
 
@@ -90,6 +116,88 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
             periodicity: Periodicity.QUINCENAL,
             cutoffRules: 'Días 15 y 30',
           },
+          adminActor,
+        ),
+      ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('updatePaymentGroup y períodos de corte', () => {
+    it('debe actualizar un grupo de pago y auditar los cambios (Happy Path)', async () => {
+      // Arrange
+      prismaMock.paymentGroup.findUnique
+        .mockResolvedValueOnce({
+          id: 'pg-1',
+          name: 'Quincenal',
+          periodicity: Periodicity.QUINCENAL,
+          cutoffRules: '15 y último',
+          isActive: true,
+        })
+        .mockResolvedValueOnce(null);
+      prismaMock.paymentGroup.update.mockResolvedValueOnce({
+        id: 'pg-1',
+        name: 'Quincenal ajustado',
+        periodicity: Periodicity.QUINCENAL,
+        cutoffRules: '16 y último',
+        isActive: true,
+      });
+
+      // Act
+      const updated = await service.updatePaymentGroup(
+        'pg-1',
+        {
+          name: 'Quincenal ajustado',
+          cutoffRules: '16 y último',
+        },
+        adminActor,
+      );
+
+      // Assert
+      expect(updated.name).toBe('Quincenal ajustado');
+      expect(auditMock.recordLog).toHaveBeenCalledTimes(1);
+    });
+
+    it('debe listar y crear fechas de corte personalizadas sin solapamiento (Happy Path)', async () => {
+      // Arrange
+      prismaMock.paymentGroupPeriod.findMany.mockResolvedValueOnce([
+        { id: 'period-1' },
+      ]);
+      prismaMock.paymentGroup.findUnique.mockResolvedValueOnce({ id: 'pg-1' });
+      prismaMock.paymentGroupPeriod.findFirst.mockResolvedValueOnce(null);
+      prismaMock.paymentGroupPeriod.create.mockResolvedValueOnce({
+        id: 'period-2',
+        label: 'Corte especial',
+      });
+
+      // Act
+      const periods = await service.findPeriods('pg-1');
+      const created = await service.createPeriod(
+        'pg-1',
+        {
+          periodStart: '2026-12-01',
+          periodEnd: '2026-12-10',
+          label: 'Corte especial',
+        },
+        adminActor,
+      );
+
+      // Assert
+      expect(periods).toHaveLength(1);
+      expect(created.id).toBe('period-2');
+    });
+
+    it('debe rechazar la creación de un período solapado (Edge Case)', async () => {
+      // Arrange
+      prismaMock.paymentGroup.findUnique.mockResolvedValueOnce({ id: 'pg-1' });
+      prismaMock.paymentGroupPeriod.findFirst.mockResolvedValueOnce({
+        id: 'period-existente',
+      });
+
+      // Act & Assert
+      await expect(
+        service.createPeriod(
+          'pg-1',
+          { periodStart: '2026-12-05', periodEnd: '2026-12-15' },
           adminActor,
         ),
       ).rejects.toThrow(ConflictException);

@@ -24,6 +24,7 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
       create: jest.Mock;
     };
     accrual: { findMany: jest.Mock; create: jest.Mock };
+    paymentGroupPeriod: { count: jest.Mock; findFirst: jest.Mock };
     $transaction: jest.Mock;
   };
   let auditMock: { recordLog: jest.Mock };
@@ -45,6 +46,10 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
         create: jest.fn(),
       },
       accrual: { findMany: jest.fn(), create: jest.fn() },
+      paymentGroupPeriod: {
+        count: jest.fn().mockResolvedValue(0),
+        findFirst: jest.fn(),
+      },
       $transaction: jest.fn((cb) => cb(prismaMock)),
     };
     auditMock = {
@@ -96,6 +101,29 @@ describe('AccrualsService (RN-CAUS-01 a RN-CAUS-04 Motor de Causación por Lote)
       // Assert
       expect(preview.items).toHaveLength(2);
       expect(preview.totalBatchAmount).toBe('400.00');
+    });
+
+    it('debe rechazar un período que no coincide con las fechas de corte configuradas (RN-CAT-03)', async () => {
+      // Arrange
+      prismaMock.project.findUnique.mockResolvedValueOnce({
+        id: 'proj-1',
+        status: ProjectStatus.ACTIVO,
+        startDate: new Date('2026-01-01T00:00:00Z'),
+        endDate: new Date('2026-12-31T00:00:00Z'),
+      });
+      prismaMock.paymentGroupPeriod.count.mockResolvedValueOnce(24);
+      prismaMock.paymentGroupPeriod.findFirst.mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        service.previewAccrualBatch({
+          code: 'LOTE-FUERA-CORTE',
+          projectId: 'proj-1',
+          paymentGroupId: 'pg-1',
+          periodStart: '2026-11-02',
+          periodEnd: '2026-11-16',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('debe lanzar NotFoundException si el proyecto indicado no existe (Edge Case)', async () => {
