@@ -13,7 +13,7 @@ Antes de crear o modificar modelos de base de datos, servicios de backend o pant
 - `docs/DECISIONES_TECNICAS_DEFENSA.md`
 
 ## 2. Stack y Separación de Capas (Inquebrantable)
-- **Frontend (`/frontend`):** React + Vite + TypeScript + TailwindCSS. Es una SPA 100% cliente. Prohibido poner lógica de cálculo financiero o consultas directas en el frontend.
+- **Frontend (`/frontend`):** React + Vite + TypeScript. Es una SPA 100% cliente. Prohibido poner lógica de cálculo financiero o consultas directas en el frontend. El estilo se define en `frontend/src/styles/design-system.css` (sistema propio de tokens y clases, sin framework de CSS) y se documenta en `DESIGN.md`; prohibido el estilo inline.
 - **Backend (`/backend`):** NestJS (TypeScript) con Arquitectura Modular en Capas:
   - `*.controller.ts`: Solo manejo HTTP, validación de DTOs (`class-validator`) y decoradores `@Roles(...)`. Prohibido escribir consultas de Prisma o cálculos financieros en un controlador.
   - `*.service.ts`: Lógica de negocio, cálculos con `Decimal.js`, validación de reglas `RN-*` y llamadas transaccionales (`prisma.$transaction`).

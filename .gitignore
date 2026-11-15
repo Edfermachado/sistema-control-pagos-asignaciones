@@ -42,3 +42,18 @@ backend/uploads/
 # Instaladores locales ajenos al repositorio del proyecto
 Antigravity.tar.gz
 Antigravity-x64/
+
+# Configuración local de OpenCode (contiene la API key de 21st.dev: NUNCA versionar)
+opencode.json
+opencode.jsonc
+
+# Caché/artefactos locales de skills (motor de diseño, binarios descargados)
+.opencode/.cache/
+.opencode/node_modules/
+.opencode/package-lock.json
+.impeccable/
+
+# Skills de terceros instaladas localmente (se restauran desde skills-lock.json o con
+# `npx skills add ...`; no se versionan para no inflar el repositorio con código ajeno)
+.opencode/skills/
+

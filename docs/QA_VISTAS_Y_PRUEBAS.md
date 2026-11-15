@@ -1,0 +1,192 @@
+# QA de la interfaz — Vistas, checklist y resultados
+
+**Proyecto:** Sistema de Control de Pagos y Asignaciones (USD) — FACYT, Universidad de Carabobo.
+**Fecha de ejecución:** noviembre de 2026 · **Entorno:** Docker Compose (`scpa_frontend` en `:5173`,
+`scpa_backend` en `:3000`, `scpa_postgres` en `:55432`) + build de producción de Vite.
+**Ejecutado por:** agente de QA automatizado (navegador Chromium vía CDP) con datos reales de la API.
+**Resultado global:** los flujos del enunciado funcionan de punta a punta; **2 defectos corregidos**
+antes de la entrega y **4 hallazgos menores documentados** para decisión del equipo.
+
+---
+
+## Parte A — Inventario de vistas y checklist de pruebas
+
+La aplicación tiene **cinco espacios de trabajo** y **tres roles** con visibilidad distinta. Cada
+espacio se compone de secciones (folios) que se listan abajo con lo que hay que probar en cada una.
+
+### Vista 1 — Resumen y deudas (`RESUMEN`)
+
+| Sección | Qué probar |
+|---|---|
+| Libro mayor (causado / pagado / deuda) | Que las tres cifras coincidan con el total real; que la deuda se pinte en rojo solo si es > 0; que los montos tengan formato `$1.234,56` inválido → revisar separadores y decimales. |
+| Cobertura (proyectos / beneficiarios / causaciones) | Que los conteos cambien al crear o desactivar catálogos. |
+| Estado de cuenta por beneficiario | Filtro por proyecto; orden y alineación de montos; fila vacía con mensaje cuando no hay causaciones; que el saldo adeudado cuadre con causado − pagado. |
+
+### Vista 2 — Catálogos, beneficiarios y asignaciones (`CATALOGOS`)
+
+| Sección | Qué probar |
+|---|---|
+| Proyectos | Crear (código único, área, ámbito, vigencia); editar; activar/desactivar; rechazo de fecha fin < inicio (`RN-CAT-01`) y de código duplicado. |
+| Grupos de pago y fechas de corte | Crear grupo (genera períodos automáticos); listar cortes; agregar corte personalizado; eliminar corte; rechazo por solapamiento (`RN-CAT-03`). |
+| Beneficiarios | Crear (cédula única); editar; activar/desactivar; que **no** exista contraseña ni usuario (`RN-SEG-01`). |
+| Asignaciones | Crear beneficiario + proyecto + grupo + monto + vigencia; bloqueo de solapamiento en el mismo proyecto (`RN-CAT-04`); bloqueo en proyecto inactivo (`RN-CAT-02`); desactivar. |
+
+### Vista 3 — Causación, solicitudes y pagos (`MOTOR_FINANCIERO`)
+
+| Sección | Qué probar |
+|---|---|
+| Lote de causación | Previsualización con días activos / días totales y monto; ejecución del lote; bloqueo de doble causación; validación del corte contra el grupo. |
+| Lotes emitidos | Listado, estado, anulación de lote con motivo (`RN-GLOB-04`). |
+| Solicitudes | Crear seleccionando causaciones pendientes (total en vivo); enviar; aprobar/rechazar; reintento de una causación ya incluida en otra solicitud activa. |
+| Pagos FIFO | Pago parcial, pago total, sobrepago rechazado, cierre solo al 100 %, PDF del recibo, anulación con reversión (`RN-PAG-03`); que el rol sin permiso no vea los botones. |
+
+### Vista 4 — Cajas chicas (`CAJA_CHICA`)
+
+| Sección | Qué probar |
+|---|---|
+| Crear caja | Código único, proyecto, tope autorizado. |
+| Apertura mensual | Mes `YYYY-MM`, arrastre del mes anterior, reposición; aprobación por Gerencia. |
+| Vales | Solicitar, aprobar (no mueve saldo), desembolsar (descuenta), rechazar con motivo. |
+| Rendición | Comprobante obligatorio (parámetro `PETTY_CASH_REQUIRE_ATTACHMENT=true`), monto real, vuelto al disponible. |
+| Cierre | Bloqueo con vales pendientes (`RN-CAJA-04`); saldo final congelado; cierre definitivo de la caja. |
+
+### Vista 5 — Usuarios, parámetros y auditoría (`AUDITORIA`)
+
+| Sección | Qué probar |
+|---|---|
+| Usuarios | Crear con rol; listar sin `password_hash`; activar/desactivar; que el ADMIN no pueda desactivarse a sí mismo. |
+| Parámetros | Crear, editar en línea, eliminar; visibilidad solo para el ADMIN. |
+| Bitácora `audit_log` | Orden cronológico, columnas (fecha, usuario, rol, acción, tabla, registro), desplegable con `old_values` / `new_values`, ausencia de edición. |
+
+### Transversales (probar siempre)
+
+1. **Login automático por rol** (selector del riel) y **login manual** con credenciales correctas e incorrectas.
+2. **RBAC:** el ADMIN no ve Causación ni Cajas Chicas; el RECEPTOR no ve usuarios ni parámetros; el GENERADOR no aprueba ni paga.
+3. **Consola:** cero errores de JavaScript durante todo el recorrido.
+4. **Layout:** 1440×900 y 390×844 sin desbordes horizontales ni texto recortado; tablas con desplazamiento interno.
+5. **Contraste:** todo el texto ≥ AA (4,5:1 normal, 3:1 grande).
+6. **Persistencia:** recargar la página tras cada operación y comprobar que el dato sigue ahí.
+
+---
+
+## Parte B — Resultados de la ejecución (datos reales)
+
+### Flujos verificados de punta a punta
+
+| # | Flujo | Resultado |
+|---|---|---|
+| 1 | Login automático y manual (3 roles), credenciales inválidas | OK — "Credenciales de acceso inválidas." |
+| 2 | Alta, edición y cambio de estado de proyecto | OK — avisos y refresco de tabla |
+| 3 | Validaciones de proyecto (`RN-CAT-01`, código duplicado) | OK — mensajes con código de norma |
+| 4 | Alta de beneficiario y disponibilidad inmediata en los selects | OK |
+| 5 | Alta de asignación y bloqueo de solapamiento (`RN-CAT-04`) | OK — rechazo con mensaje |
+| 6 | Bloqueo de asignación en proyecto inactivo (`RN-CAT-02`) | OK |
+| 7 | Alta de grupo de pago con generación automática de cortes | OK — 118 períodos generados |
+| 8 | Alta y baja de corte personalizado (rango libre) | OK — 48 → 49 → 48 |
+| 9 | Previsualización de prorrateo (15/15 días → $250,00) | OK |
+| 10 | Ejecución de lote y aparición de la causación PENDIENTE | OK |
+| 11 | Crear solicitud con selección de causaciones (total en vivo $250) | OK |
+| 12 | Enviar → aprobar → pagar parcial $100 (FIFO) → estado PARCIAL | OK — causación $100/$150 |
+| 13 | Descarga del PDF del recibo | OK — PDF 1.4 con desglose FIFO y firmas |
+| 14 | Anulación del pago con reversión FIFO | OK — deuda devuelta, solicitud reabierta |
+| 15 | Pago total, sobrepago rechazado (`RN-PAG-02`), cierre de solicitud | OK |
+| 16 | Caja chica: crear → apertura → aprobar → vale → aprobar → desembolsar | OK — saldo 500 → 380 |
+| 17 | Cierre de mes bloqueado con vale sin rendir (`RN-CAJA-04`) | OK |
+| 18 | Rendición con comprobante subido (multipart) y vuelto de $10 | OK — saldo 390 |
+| 19 | Cierre de mes con saldo congelado y cierre definitivo de caja | OK — badge CERRADA |
+| 20 | Usuarios: crear, desactivar; parámetros: crear, editar, eliminar | OK |
+| 21 | Bitácora con detalle JSONB de `old_values` | OK |
+| 22 | RBAC al cambiar de rol (visibilidad de pestañas y contenido) | OK tras corrección (F3, F4) |
+
+### Mediciones
+
+| Comprobación | Resultado |
+|---|---|
+| Errores de consola en todo el recorrido | 0 |
+| Estilos inline renderizados | 0 |
+| Desbordes horizontales (desktop y móvil) | 0 |
+| Texto recortado | 0 |
+| Fallos de contraste AA (5 vistas × 2 tamaños) | 0 |
+| `impeccable detect` (archivos y URL) | 0 hallazgos |
+
+---
+
+## Parte C — Hallazgos
+
+### Corregidos en esta sesión
+
+**F3 — El ADMIN conservaba el espacio de Cajas Chicas al cambiar de rol** (Alto, RBAC).
+Al pasar de GENERADOR/RECEPTOR a ADMIN estando en la vista 4, la pestaña desaparecía del riel pero el
+contenido de cajas chicas seguía visible con datos de la sesión anterior.
+*Corrección:* `handleRoleSwitch` valida el espacio activo contra los permitidos por el rol y regresa a
+Resumen. Verificado: ADMIN cae en Resumen y sus pestañas son 1, 2 y 5.
+
+**F4 — El ADMIN veía la sección Asignaciones** (Medio, RBAC/UX).
+Mostraba solo un estado vacío e invitaba a "vincular un beneficiario" aunque `RN-SEG-02` se lo prohíbe.
+*Corrección:* la sección se renderiza solo si el rol no es ADMIN. Verificado: catálogos del ADMIN
+quedan en 3 folios (proyectos, grupos, beneficiarios).
+
+### Documentados, sin corregir (decisión del equipo)
+
+**F1 — Motivo de anulación precargado** (Medio, integridad; pre-existente).
+El campo de motivo nace con un texto genérico ("Corrección contable autorizada por Gerencia…"), así
+que se puede anular sin escribir nada y la auditoría registra un motivo de plantilla, debilitando
+`RN-GLOB-04`. *Recomendación:* inicializar vacío, `required`, mínimo 10 caracteres y placeholder.
+
+**F2 — Anulación de pago sin confirmación** (Medio, UX; pre-existente).
+"Anular con reversión FIFO" ejecuta en el primer clic sobre una acción irreversible.
+*Recomendación:* paso de confirmación con el monto y el recibo afectados a la vista.
+
+**F5 — Validación de formulario ausente en el pago** (Bajo; pre-existente).
+Si se envía el pago sin beneficiario, el aviso que aparece es `[RN-PAG-02] El beneficiario no posee
+causaciones con saldo pendiente`, que describe el síntoma y no la causa.
+*Recomendación:* `required` en los selects y mensaje propio antes de llamar a la API.
+
+**F6 — Campos de anulación y rendición separados de sus botones** (Bajo, UX).
+El motivo de anulación, el monto rendido y el archivo del comprobante viven en la sección
+"Rendición", mientras los botones que los usan están en la tabla de vales o de pagos.
+*Recomendación:* llevar esos campos junto a la acción o abrir una fila expandida por registro.
+
+**F7 — `RN-CAT-03` impide cortes dentro de rangos ya generados** (Informativo).
+Un corte personalizado solo se puede agregar fuera de 2026–2027 porque ya existen períodos
+generados; el rechazo es correcto pero no se explica en la interfaz.
+*Recomendación:* nota en el folio o acción explícita de "reemplazar corte".
+
+**F8 — Tras crear un grupo, la tabla de cortes sigue mostrando otro grupo** (Bajo, UX).
+Los períodos se generan bien (118 en el caso probado), pero el grupo nuevo no queda seleccionado.
+*Recomendación:* seleccionarlo al crearlo.
+
+---
+
+## Parte D — Cómo repetir estas pruebas
+
+```bash
+# 1. Levantar el sistema con datos de demostración
+cp .env.example .env
+docker compose up -d --build          # web :5173 · API :3000 · PostgreSQL :55432
+
+# 2. Pruebas automáticas
+node scripts/api-smoke-test.mjs                       # 68 comprobaciones de API
+npm --prefix backend test -- --runInBand              # 225 unitarias
+npm --prefix frontend test                            # 27 unitarias
+
+# 3. Detector de anti-patrones de interfaz
+export IMPECCABLE_HOME="E:/Vigilia/SisInf/proyecto/repo/.opencode/.cache/impeccable"
+sh .opencode/skills/impeccable/scripts/impeccable detect http://localhost:5173 --json
+```
+
+Para el recorrido manual, usar la tabla de la Parte A como guía y comprobar en cada paso: aviso en
+pantalla, cambio en la tabla, ausencia de errores de consola y persistencia tras recargar.
+
+Las capturas de esta ejecución están en `.opencode/.cache/qa/` (móvil) y `.opencode/.cache/shots/`
+(escritorio y móvil), fuera del control de versiones.
+
+---
+
+## Parte E — Qué no cubre esta ronda
+
+- **Accesibilidad profunda:** navegación completa por teclado, lectores de pantalla y ARIA avanzado.
+- **Carga y concurrencia:** dos usuarios operando la misma solicitud al mismo tiempo.
+- **Navegadores distintos de Chromium** (Firefox, Safari/iOS).
+- **Impresión** de los PDFs y su legibilidad en papel.
+- **Datos voluminosos:** tablas con miles de filas (hoy no hay paginación).

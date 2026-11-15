@@ -258,3 +258,41 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * **Frontend (Vitest):** 5 suites / `27/27` tests en verde + `vite build` exitoso.
   * **Smoke test API:** `68/68` verificaciones en verde.
   * **UI (Chromium headless):** ADMIN gestiona catálogos y cortes; GENERADOR selecciona períodos; sin errores de consola.
+
+---
+
+### Interacción #14 — Rediseño visual completo de la interfaz y erradicación de "AI slop" con skills y MCP locales en OpenCode
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Hermes Agent (orquestación), OpenCode CLI 2.3.0 con DeepSeek V4.1 Pro, skills locales `impeccable`, `frontend-design` y `web-design-guidelines`, MCP locales `shadcn`, `chrome-devtools` y `@21st-dev/magic`.
+* **Indicación (Prompt) del Usuario:**
+  > *"Ejecuta de principio a fin, de forma completamente autónoma, la instalación segura de herramientas de diseño web para OpenCode (estrictamente dentro del directorio del proyecto) y la orquestación del rediseño visual completo de todas las vistas para erradicar cualquier rastro de 'AI slop'."*
+* **Auditoría de las skills descargadas:** se inspeccionaron los tres `SKILL.md` y todos los scripts auxiliares: sin instrucciones ocultas, sin exfiltración de variables de entorno ni comandos maliciosos. La única dependencia ejecutable (`impeccable/scripts/impeccable`) es un lanzador de shell que descarga un motor binario **verificado por SHA-256** contra `engine-checksums.txt`; se redirigió su caché al propio proyecto (`IMPECCABLE_HOME=.opencode/.cache/impeccable`) para no escribir fuera del workspace.
+* **Implementación:**
+  1. **`DESIGN.md`** (nuevo, raíz): identidad "libro mayor + instrumento de laboratorio", paleta fría, tipografía Spectral + Public Sans, prohibiciones explícitas de clichés generados, reglas por vista y criterios de aceptación.
+  2. **`frontend/src/styles/design-system.css`** (nuevo): tokens de color, tipografía, espaciado y radios; estructura de riel + folios; tablas contables con numeración tabular; badges, controles y avisos. Sin framework de CSS y sin estilos inline.
+  3. **`App.tsx`**: reescrito el armazón (riel numerado 1–5, cabecera de área de trabajo con controles de sesión y rol) y el panel de resumen convertido en libro mayor (causado / pagado / deuda + cobertura), con tabla de estado de cuenta.
+  4. **Cuatro espacios de trabajo migrados de estilo inline a clases** por agentes OpenCode en paralelo, con especificaciones escritas en `.opencode/prompts/` y verificación central del build: catálogos y asignaciones, motor financiero (causación, solicitudes, FIFO y anulaciones), cajas chicas y usuarios/auditoría.
+* **Verificación final:**
+  * `tsc -b` + `vite build`: sin errores; **cero** `style={{ }}` en el frontend.
+  * **Frontend (Vitest):** 5 suites / `27/27` en verde. **Smoke test API:** `68/68`.
+  * **10 capturas** (5 vistas × 1440×900 y 390×844): sin errores de consola, sin desbordes horizontales, sin texto recortado y **0 fallos de contraste** (todo ≥ AA).
+  * **`impeccable detect` sobre la app en ejecución:** 0 anti-patrones; se corrigieron los dos avisos iniciales (fondo cuadriculado eliminado, `--ink-3` oscurecido a `#5F6C76`).
+
+---
+
+### Interacción #15 — Pruebas funcionales de la interfaz (QA) y corrección de dos fallas de RBAC antes de la entrega
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Hermes Agent como orquestador, navegador Chromium controlado por CDP, `impeccable detect`, Docker Compose.
+* **Indicación (Prompt) del Usuario:**
+  > *"También quiero una lista de todas las vistas y todo lo que debería probar… me gustaría que tú o el agente con las herramientas para probar web hagan las pruebas y verifiquen que todo funcione bien, antes de subir los cambios a la rama guille."*
+* **Alcance ejecutado:** recorrido completo de los cinco espacios de trabajo con los tres roles y datos reales de la API: catálogos (proyectos, grupos y cortes, beneficiarios, asignaciones y sus validaciones `RN-CAT-01/02/03/04`), motor financiero (previsualización de prorrateo, lote, solicitud, aprobación, pago parcial y total FIFO, sobrepago rechazado, PDF del recibo, anulación con reversión), cajas chicas (apertura, vale, aprobación, desembolso, rendición con comprobante subido, cierre de mes bloqueado y cierre definitivo), usuarios, parámetros con edición en línea y bitácora con detalle JSONB; además de login manual válido e inválido y cambio de rol.
+* **Defectos corregidos:**
+  1. **RBAC al cambiar de rol:** el ADMIN conservaba el espacio de Cajas Chicas visible al cambiar desde GENERADOR/RECEPTOR. `handleRoleSwitch` ahora valida el espacio activo contra los permitidos por el rol.
+  2. **RBAC en catálogos:** el ADMIN veía la sección de Asignaciones (estado vacío que invitaba a operar). La sección ya no se renderiza para ese rol.
+* **Hallazgos documentados sin corregir (decisión del equipo):** motivo de anulación precargado con texto de plantilla (`RN-GLOB-04`), anulación de pago sin confirmación, validación de formulario ausente en el registro de pagos, campos de anulación/rendición separados de sus botones, y dos detalles de usabilidad en cortes y grupos.
+* **Verificación final:**
+  * **Backend (Jest):** 30 suites / `225/225` en verde.
+  * **Frontend (Vitest):** 5 suites / `27/27` en verde.
+  * **Smoke test API:** `68/68`.
+  * **10 capturas** (5 vistas × 1440×900 y 390×844): 0 errores de consola, 0 desbordes, 0 recortes, 0 fallos de contraste y 0 estilos inline.
+  * Informe completo con el checklist de pruebas: [`docs/QA_VISTAS_Y_PRUEBAS.md`](./QA_VISTAS_Y_PRUEBAS.md).

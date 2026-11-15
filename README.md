@@ -171,6 +171,7 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 
 ## 8. Documentación Adicional para Evaluación
 
+* 🎨 [Identidad visual y sistema de diseño (`DESIGN.md`)](./DESIGN.md) — tokens, tipografía, prohibiciones anti-*AI slop* y criterios de aceptación de interfaz.
 * 📋 [Informe de Estado, Validación y Pendientes](./docs/INFORME_ESTADO_Y_PENDIENTES.md)
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)
 * 🧪 [Estándares de Desarrollo, Clean Code y Unit Testing 1:1](./docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md)
