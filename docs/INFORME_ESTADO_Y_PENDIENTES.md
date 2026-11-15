@@ -203,6 +203,37 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 6. ✅ **Auditoría a nivel de BD:** triggers PostgreSQL sobre las tablas del dominio y bloqueo append-only de `audit_logs`.
 7. ✅ **PDF formales:** marca de agua gráfica para documentos anulados y bloques de firma/trazabilidad.
 
+### Brechas residuales frente al PDF (revisión final)
+
+1. **Alcance del ADMIN sobre catálogos**
+   - El PDF dice que el Administrador “gestiona usuarios, parámetros y catálogos”.
+   - Hoy el ADMIN administra usuarios, parámetros y grupos de pago, pero proyectos y beneficiarios son gestionados por el GENERADOR (el ADMIN solo los consulta).
+   - Es una decisión de segregación documentada en `REGLAS_DE_NEGOCIO.md`, pero conviene confirmarla con el profesor o ampliar permisos del ADMIN para evitar una observación literal.
+
+2. **Fechas de corte adaptables**
+   - Los grupos de pago guardan `cutoffRules` como texto, pero el sistema no genera automáticamente los períodos a partir de esa regla; el Generador introduce `periodStart` y `periodEnd` al crear el lote.
+   - Funcionalmente permite cortes adaptables, pero la regla no está automatizada ni validada estructuralmente.
+
+3. **Inmutabilidad a nivel de base de datos**
+   - La aplicación no expone endpoints de edición/borrado de registros financieros y las correcciones se hacen por anulación.
+   - Sin embargo, no hay triggers que bloqueen `UPDATE`/`DELETE` directos sobre montos financieros en PostgreSQL. Los triggers actuales auditan, pero no impiden la mutación.
+
+4. **Atribución de usuario en la auditoría de triggers**
+   - Los triggers registran `INSERT/UPDATE/DELETE` reales, pero con `user_id` y `user_role` nulos porque PostgreSQL no conoce al usuario de la aplicación.
+   - La trazabilidad “quién” se completa con el log de negocio del servicio. Cambios hechos directamente por SQL quedarían sin usuario atribuido.
+
+5. **Alcance del pago FIFO**
+   - Se implementó, por decisión del equipo, que el pago se aplique solo a las causaciones incluidas en la solicitud aprobada.
+   - El PDF dice “sobre la deuda pendiente”; si el profesor espera que el FIFO recorra toda la deuda del beneficiario/proyecto, habría que ajustar esa regla.
+
+6. **CRUD de catálogos en la interfaz**
+   - Proyectos y grupos de pago no tienen edición completa desde la UI; beneficiarios permiten actualización por API pero no desde pantalla.
+   - No es un bloqueo para la demo, pero “gestionar catálogos” puede implicar editar/desactivar, no solo crear.
+
+7. **Recibos**
+   - No existe una tabla separada de “recibos”: el recibo se representa con `payments.receipt_code` y su PDF.
+   - Es una decisión de modelado razonable, pero conviene explicarla en la defensa.
+
 ### Prioridad media
 
 8. **Documentación de API**
