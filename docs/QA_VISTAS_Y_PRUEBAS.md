@@ -67,6 +67,19 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 5. **Contraste:** todo el texto ≥ AA (4,5:1 normal, 3:1 grande).
 6. **Persistencia:** recargar la página tras cada operación y comprobar que el dato sigue ahí.
 
+### Rutas (una vista por URL)
+
+| Comprobación | Cómo |
+|---|---|
+| Entrada directa | Abrir `/causacion` con sesión: debe cargar la vista, no el resumen. |
+| Recarga | `F5` sobre cualquier ruta: la sesión y la vista se mantienen. |
+| Ruta prohibida | Con rol GENERADOR abrir `/auditoria`: redirige a `/resumen` con aviso `RN-SEG-02`. |
+| Ruta inexistente | Abrir `/ruta-inventada`: pantalla propia con salidas a resumen y acceso. |
+| Historial | Atrás y adelante del navegador devuelven a las vistas visitadas. |
+| Sin sesión | Abrir una ruta protegida sin sesión lleva al portal; tras el login vuelve a esa ruta. |
+| Cierre de sesión | El botón "Cerrar sesión" limpia el almacenamiento y deja el portal; recargar no reabre la sesión. |
+| Enlaces del riel | Cada ítem es un enlace real: se puede abrir en otra pestaña y marca `aria-current` en la vista activa. |
+
 ---
 
 ## Parte B — Resultados de la ejecución (datos reales)
@@ -98,6 +111,41 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | 21 | Bitácora con detalle JSONB de `old_values` | OK |
 | 22 | RBAC al cambiar de rol (visibilidad de pestañas y contenido) | OK tras corrección (F3, F4) |
 
+### Rutas, sesión y RBAC por URL (implementado en noviembre de 2026)
+
+| # | Comprobación | Resultado |
+|---|---|---|
+| 1 | `/` sin sesión → portal de acceso | OK — `/login` |
+| 2 | Login demo (3 roles) y login manual | OK — redirige al resumen con la sesión del rol |
+| 3 | Login con credenciales inválidas | OK — se queda en el portal con el aviso |
+| 4 | Entrada directa a `/causacion` con sesión | OK — carga la vista, 4 folios |
+| 5 | Recarga sobre `/causacion` | OK — sesión y vista se conservan (`sessionStorage`) |
+| 6 | GENERADOR abre `/auditoria` | OK — redirige a `/resumen` y explica `RN-SEG-02` |
+| 7 | Cambio de rol en el riel | OK — sesión, riel y permisos se recalculan |
+| 8 | ADMIN abre `/causacion` por URL | OK — redirige con aviso |
+| 9 | Ruta inexistente | OK — pantalla propia con dos salidas |
+| 10 | Atrás / adelante del navegador | OK |
+| 11 | Logout | OK — `/login`, almacenamiento limpio, recarga no reabre sesión |
+| 12 | Deep link sin sesión → login → destino | OK — vuelve a `/cajas-chicas` tras autenticarse |
+
+### Reflejo en la base de datos (verificado con `psql` dentro del contenedor)
+
+| Operación en la interfaz | Fila comprobada en PostgreSQL |
+|---|---|
+| Crear proyecto `QA2-PROY-01` | `projects` con estado `ACTIVO` |
+| Crear beneficiario `V-QA2-111` | `beneficiaries` activo, sin credenciales |
+| Crear asignación $200 | `assignments.amount_per_period = 200.00` activa |
+| Generar lote `QA2-LOTE-01` | `accrual_batches` 2026-03-01/15, `total_amount 200.00`, `GENERADO` |
+| Causación prorrateada | `accruals` 200.00 causado, 15/15 días, `PENDIENTE` |
+| Solicitud `QA2-SOL-01` | `payment_requests` total 200.00, 1 ítem de 200.00 |
+| Pago parcial $80 | `payments` `QA2-REC-01` 80.00 `VALIDO`; `payment_allocations` 80.00; causación `PARCIAL`, saldo 120.00 |
+| Pago del saldo $120 | `QA2-REC-02` 120.00; causación `PAGADO`, saldo 0.00 |
+| Cierre | `payment_requests.status = CERRADA`, pagado 200.00 |
+| Caja `QA2-CAJA-01` | `petty_cashes.CERRADA`; período 2027-01 disponible 210.00, cierre 210.00, `CERRADO` |
+| Vale `QA2-VAL-01` | 100 solicitado, 100 desembolsado, 90 rendido, 10 devuelto, `RENDIDO`, comprobante adjunto |
+| Usuario y parámetro | `users` con rol RECEPTOR activo; `system_parameters` `QA2_PARAM=activo` |
+| Auditoría | `audit_logs` con eventos de negocio (`USER_LOGIN`, `UPDATE`…) y de trigger (`INSERT` en `payment_group_periods`) |
+
 ### Mediciones
 
 | Comprobación | Resultado |
@@ -108,6 +156,8 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | Texto recortado | 0 |
 | Fallos de contraste AA (5 vistas × 2 tamaños) | 0 |
 | `impeccable detect` (archivos y URL) | 0 hallazgos |
+| Rutas: deep link, recarga, guard por rol, 404 e historial | 12/12 comprobaciones OK |
+| Frontend Vitest tras el enrutado | 8 suites / **58** pruebas en verde |
 
 ---
 

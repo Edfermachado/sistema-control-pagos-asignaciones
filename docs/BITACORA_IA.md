@@ -356,3 +356,29 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 * **Verificación técnica:**
   - **Pruebas Frontend:** 7 suites / `41/41` pruebas pasando en verde con Vitest (+5 pruebas nuevas).
   - **Compilación Frontend:** `tsc -b && vite build` exitoso con cero advertencias de tipo y cero estilos inline.
+
+---
+
+### Interacción #19 — Enrutado por vista: una URL por espacio de trabajo, sesión persistente y verificación funcional completa
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Hermes Agent como orquestador, navegador Chromium vía CDP para las pruebas, `psql` dentro del contenedor para comprobar la base de datos, `impeccable detect`.
+* **Indicación (Prompt) del Usuario:**
+  > *"Así que no termines hasta que hayas validado todo siempre asegurando que se cumpla todo lo que solicita el documento… quiero que testees todo, que funcione el login, los botones, valides que todo se refleje correctamente en la base de datos."*
+* **Problema que resuelve:** la aplicación tenía cinco espacios y un portal de acceso, pero todos bajo la misma URL `/`. No se podía enlazar, recargar ni volver con el botón Atrás, y el RBAC solo se demostraba ocultando botones (`react-router-dom` estaba declarado y sin usar).
+* **Implementación:**
+  1. **`frontend/src/routes/workspaces.ts`:** definición única de las cinco rutas (`/resumen`, `/catalogos`, `/causacion`, `/cajas-chicas`, `/auditoria`) con título, descripción, índice y **roles autorizados**; funciones puras `findWorkspaceByPath`, `canAccessWorkspace`, `visibleWorkspaces`, `firstAllowedPath` y `pathForWorkspace`, con su suite de pruebas.
+  2. **`context/WorkspaceContext.tsx`:** todo el estado y la carga de datos que vivían en `App.tsx` (sesión, RBAC, catálogos, motor financiero, cajas, auditoría, filtros y paginación del resumen) pasan a un contexto tipado; un efecto único recarga los datos cuando cambia la sesión o el filtro de proyecto.
+  3. **`components/AppShell.tsx` y `components/RouteGuards.tsx`:** riel con `NavLink` reales (`aria-current` en la vista activa), cabecera con el título de la ruta, guard de sesión y guard de rol que redirige con aviso citando `RN-SEG-02`, y estado de carga mientras se restaura la sesión.
+  4. **`pages/`:** el portal de acceso y las cinco vistas como componentes de ruta; `NotFoundPage` para rutas inexistentes. `App.tsx` queda como configuración del router, generada desde `WORKSPACES` para que no haya rutas duplicadas a mano.
+  5. **`utils/session.util.ts`:** persistencia en `sessionStorage` (ámbito de pestaña, no `localStorage`) con `serializeSession`, `parseStoredSession`, `saveSession`, `loadSession` y `clearSession`, más 6 pruebas nuevas (11 en total en esa suite).
+  6. **`design-system.css`:** bloque nuevo (`.app-boot`, enlaces del riel y de la marca) sin introducir tokens nuevos.
+* **Pruebas ejecutadas en la interfaz:** 12 comprobaciones de rutas y sesión (entrada directa, recarga, ruta prohibida por rol, cambio de rol, ruta inexistente, historial, logout y retorno al destino tras el login) y los flujos completos de catálogos, causación, solicitud, dos pagos parciales consecutivos con FIFO, PDF, caja chica con comprobante real subido, cierre de mes y de caja, usuarios, parámetros y bitácora.
+* **Comprobación en PostgreSQL:** cada operación de la interfaz se verificó contra su fila real (`projects`, `beneficiaries`, `assignments`, `accrual_batches`, `accruals`, `payment_requests`, `payments`, `payment_allocations`, `petty_cashes`, `petty_cash_periods`, `petty_cash_vouchers`, `users`, `system_parameters`, `audit_logs`). Detalle en [`docs/QA_VISTAS_Y_PRUEBAS.md`](./QA_VISTAS_Y_PRUEBAS.md).
+* **Verificación final:**
+  * **Frontend (Vitest):** 8 suites / `58/58` en verde (antes 41).
+  * **Backend (Jest):** 30 suites / `225/225` en verde.
+  * **Smoke test API:** `68/68`.
+  * **10 capturas** (5 rutas × 1440×900 y 390×844): 0 errores de consola, 0 desbordes, 0 recortes y 0 fallos de contraste.
+  * **`impeccable detect`:** 0 hallazgos sobre los archivos y sobre la aplicación en ejecución.
+
+---

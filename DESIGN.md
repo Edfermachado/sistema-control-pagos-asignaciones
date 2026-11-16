@@ -145,6 +145,31 @@ Reglas semánticas fijas:
   (desplazamiento horizontal con encabezados pegados a su columna).
 - ≤ 600 px: formularios a una columna, botones a ancho completo cuando formen un grupo.
 
+### Rutas y navegación (una vista por URL)
+
+Cada espacio de trabajo tiene su propia ruta y el navegador es la fuente de verdad de la navegación:
+
+| Ruta | Espacio | Roles con acceso |
+|---|---|---|
+| `/login` | Portal de acceso | público |
+| `/resumen` | Resumen y deudas (1) | ADMIN, GENERADOR, RECEPTOR |
+| `/catalogos` | Catálogos y asignaciones (2) | ADMIN, GENERADOR, RECEPTOR |
+| `/causacion` | Causación y pagos (3) | GENERADOR, RECEPTOR |
+| `/cajas-chicas` | Cajas chicas (4) | GENERADOR, RECEPTOR |
+| `/auditoria` | Usuarios y auditoría (5) | ADMIN, RECEPTOR |
+
+Reglas:
+- La raíz `/` redirige al primer espacio permitido del rol o al portal si no hay sesión.
+- Una ruta prohibida para el rol **no se muestra vacía**: redirige al primer espacio permitido y
+  explica el motivo citando `RN-SEG-02`. El riel nunca ofrece una ruta que el rol no puede abrir.
+- Cualquier ruta desconocida muestra una pantalla propia con dos salidas (resumen y acceso).
+- La sesión se guarda en `sessionStorage` (ámbito de pestaña): recargar mantiene la vista y la
+  sesión; cerrar la pestaña la elimina. El `logout` limpia el almacenamiento y vuelve a `/login`.
+- Al entrar sin sesión a una ruta protegida, el portal recuerda el destino y vuelve a él tras
+  autenticarse.
+- Mientras se restaura la sesión se muestra un estado de carga (`.app-boot`), nunca la pantalla de
+  acceso a medio pintar.
+
 ---
 
 ## 7. Componentes y clases canónicas
@@ -213,3 +238,5 @@ Una vista está terminada cuando:
 4. `impeccable detect` no reporta anti-patrones nuevos.
 5. Ningún estilo inline introduce color, radio, sombra o tipografía fuera de los tokens.
 6. Las reglas de negocio, los endpoints y el RBAC no cambiaron.
+7. Su ruta se puede abrir directamente, recargar y compartir; un rol sin permiso es redirigido con
+   explicación y el botón Atrás del navegador devuelve a la vista anterior.
