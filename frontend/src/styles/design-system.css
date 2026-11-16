@@ -778,6 +778,140 @@ textarea {
   overflow-wrap: anywhere;
 }
 
+.rail__role-tag {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-top: 2px;
+}
+
+.rail__logout-btn {
+  width: 100%;
+  justify-content: center;
+  margin-top: var(--s-2);
+}
+
+/* 9.1 PANTALLA DE ACCESO (LOGIN PORTAL) ------------------------------------- */
+.login-portal {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--s-5) var(--s-4);
+  background-color: var(--paper);
+}
+
+.login-portal__card {
+  width: 100%;
+  max-width: 540px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 20px rgba(23, 32, 42, 0.05);
+  overflow: hidden;
+}
+
+.login-portal__head {
+  padding: var(--s-5);
+  border-bottom: 1px solid var(--line);
+  background-color: var(--surface-alt);
+}
+
+.login-portal__org {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  margin-bottom: var(--s-1);
+}
+
+.login-portal__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 var(--s-1);
+  letter-spacing: -0.015em;
+}
+
+.login-portal__lead {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.login-portal__body {
+  padding: var(--s-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+}
+
+.login-portal__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.login-portal__section-title {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-3);
+  margin: 0;
+}
+
+.login-portal__demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--s-2);
+}
+
+.login-portal__demo-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--s-3);
+  background-color: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+}
+
+.login-portal__demo-btn:hover {
+  background-color: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.login-portal__demo-role {
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--ink);
+}
+
+.login-portal__demo-desc {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.login-portal__divider {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+}
+
+.login-portal__divider::before,
+.login-portal__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: var(--line);
+}
+
 
 /* 10. AVISOS Y ESTADOS ---------------------------------------------------- */
 .notice {

@@ -338,3 +338,21 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 * **Verificación técnica:**
   - **Pruebas Frontend:** 6 suites / `36/36` pruebas pasando en verde con Vitest (+9 pruebas nuevas).
   - **Compilación Frontend:** `tsc -b && vite build` exitoso con cero advertencias de tipo y cero estilos inline.
+
+---
+
+### Interacción #18 — Implementación del Flujo Formal de Cierre de Sesión (Logout) y Pantalla de Acceso Portal
+* **Fecha:** Noviembre 2026 · **Rama:** `dervis`
+* **Herramientas / Modelos:** Antigravity (Gemini 3.8 Flash)
+* **Indicación (Prompt) del Usuario:**
+  > *"hagamos la 5 entonces"* (Implementación de botón formal de Logout y flujo de sesión desacoplado).
+* **Motivación y Arquitectura:**
+  Previamente, el sistema mantenía una sesión automática permanente basada en credenciales demo sin opción explícita de cerrar sesión. Se implementó una gestión de sesión limpia (`session.util.ts`), con borrado de tokens en memoria (estateless JWT), visualización de estado desconectado y una pantalla de acceso portal (`login-portal`) para ingresar tanto con credenciales institucionales como mediante accesos rápidos por rol (`ADMIN`, `GENERADOR`, `RECEPTOR`).
+* **Implementación:**
+  1. **`frontend/src/utils/session.util.ts`**: Funciones puras para construcción de sesión (`buildUserSession`), validación de sintaxis de token (`isValidAuthToken`) y reseteo de estado limpio (`getClearedSessionState`).
+  2. **`frontend/src/utils/session.util.spec.ts`**: 5 pruebas unitarias 1:1 con patrón AAA cubriendo casos felices y bordes de token y sesión.
+  3. **`frontend/src/styles/design-system.css`**: Clases `.login-portal`, `.login-portal__card`, `.login-portal__demo-grid`, `.rail__logout-btn` respetando la paleta fría, tipografía Spectral + Public Sans y sin estilos inline.
+  4. **`frontend/src/App.tsx`**: Botón de "Cerrar sesión" en el riel inferior y en la barra de herramientas superior; estado `isLoggedOut` que previene el auto-login tras cierre de sesión y renderiza el portal de autenticación.
+* **Verificación técnica:**
+  - **Pruebas Frontend:** 7 suites / `41/41` pruebas pasando en verde con Vitest (+5 pruebas nuevas).
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso con cero advertencias de tipo y cero estilos inline.

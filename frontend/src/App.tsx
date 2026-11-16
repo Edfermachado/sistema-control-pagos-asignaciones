@@ -36,6 +36,7 @@ import { formatUsdCurrency } from './utils/currency.util';
 import { getRoleDisplayLabel, getRolePermissions } from './utils/rbac.util';
 import { TableFilterBar } from './components/TableFilterBar';
 import { TablePagination } from './components/TablePagination';
+import { getClearedSessionState } from './utils/session.util';
 import {
   paginateTableItems,
   searchTableItems,
@@ -252,6 +253,7 @@ export function App(): React.ReactElement {
   const [customEmail, setCustomEmail] = useState('');
   const [customPassword, setCustomPassword] = useState('');
   const [showCustomLogin, setShowCustomLogin] = useState(false);
+  const [isLoggedOut, setIsLoggedOut] = useState<boolean>(false);
 
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
@@ -386,6 +388,7 @@ export function App(): React.ReactElement {
         setActiveRole(res.user.role);
         setCurrentUserEmail(res.user.email);
         setIsConnectedToApi(true);
+        setIsLoggedOut(false);
         await loadWorkspaceData(res.accessToken, res.user.role);
       } catch {
         setIsConnectedToApi(false);
@@ -395,9 +398,26 @@ export function App(): React.ReactElement {
   );
 
   useEffect(() => {
+    if (isLoggedOut) {
+      return;
+    }
     const creds = DEMO_ROLE_CREDENTIALS[activeRole];
     void loginWithCredentials(creds.email, creds.password);
-  }, [activeRole, loginWithCredentials]);
+  }, [activeRole, isLoggedOut, loginWithCredentials]);
+
+  const handleLogout = () => {
+    const cleared = getClearedSessionState();
+    setToken(cleared.token);
+    setIsConnectedToApi(cleared.isConnectedToApi);
+    setIsLoggedOut(true);
+    setShowCustomLogin(false);
+    setCustomEmail('');
+    setCustomPassword('');
+    handleNotify(
+      'success',
+      'Sesión finalizada exitosamente. Ingrese con sus credenciales o seleccione un rol para continuar.',
+    );
+  };
 
   const getAllowedTabsForRole = (role: UserRole): WorkspaceTab[] => {
     const perms = getRolePermissions(role);
@@ -439,6 +459,7 @@ export function App(): React.ReactElement {
       setActiveRole(res.user.role);
       setCurrentUserEmail(res.user.email);
       setIsConnectedToApi(true);
+      setIsLoggedOut(false);
       setShowCustomLogin(false);
       handleNotify(
         'success',
@@ -480,6 +501,136 @@ export function App(): React.ReactElement {
     10,
   );
 
+  if (isLoggedOut && !token) {
+    return (
+      <div className="login-portal">
+        <div className="login-portal__card">
+          <div className="login-portal__head">
+            <div className="login-portal__org">
+              Universidad de Carabobo · FACYT · Escuela de Computación
+            </div>
+            <h1 className="login-portal__title">Control de Pagos</h1>
+            <p className="login-portal__lead">
+              Sistema de gestión, causación prorrateada, pagos FIFO y auditoría en USD.
+            </p>
+          </div>
+
+          <div className="login-portal__body">
+            {notification && (
+              <div
+                className={`notice ${
+                  notification.type === 'success'
+                    ? 'notice--ok'
+                    : 'notice--error'
+                }`}
+                role="status"
+              >
+                <span>{notification.message}</span>
+                <button
+                  type="button"
+                  className="notice__close"
+                  onClick={() => setNotification(null)}
+                  aria-label="Cerrar aviso"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            <div className="login-portal__section">
+              <h2 className="login-portal__section-title">
+                Acceso Rápido por Rol (Demostración RN-SEG-02)
+              </h2>
+              <div className="login-portal__demo-grid">
+                <button
+                  type="button"
+                  className="login-portal__demo-btn"
+                  onClick={() => {
+                    const creds = DEMO_ROLE_CREDENTIALS[UserRole.GENERADOR];
+                    void loginWithCredentials(creds.email, creds.password);
+                  }}
+                >
+                  <span className="login-portal__demo-role">GENERADOR</span>
+                  <span className="login-portal__demo-desc">
+                    Coordinador de Proyectos
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-portal__demo-btn"
+                  onClick={() => {
+                    const creds = DEMO_ROLE_CREDENTIALS[UserRole.RECEPTOR];
+                    void loginWithCredentials(creds.email, creds.password);
+                  }}
+                >
+                  <span className="login-portal__demo-role">RECEPTOR</span>
+                  <span className="login-portal__demo-desc">
+                    Gerencia de Administración
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="login-portal__demo-btn"
+                  onClick={() => {
+                    const creds = DEMO_ROLE_CREDENTIALS[UserRole.ADMIN];
+                    void loginWithCredentials(creds.email, creds.password);
+                  }}
+                >
+                  <span className="login-portal__demo-role">ADMIN</span>
+                  <span className="login-portal__demo-desc">
+                    Administrador del Sistema
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <div className="login-portal__divider">o con credenciales</div>
+
+            <form className="form-grid" onSubmit={handleCustomLoginSubmit}>
+              <div className="field">
+                <label className="field__label" htmlFor="portal-email">
+                  Correo institucional
+                </label>
+                <input
+                  id="portal-email"
+                  className="input"
+                  type="email"
+                  value={customEmail}
+                  onChange={(e) => setCustomEmail(e.target.value)}
+                  placeholder="coordinador@uc.edu.ve"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+
+              <div className="field">
+                <label className="field__label" htmlFor="portal-password">
+                  Contraseña
+                </label>
+                <input
+                  id="portal-password"
+                  className="input"
+                  type="password"
+                  value={customPassword}
+                  onChange={(e) => setCustomPassword(e.target.value)}
+                  placeholder="PasswordUC2026!"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+
+              <button type="submit" className="btn">
+                Iniciar Sesión
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="shell">
       <aside className="rail">
@@ -517,8 +668,16 @@ export function App(): React.ReactElement {
           <div>
             <div className="rail__foot-label">Sesión activa</div>
             <div className="rail__session">{currentUserEmail}</div>
-            <div>{getRoleDisplayLabel(activeRole)}</div>
+            <div className="rail__role-tag">{getRoleDisplayLabel(activeRole)}</div>
           </div>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm rail__logout-btn"
+            onClick={handleLogout}
+            title="Cerrar la sesión actual"
+          >
+            Cerrar sesión
+          </button>
           <div>
             <div className="rail__foot-label">Normas del dominio</div>
             <div>RN-CAUS · RN-PAG · RN-CAJA · RN-AUD</div>
@@ -576,6 +735,14 @@ export function App(): React.ReactElement {
                 onClick={refreshData}
               >
                 Actualizar datos
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--sm"
+                onClick={handleLogout}
+                title="Cerrar la sesión actual"
+              >
+                Cerrar sesión
               </button>
             </div>
           </div>
