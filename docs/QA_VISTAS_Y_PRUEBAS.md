@@ -142,6 +142,10 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | 8 | Editar un proyecto (nombre) y guardar | OK — `projects.name` actualizado en PostgreSQL |
 | 9 | Desactivar y reactivar un beneficiario | OK — `is_active` pasa a `false` y vuelve a `true` |
 | 10 | El motivo escrito se limpia tras ejecutar la acción | OK — no queda una justificación reutilizable de la operación anterior |
+| 11 | Anular una causación individual (no el lote) | OK — guard activo; causación `ANULADO` con saldo 0,00 |
+| 12 | Enlace "Ver comprobante" de un vale rendido | OK — `200 application/pdf` con el archivo servido |
+| 13 | Integridad del archivo subido | OK — PDF de 1.927 bytes guardado y servido con el mismo `sha256` que el original |
+| 14 | Búsqueda dentro de las tablas de catálogos | OK — el buscador por código aísla el proyecto y habilita sus acciones |
 
 ### Reflejo en la base de datos (verificado con `psql` dentro del contenedor)
 
@@ -262,8 +266,14 @@ Las capturas de esta ejecución están en `.opencode/.cache/qa/` (móvil) y `.op
 
 ## Parte E — Qué no cubre esta ronda
 
-- **Accesibilidad profunda:** navegación completa por teclado, lectores de pantalla y ARIA avanzado.
+- **Accesibilidad profunda:** navegación completa por teclado y lectores de pantalla (solo se midió
+  contraste AA y se revisaron `label`/`aria-current`).
 - **Carga y concurrencia:** dos usuarios operando la misma solicitud al mismo tiempo.
 - **Navegadores distintos de Chromium** (Firefox, Safari/iOS).
 - **Impresión** de los PDFs y su legibilidad en papel.
-- **Datos voluminosos:** tablas con miles de filas (hoy no hay paginación).
+- **Móvil:** se comprobó la maquetación a 390×844 en las cinco rutas (sin desbordes), pero los flujos
+  se recorrieron con ratón a 1440×900, no con toques reales.
+- **Cambio de contraseña y alta de usuario con credenciales propias:** se creó el usuario, no se probó
+  su primer inicio de sesión.
+- **Datos voluminosos:** las tablas se probaron con decenas de filas (paginación de 8–10 por página),
+  no con miles.
