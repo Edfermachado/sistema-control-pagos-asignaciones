@@ -104,10 +104,12 @@ export function buildSimplePdfBuffer(
   if (cleanWatermark) {
     streamCommands.push(
       'q',
+      'BT',
       '0.82 0.82 0.82 rg',
       '/F1 58 Tf',
       '0.7071 0.7071 -0.7071 0.7071 120 260 Tm',
       `(${cleanWatermark}) Tj`,
+      'ET',
       'Q',
     );
   }

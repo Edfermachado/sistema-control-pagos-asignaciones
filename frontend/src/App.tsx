@@ -33,7 +33,7 @@ import {
 } from './types/domain.types';
 import { apiRequest } from './utils/api-client.util';
 import { formatUsdCurrency } from './utils/currency.util';
-import { getRoleDisplayLabel } from './utils/rbac.util';
+import { getRoleDisplayLabel, getRolePermissions } from './utils/rbac.util';
 
 type WorkspaceTab =
   | 'RESUMEN'
@@ -53,6 +53,8 @@ interface ExecutiveSummaryData {
     totalAccruedUsd: string;
     totalPaidUsd: string;
     totalDebtDueUsd: string;
+    oldestUnpaidPeriodStart?: string | null;
+    pendingAccrualsCount?: number;
   }>;
 }
 
@@ -281,30 +283,37 @@ export function App(): React.ReactElement {
   const loadWorkspaceData = useCallback(
     async (authToken: string, role: UserRole) => {
       try {
-        const [projRes, pgRes, benRes] = await Promise.all([
+        const summaryUrl = summaryProjectFilter
+          ? `/reports/summary?projectId=${summaryProjectFilter}`
+          : '/reports/summary';
+
+        const [projRes, pgRes, benRes, sumRes] = await Promise.all([
           apiRequest<LiveProject[]>('/projects', { token: authToken }),
           apiRequest<LivePaymentGroup[]>('/payment-groups', {
             token: authToken,
           }),
           apiRequest<LiveBeneficiary[]>('/beneficiaries', { token: authToken }),
+          apiRequest<ExecutiveSummaryData>(summaryUrl, { token: authToken }),
         ]);
         setProjects(projRes);
         setPaymentGroups(pgRes);
         setBeneficiaries(benRes);
+        setSummary(sumRes);
 
-        // RN-SEG-02: ADMIN no gestiona ni consulta asignaciones.
+        // RN-SEG-02: ADMIN no gestiona ni consulta asignaciones ni opera dinero.
         if (role === UserRole.ADMIN) {
           setAssignments([]);
+          setAccruals([]);
+          setAccrualBatches([]);
+          setPaymentRequests([]);
+          setPayments([]);
+          setPettyCashes([]);
         } else {
-          const asigRes = await apiRequest<LiveAssignment[]>('/assignments', {
-            token: authToken,
-          });
-          setAssignments(asigRes);
-        }
-
-        if (role === UserRole.GENERADOR || role === UserRole.RECEPTOR) {
-          const [accRes, batchRes, reqRes, payRes, pcRes, sumRes] =
+          const [asigRes, accRes, batchRes, reqRes, payRes, pcRes] =
             await Promise.all([
+              apiRequest<LiveAssignment[]>('/assignments', {
+                token: authToken,
+              }),
               apiRequest<LiveAccrual[]>('/accruals', { token: authToken }),
               apiRequest<LiveAccrualBatch[]>('/accruals/batches', {
                 token: authToken,
@@ -316,19 +325,13 @@ export function App(): React.ReactElement {
               apiRequest<LivePettyCash[]>('/petty-cashes', {
                 token: authToken,
               }),
-              apiRequest<ExecutiveSummaryData>(
-                summaryProjectFilter
-                  ? `/reports/summary?projectId=${summaryProjectFilter}`
-                  : '/reports/summary',
-                { token: authToken },
-              ),
             ]);
+          setAssignments(asigRes);
           setAccruals(accRes);
           setAccrualBatches(batchRes);
           setPaymentRequests(reqRes);
           setPayments(payRes);
           setPettyCashes(pcRes);
-          setSummary(sumRes);
         }
 
         if (role === UserRole.ADMIN) {
@@ -340,13 +343,19 @@ export function App(): React.ReactElement {
           ]);
           setUsers(usersRes);
           setParameters(parametersRes);
+        } else {
+          setUsers([]);
+          setParameters([]);
         }
 
-        if (role === UserRole.ADMIN || role === UserRole.RECEPTOR) {
+        const perms = getRolePermissions(role);
+        if (perms.canViewAuditLog) {
           const logsRes = await apiRequest<LiveAuditRecord[]>('/audit-logs', {
             token: authToken,
           });
           setAuditLogs(logsRes);
+        } else {
+          setAuditLogs([]);
         }
       } catch {
         // Mantiene datos previos si algún endpoint está restringido al rol
@@ -382,14 +391,27 @@ export function App(): React.ReactElement {
     void loginWithCredentials(creds.email, creds.password);
   }, [activeRole, loginWithCredentials]);
 
+  const getAllowedTabsForRole = (role: UserRole): WorkspaceTab[] => {
+    const perms = getRolePermissions(role);
+    return TAB_ORDER.filter((tab) => {
+      if (
+        role === UserRole.ADMIN &&
+        (tab === 'MOTOR_FINANCIERO' || tab === 'CAJA_CHICA')
+      ) {
+        return false;
+      }
+      if (tab === 'AUDITORIA' && !perms.canViewAuditLog) {
+        return false;
+      }
+      return true;
+    });
+  };
+
   const handleRoleSwitch = (newRole: UserRole) => {
     setActiveRole(newRole);
     setNotification(null);
     // RN-SEG-02: al cambiar de rol, el espacio activo debe seguir siendo válido para ese rol.
-    const allowedTabs: WorkspaceTab[] =
-      newRole === UserRole.ADMIN
-        ? ['RESUMEN', 'CATALOGOS', 'AUDITORIA']
-        : TAB_ORDER;
+    const allowedTabs = getAllowedTabsForRole(newRole);
     if (!allowedTabs.includes(activeTab)) {
       setActiveTab('RESUMEN');
     }
@@ -436,11 +458,7 @@ export function App(): React.ReactElement {
     ? Number(summary.totalPendingDebtUsd)
     : accruals.reduce((acc, r) => acc + Number(r.balanceDue), 0);
 
-  const visibleTabs = TAB_ORDER.filter(
-    (tab) =>
-      activeRole !== UserRole.ADMIN ||
-      (tab !== 'MOTOR_FINANCIERO' && tab !== 'CAJA_CHICA'),
-  );
+  const visibleTabs = getAllowedTabsForRole(activeRole);
   const meta = WORKSPACE_META[activeTab];
   const balanceRows = summary?.beneficiaryBalances ?? [];
 
@@ -701,12 +719,13 @@ export function App(): React.ReactElement {
                           <th scope="col" className="num">
                             Saldo adeudado (USD)
                           </th>
+                          <th scope="col">Antigüedad de deuda</th>
                         </tr>
                       </thead>
                       <tbody>
                         {balanceRows.length === 0 && (
                           <tr className="table__empty">
-                            <td colSpan={5}>
+                            <td colSpan={6}>
                               Sin causaciones registradas para el filtro actual.
                               Genere un lote de causación en el espacio 3.
                             </td>
@@ -726,6 +745,14 @@ export function App(): React.ReactElement {
                             </td>
                             <td className="num table__strong">
                               {formatUsdCurrency(Number(row.totalDebtDueUsd))}
+                            </td>
+                            <td className="nowrap">
+                              {Number(row.totalDebtDueUsd) > 0 &&
+                              row.oldestUnpaidPeriodStart
+                                ? `Desde ${row.oldestUnpaidPeriodStart} (${
+                                    row.pendingAccrualsCount ?? 1
+                                  } per.)`
+                                : 'Al día (Sin deuda)'}
                             </td>
                           </tr>
                         ))}

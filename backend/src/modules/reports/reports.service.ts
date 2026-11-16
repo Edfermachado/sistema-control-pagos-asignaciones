@@ -20,6 +20,8 @@ export interface BeneficiaryDebtSummary {
   totalAccruedUsd: string;
   totalPaidUsd: string;
   totalDebtDueUsd: string;
+  oldestUnpaidPeriodStart?: string | null;
+  pendingAccrualsCount?: number;
 }
 
 export interface ExecutiveReportSummary {
@@ -63,6 +65,8 @@ export class ReportsService {
         accrued: Decimal;
         paid: Decimal;
         debt: Decimal;
+        oldestUnpaidPeriodStart: string | null;
+        pendingAccrualsCount: number;
       }
     >();
 
@@ -81,11 +85,27 @@ export class ReportsService {
         accrued: new Decimal('0.00'),
         paid: new Decimal('0.00'),
         debt: new Decimal('0.00'),
+        oldestUnpaidPeriodStart: null,
+        pendingAccrualsCount: 0,
       };
 
       current.accrued = current.accrued.plus(accruedDec);
       current.paid = current.paid.plus(paidDec);
       current.debt = current.debt.plus(debtDec);
+
+      if (debtDec.gt(0)) {
+        current.pendingAccrualsCount += 1;
+        if (acc.periodStart instanceof Date) {
+          const periodIso = acc.periodStart.toISOString().slice(0, 10);
+          if (
+            !current.oldestUnpaidPeriodStart ||
+            periodIso < current.oldestUnpaidPeriodStart
+          ) {
+            current.oldestUnpaidPeriodStart = periodIso;
+          }
+        }
+      }
+
       mapByBeneficiary.set(acc.beneficiaryId, current);
     }
 
@@ -98,6 +118,8 @@ export class ReportsService {
       totalAccruedUsd: data.accrued.toFixed(2),
       totalPaidUsd: data.paid.toFixed(2),
       totalDebtDueUsd: data.debt.toFixed(2),
+      oldestUnpaidPeriodStart: data.oldestUnpaidPeriodStart,
+      pendingAccrualsCount: data.pendingAccrualsCount,
     }));
 
     return {
@@ -131,7 +153,7 @@ export class ReportsService {
     const lines = formatIndividualPaymentReceiptLines({
       receiptCode: payment.receiptCode,
       paymentDate: payment.paymentDate.toISOString().slice(0, 10),
-      status: payment.status as unknown as PaymentStatus,
+      status: payment.status,
       beneficiaryName: payment.beneficiary.fullName,
       beneficiaryDni: payment.beneficiary.dni,
       projectCode: payment.paymentRequest.project.code,

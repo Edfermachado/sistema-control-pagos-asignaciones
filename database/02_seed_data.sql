@@ -92,32 +92,39 @@ INSERT INTO "assignments" ("id", "beneficiary_id", "project_id", "payment_group_
 VALUES
   ('55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444401', '22222222-2222-4222-8222-222222222201', '33333333-3333-4333-8333-333333333302', 450.00, '2026-01-01', '2026-12-31', true),
   ('55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222202', '33333333-3333-4333-8333-333333333302', 450.00, '2026-11-11', '2026-11-30', true),
-  ('55555555-5555-4555-8555-555555555503', '44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222203', '33333333-3333-4333-8333-333333333303', 600.00, '2026-03-01', '2026-12-31', true)
+  ('55555555-5555-4555-8555-555555555503', '44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222203', '33333333-3333-4333-8333-333333333303', 600.00, '2026-03-01', '2026-12-31', true),
+  ('55555555-5555-4555-8555-555555555504', '44444444-4444-4444-8444-444444444403', '22222222-2222-4222-8222-222222222203', '33333333-3333-4333-8333-333333333301', 140.00, '2026-03-01', '2026-12-31', true)
 ON CONFLICT ("id") DO NOTHING;
 
 -- 6. Lotes de Causación y Causaciones Prorrateadas (RN-CAUS-01 a 04)
 INSERT INTO "accrual_batches" ("id", "code", "project_id", "payment_group_id", "period_start", "period_end", "total_days", "total_amount", "status", "generated_by_id")
 VALUES
   ('66666666-6666-4666-8666-666666666601', 'LOTE-FIS-2026-Q1', '22222222-2222-4222-8222-222222222201', '33333333-3333-4333-8333-333333333302', '2026-10-01', '2026-10-15', 15, 450.00, 'GENERADO', '11111111-1111-4111-8111-111111111102'),
-  ('66666666-6666-4666-8666-666666666602', 'LOTE-FIS-2026-Q2', '22222222-2222-4222-8222-222222222201', '33333333-3333-4333-8333-333333333302', '2026-10-16', '2026-10-31', 16, 450.00, 'GENERADO', '11111111-1111-4111-8111-111111111102')
+  ('66666666-6666-4666-8666-666666666602', 'LOTE-FIS-2026-Q2', '22222222-2222-4222-8222-222222222201', '33333333-3333-4333-8333-333333333302', '2026-10-16', '2026-10-31', 16, 450.00, 'GENERADO', '11111111-1111-4111-8111-111111111102'),
+  ('66666666-6666-4666-8666-666666666603', 'LOTE-QUI-2026-Q1', '22222222-2222-4222-8222-222222222202', '33333333-3333-4333-8333-333333333302', '2026-11-01', '2026-11-15', 15, 150.00, 'GENERADO', '11111111-1111-4111-8111-111111111102'),
+  ('66666666-6666-4666-8666-666666666604', 'LOTE-BIO-2026-M10', '22222222-2222-4222-8222-222222222203', '33333333-3333-4333-8333-333333333303', '2026-10-01', '2026-10-31', 31, 600.00, 'GENERADO', '11111111-1111-4111-8111-111111111102')
 ON CONFLICT ("code") DO NOTHING;
 
 INSERT INTO "accruals" ("id", "batch_id", "assignment_id", "beneficiary_id", "project_id", "period_start", "period_end", "active_days", "total_period_days", "prorated_amount", "paid_amount", "balance_due", "status")
 VALUES
   ('77777777-7777-4777-8777-777777777701', '66666666-6666-4666-8666-666666666601', '55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444401', '22222222-2222-4222-8222-222222222201', '2026-10-01', '2026-10-15', 15, 15, 450.00, 450.00, 0.00, 'PAGADO'),
-  ('77777777-7777-4777-8777-777777777702', '66666666-6666-4666-8666-666666666602', '55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444401', '22222222-2222-4222-8222-222222222201', '2026-10-16', '2026-10-31', 16, 16, 450.00, 150.00, 300.00, 'PARCIAL')
+  ('77777777-7777-4777-8777-777777777702', '66666666-6666-4666-8666-666666666602', '55555555-5555-4555-8555-555555555501', '44444444-4444-4444-8444-444444444401', '22222222-2222-4222-8222-222222222201', '2026-10-16', '2026-10-31', 16, 16, 450.00, 150.00, 300.00, 'PARCIAL'),
+  ('77777777-7777-4777-8777-777777777703', '66666666-6666-4666-8666-666666666603', '55555555-5555-4555-8555-555555555502', '44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222202', '2026-11-01', '2026-11-15', 5, 15, 150.00, 0.00, 150.00, 'PENDIENTE'),
+  ('77777777-7777-4777-8777-777777777704', '66666666-6666-4666-8666-666666666604', '55555555-5555-4555-8555-555555555503', '44444444-4444-4444-8444-444444444402', '22222222-2222-4222-8222-222222222203', '2026-10-01', '2026-10-31', 31, 31, 600.00, 0.00, 600.00, 'PENDIENTE')
 ON CONFLICT ("id") DO NOTHING;
 
 -- 7. Solicitud de Pago y Pago Parcial aplicado con Prelación FIFO ($600 sobre deuda de $900: RN-PAG-02)
-INSERT INTO "payment_requests" ("id", "code", "project_id", "created_by_id", "reviewed_by_id", "total_amount", "paid_amount", "status")
+INSERT INTO "payment_requests" ("id", "code", "project_id", "created_by_id", "reviewed_by_id", "total_amount", "paid_amount", "status", "sent_at", "reviewed_at")
 VALUES
-  ('88888888-8888-4888-8888-888888888801', 'SOL-FIS-2026-001', '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', 900.00, 600.00, 'ENTREGADA')
+  ('88888888-8888-4888-8888-888888888801', 'SOL-FIS-2026-001', '22222222-2222-4222-8222-222222222201', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', 900.00, 600.00, 'ENTREGADA', '2026-11-01 10:00:00', '2026-11-02 14:30:00'),
+  ('88888888-8888-4888-8888-888888888802', 'SOL-BIO-2026-001', '22222222-2222-4222-8222-222222222203', '11111111-1111-4111-8111-111111111102', NULL, 600.00, 0.00, 'ENVIADA', '2026-11-04 09:30:00', NULL)
 ON CONFLICT ("code") DO NOTHING;
 
 INSERT INTO "payment_request_items" ("id", "payment_request_id", "accrual_id", "requested_amount")
 VALUES
   ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01', '88888888-8888-4888-8888-888888888801', '77777777-7777-4777-8777-777777777701', 450.00),
-  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', '88888888-8888-4888-8888-888888888801', '77777777-7777-4777-8777-777777777702', 450.00)
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02', '88888888-8888-4888-8888-888888888801', '77777777-7777-4777-8777-777777777702', 450.00),
+  ('eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03', '88888888-8888-4888-8888-888888888802', '77777777-7777-4777-8777-777777777704', 600.00)
 ON CONFLICT ("payment_request_id", "accrual_id") DO NOTHING;
 
 INSERT INTO "payments" ("id", "receipt_code", "payment_request_id", "beneficiary_id", "delivered_by_id", "amount", "payment_date", "reference", "status")
@@ -137,16 +144,17 @@ VALUES
   ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', 'CC-FIS-01', 'Caja Chica Laboratorio Óptica Cuántica', '22222222-2222-4222-8222-222222222201', 200.00, 'ACTIVA')
 ON CONFLICT ("code") DO NOTHING;
 
-INSERT INTO "petty_cash_periods" ("id", "petty_cash_id", "year_month", "carryover_balance", "initial_replenishment", "available_balance", "closing_balance", "status", "opened_by_id", "approved_by_id", "closed_by_id")
+INSERT INTO "petty_cash_periods" ("id", "petty_cash_id", "year_month", "carryover_balance", "initial_replenishment", "available_balance", "closing_balance", "status", "opened_by_id", "approved_by_id", "closed_by_id", "opened_at", "closed_at")
 VALUES
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccc01', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-10', 0.00, 200.00, 65.50, 65.50, 'CERRADO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103'),
-  ('cccccccc-cccc-4ccc-8ccc-cccccccccc02', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-11', 65.50, 134.50, 200.00, NULL, 'ABIERTO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', NULL)
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccc01', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-10', 0.00, 200.00, 65.50, 65.50, 'CERRADO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103', '2026-10-01 08:30:00', '2026-10-31 17:00:00'),
+  ('cccccccc-cccc-4ccc-8ccc-cccccccccc02', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01', '2026-11', 65.50, 134.50, 200.00, NULL, 'ABIERTO', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', NULL, '2026-11-01 08:30:00', NULL)
 ON CONFLICT ("petty_cash_id", "year_month") DO NOTHING;
 
--- Vale histórico de octubre que justifica el saldo consumido (134.50) y el cierre en 65.50
-INSERT INTO "petty_cash_vouchers" ("id", "code", "period_id", "requested_by_id", "approved_by_id", "disbursed_by_id", "beneficiary_name", "concept", "requested_amount", "disbursed_amount", "settled_amount", "returned_amount", "invoice_reference", "status")
+-- Vale histórico de octubre que justifica el saldo consumido (134.50) y el cierre en 65.50, más vale solicitado de noviembre
+INSERT INTO "petty_cash_vouchers" ("id", "code", "period_id", "requested_by_id", "approved_by_id", "disbursed_by_id", "beneficiary_name", "concept", "requested_amount", "disbursed_amount", "settled_amount", "returned_amount", "invoice_reference", "attachment_url", "status")
 VALUES
-  ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'VALE-FIS-2026-10', 'cccccccc-cccc-4ccc-8ccc-cccccccccc01', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103', 'TSU. Luis Herrera', 'Compra de insumos ópticos y guantes de nitrilo', 134.50, 134.50, 134.50, 0.00, 'FACT-FIS-2026-1042', 'RENDIDO')
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddd01', 'VALE-FIS-2026-10', 'cccccccc-cccc-4ccc-8ccc-cccccccccc01', '11111111-1111-4111-8111-111111111102', '11111111-1111-4111-8111-111111111103', '11111111-1111-4111-8111-111111111103', 'TSU. Luis Herrera', 'Compra de insumos ópticos y guantes de nitrilo', 134.50, 134.50, 134.50, 0.00, 'FACT-FIS-2026-1042', '/uploads/factura-fis-2026-1042.pdf', 'RENDIDO'),
+  ('dddddddd-dddd-4ddd-8ddd-dddddddddd02', 'VALE-FIS-2026-11A', 'cccccccc-cccc-4ccc-8ccc-cccccccccc02', '11111111-1111-4111-8111-111111111102', NULL, NULL, 'TSU. Luis Herrera', 'Adquisición de lentes colimadores de repuesto', 45.00, NULL, NULL, NULL, NULL, NULL, 'SOLICITADO')
 ON CONFLICT ("code") DO NOTHING;
 
 -- 9. Parámetros globales del sistema (RF 2.1: gestión exclusiva del ADMIN)
@@ -158,3 +166,11 @@ VALUES
   ('ffffffff-ffff-4fff-8fff-ffffffffff04', 'PETTY_CASH_REQUIRE_ATTACHMENT', 'true', 'Exigir archivo de comprobante al rendir un vale de caja chica', '11111111-1111-4111-8111-111111111101'),
   ('ffffffff-ffff-4fff-8fff-ffffffffff05', 'AUDIT_RETENTION_DAYS', '365', 'Días de retención de la bitácora de auditoría', '11111111-1111-4111-8111-111111111101')
 ON CONFLICT ("key") DO NOTHING;
+
+-- 10. Registros iniciales de auditoría de negocio (RN-AUD-03)
+INSERT INTO "audit_logs" ("id", "user_id", "user_role", "action", "table_name", "record_id", "old_values", "new_values")
+VALUES
+  ('01010101-0101-4101-8101-010101010101', '11111111-1111-4111-8111-111111111102', 'GENERADOR', 'GENERATE_ACCRUAL_BATCH', 'accrual_batches', '66666666-6666-4666-8666-666666666603', NULL, '{"code":"LOTE-QUI-2026-Q1","totalAmount":"150.00","activeDays":5,"totalPeriodDays":15}'),
+  ('01010101-0101-4101-8101-010101010102', '11111111-1111-4111-8111-111111111103', 'RECEPTOR', 'REGISTER_FIFO_PAYMENT', 'payments', '99999999-9999-4999-8999-999999999901', '{"totalDebtBeforePayment":"900.00"}', '{"receiptCode":"REC-2026-001","paymentAmount":"600.00","remainingDebtAfterPayment":"300.00"}'),
+  ('01010101-0101-4101-8101-010101010103', '11111111-1111-4111-8111-111111111102', 'GENERADOR', 'SETTLE_PETTY_CASH_VOUCHER', 'petty_cash_vouchers', 'dddddddd-dddd-4ddd-8ddd-dddddddddd01', '{"status":"DESEMBOLSADO"}', '{"status":"RENDIDO","settledAmount":"134.50","invoiceReference":"FACT-FIS-2026-1042"}')
+ON CONFLICT ("id") DO NOTHING;

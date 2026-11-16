@@ -296,3 +296,23 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * **Smoke test API:** `68/68`.
   * **10 capturas** (5 vistas × 1440×900 y 390×844): 0 errores de consola, 0 desbordes, 0 recortes, 0 fallos de contraste y 0 estilos inline.
   * Informe completo con el checklist de pruebas: [`docs/QA_VISTAS_Y_PRUEBAS.md`](./QA_VISTAS_Y_PRUEBAS.md).
+
+
+---
+
+### Interacción #16 — Auditoría Integral del Modelo de Negocio, Frontend, Backend y Ampliación de Datos de Prueba (MVP)
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity (Gemini)
+* **Indicación (Prompt) del Usuario:**
+  > *"Haz una auditoria y analisis del front y back, y de los datos de prueba para tener el MPV funcional, dime las áreas de mejora así como posibles fallos en el modelo de negocio basado en nuestros docs"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`backend/src/common/constants/domain.enums.ts`** (`CC-01`, `CC-04`): Reexportación directa de los tipos enumerados generados por `@prisma/client` para eliminar las conversiones forzadas `as unknown as` en los servicios de dominio.
+  2. **`backend/src/modules/audit/audit.service.ts` y `audit.service.spec.ts`** (`RN-AUD-03`): Inclusión de la relación `user: { select: { id, fullName, email } }` en `findAllLogs` para que la bitácora forense muestre el nombre y correo del autor en lugar de `—`.
+  3. **`backend/src/modules/reports/domain/pdf-document.builder.ts`, `reports.service.ts` y `reports.controller.ts`** (`RN-AUD-01`, `RN-AUD-02`, `RN-SEG-02`): Encapsulación de los operadores de texto (`Tf`, `Tm`, `Tj`) de la marca de agua dentro de un bloque `BT ... ET` conforme al estándar PDF 1.4; cálculo de antigüedad de deuda (`oldestUnpaidPeriodStart` y `pendingAccrualsCount`) en el estado de cuenta por beneficiario; habilitación de consulta de resumen en solo lectura para `ADMIN`.
+  4. **`backend/src/modules/accruals/accruals.service.ts` y `backend/src/modules/payments/domain/fifo-allocator.calculator.ts`** (`RN-CAUS-04`, `RN-PAG-02`): Exclusión de beneficiarios inactivos al previsualizar lotes, validación de intersección de fechas para impedir doble causación solapada y desempate por `periodEnd ASC` en la cola FIFO.
+  5. **`backend/src/modules/annulments/annulments.service.ts`** (`RN-GLOB-04`, `RN-PAG-03`): Actualización del monto total (y estado) del `AccrualBatch` cuando se anula una causación individual y limpieza de `closedAt` al reabrir una solicitud por anulación de pago.
+  6. **`backend/src/modules/petty-cash/domain/petty-cash-balance.calculator.ts` y `petty-cash.service.ts`** (`RN-CAJA-01`, `RN-CAJA-02`): Validación del tope autorizado (`authorizedAmount`) y del orden cronológico (`yearMonth` posterior al último período cerrado) al abrir períodos mensuales.
+  7. **`frontend/src/App.tsx`, `FinancialEnginePanel.tsx` y `PettyCashAndReportsPanel.tsx`** (`RN-SEG-02`, `RN-PAG-01`, `RN-CAJA-03`): Ocultación de la pestaña de Auditoría y limpieza de estados sensibles para el rol `GENERADOR`; filtrado de causaciones ya comprometidas en solicitudes activas; habilitación de los campos de motivo de rechazo y anulación de vales/solicitudes para el rol `RECEPTOR`; columna de antigüedad de deuda en el estado de cuenta.
+  8. **`database/02_seed_data.sql`, `backend/prisma/seed.ts` y `uploads/factura-fis-2026-1042.pdf`**: Sincronización y ampliación del seed con asignación semanal para `Lic. Gabriel Tovar`, lote y causación prorrateada (5/15 días = `$150.00`) `PENDIENTE` libre en `QUI-2026-02`, solicitud `ENVIADA` en `BIO-2026-03` lista para aprobar/rechazar, vale `SOLICITADO` en el período abierto `2026-11`, comprobante PDF de demostración y registros iniciales en `audit_logs`.
+* **Explicación Técnica para la Defensa:**
+  * Se cerraron las brechas entre el contrato documental (`RN-*`) y la implementación: la cola FIFO respeta el cuádruple criterio de ordenamiento (`periodStart`, `periodEnd`, `createdAt`, `id`), las cajas chicas validan su tope autorizado (`authorizedAmount`) bajo el modelo de Fondo Fijo (Imprest), y la segregación de funciones (`RN-SEG-02`) se aplica tanto en los Guards de NestJS como en la visibilidad de vistas y memoria de React.

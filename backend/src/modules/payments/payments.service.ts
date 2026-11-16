@@ -91,6 +91,7 @@ export class PaymentsService {
       pendingAccruals.map((a) => ({
         id: a.id,
         periodStart: a.periodStart,
+        periodEnd: a.periodEnd,
         createdAt: a.createdAt,
         paidAmount: a.paidAmount.toString(),
         balanceDue: a.balanceDue.toString(),
