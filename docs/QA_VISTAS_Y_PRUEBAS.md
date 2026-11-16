@@ -128,6 +128,21 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | 11 | Logout | OK — `/login`, almacenamiento limpio, recarga no reabre sesión |
 | 12 | Deep link sin sesión → login → destino | OK — vuelve a `/cajas-chicas` tras autenticarse |
 
+### Segundo recorrido: acciones destructivas y justificaciones (RN-PAG-01/03, RN-GLOB-04, RN-CAJA-03)
+
+| # | Acción probada en la interfaz | Resultado |
+|---|---|---|
+| 1 | Rechazar una solicitud con el campo de motivo vacío | OK — el botón está inhabilitado y muestra el motivo en el tooltip |
+| 2 | Rechazar la solicitud escribiendo el motivo | OK — queda `RECHAZADA` con el texto escrito por el usuario |
+| 3 | Aprobar, pagar 50,00 y anular el pago con motivo | OK — `ANULADO`; la causación vuelve a 200,00 `PENDIENTE` y la solicitud a `APROBADA` |
+| 4 | Anular la solicitud aprobada con motivo | OK — `ANULADA` |
+| 5 | Anular un lote de causación con motivo | OK — lote `ANULADO` y causaciones liberadas |
+| 6 | Rechazar un vale de caja chica sin motivo / con motivo | OK — inhabilitado / `RECHAZADO` con el texto escrito; el saldo del período no se mueve |
+| 7 | Anular un vale antes del desembolso | OK — `ANULADO`, saldo intacto (200,00 disponibles) |
+| 8 | Editar un proyecto (nombre) y guardar | OK — `projects.name` actualizado en PostgreSQL |
+| 9 | Desactivar y reactivar un beneficiario | OK — `is_active` pasa a `false` y vuelve a `true` |
+| 10 | El motivo escrito se limpia tras ejecutar la acción | OK — no queda una justificación reutilizable de la operación anterior |
+
 ### Reflejo en la base de datos (verificado con `psql` dentro del contenedor)
 
 | Operación en la interfaz | Fila comprobada en PostgreSQL |
@@ -176,16 +191,28 @@ Mostraba solo un estado vacío e invitaba a "vincular un beneficiario" aunque `R
 *Corrección:* la sección se renderiza solo si el rol no es ADMIN. Verificado: catálogos del ADMIN
 quedan en 3 folios (proyectos, grupos, beneficiarios).
 
-### Documentados, sin corregir (decisión del equipo)
+**F1 — Motivo de anulación y de rechazo precargado** (Medio, integridad; pre-existente). Corregido.
+El campo nacía con un texto genérico ("Corrección contable autorizada por Gerencia…"), así que un solo
+clic anulaba o rechazaba sin que nadie escribiera la justificación y la auditoría registraba una
+plantilla, debilitando `RN-GLOB-04` y `RN-PAG-01`.
+*Corrección:* los motivos arrancan vacíos y los botones destructivos (anular pago, causación, lote,
+solicitud y vale; rechazar solicitud y vale) quedan inhabilitados hasta que el texto alcanza el mínimo
+que exige la regla (10 caracteres para anular, 5 para rechazar), con el motivo en el tooltip.
+Verificado: inhabilitado con el campo vacío, habilitado al escribir, y el texto que llega a la auditoría
+es el escrito por el usuario.
 
-**F1 — Motivo de anulación precargado** (Medio, integridad; pre-existente).
-El campo de motivo nace con un texto genérico ("Corrección contable autorizada por Gerencia…"), así
-que se puede anular sin escribir nada y la auditoría registra un motivo de plantilla, debilitando
-`RN-GLOB-04`. *Recomendación:* inicializar vacío, `required`, mínimo 10 caracteres y placeholder.
+**F9 — El motivo sobrevivía a la operación anterior** (Bajo, integridad; detectado en esta ronda).
+Al compartirse un único campo de motivo, tras anular un pago quedaba su texto cargado y una segunda
+anulación lo reutilizaba, pudiendo justificar otra operación con un motivo ajeno.
+*Corrección:* el campo se limpia tras ejecutar con éxito la acción. Verificado en solicitud, pago, lote
+y vale de caja chica.
 
-**F2 — Anulación de pago sin confirmación** (Medio, UX; pre-existente).
-"Anular con reversión FIFO" ejecuta en el primer clic sobre una acción irreversible.
-*Recomendación:* paso de confirmación con el monto y el recibo afectados a la vista.
+### Documentados, pendientes de decisión del equipo
+
+**F2 — Anulación de pago sin confirmación** (Medio, UX; pre-existente). Atenuado.
+"Anular con reversión FIFO" sigue ejecutando en el primer clic, pero ya exige un motivo escrito por
+quien decide (F1), lo que elimina el clic accidental. *Recomendación pendiente:* paso de confirmación
+que muestre monto y recibo afectados.
 
 **F5 — Validación de formulario ausente en el pago** (Bajo; pre-existente).
 Si se envía el pago sin beneficiario, el aviso que aparece es `[RN-PAG-02] El beneficiario no posee

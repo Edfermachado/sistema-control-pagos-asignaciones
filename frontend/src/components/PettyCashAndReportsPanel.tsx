@@ -93,13 +93,12 @@ export function PettyCashAndReportsPanel({
   const [settleInvoice, setSettleInvoice] = useState('FACT-SENIAT-009841');
   const [settleFile, setSettleFile] = useState<File | null>(null);
 
-  // 5. Motivos de rechazo/anulación
-  const [voucherRejectionReason, setVoucherRejectionReason] = useState(
-    'Soporte insuficiente del gasto presentado',
-  );
-  const [voucherAnnulReason, setVoucherAnnulReason] = useState(
-    'Anulación justificada autorizada por Gerencia Administrativa',
-  );
+  // 5. Motivos de rechazo/anulación: vacíos por diseño, los escribe quien decide
+  // (RN-CAJA-03 exige ≥5 caracteres para rechazar y RN-GLOB-04 ≥10 para anular).
+  const [voucherRejectionReason, setVoucherRejectionReason] = useState('');
+  const [voucherAnnulReason, setVoucherAnnulReason] = useState('');
+  const hasVoucherRejectionReason = voucherRejectionReason.trim().length >= 5;
+  const hasVoucherAnnulReason = voucherAnnulReason.trim().length >= 10;
 
   const handleCreatePettyCash = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,6 +236,7 @@ export function PettyCashAndReportsPanel({
         body: { reason: voucherRejectionReason },
       });
       onNotify('success', 'Vale RECHAZADO con motivo registrado.');
+      setVoucherRejectionReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -308,6 +308,7 @@ export function PettyCashAndReportsPanel({
         body: { reason: voucherAnnulReason },
       });
       onNotify('success', 'Vale anulado y saldo revertido según su estado.');
+      setVoucherAnnulReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -944,6 +945,8 @@ export function PettyCashAndReportsPanel({
                                     type="button"
                                     className="btn btn--danger btn--sm"
                                     onClick={() => handleRejectVoucher(v.id)}
+                                    disabled={!hasVoucherRejectionReason}
+                                    title="Escriba el motivo de rechazo (mínimo 5 caracteres) para habilitar esta acción (RN-CAJA-03)"
                                   >
                                     Rechazar
                                   </button>
@@ -962,6 +965,8 @@ export function PettyCashAndReportsPanel({
                                     type="button"
                                     className="btn btn--danger btn--sm"
                                     onClick={() => handleRejectVoucher(v.id)}
+                                    disabled={!hasVoucherRejectionReason}
+                                    title="Escriba el motivo de rechazo (mínimo 5 caracteres) para habilitar esta acción (RN-CAJA-03)"
                                   >
                                     Rechazar
                                   </button>
@@ -986,6 +991,8 @@ export function PettyCashAndReportsPanel({
                                   type="button"
                                   className="btn btn--danger btn--sm"
                                   onClick={() => handleAnnulVoucher(v.id)}
+                                  disabled={!hasVoucherAnnulReason}
+                                  title="Escriba el motivo de anulación (mínimo 10 caracteres) para habilitar esta acción (RN-GLOB-04)"
                                 >
                                   Anular
                                 </button>

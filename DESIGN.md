@@ -170,6 +170,19 @@ Reglas:
 - Mientras se restaura la sesión se muestra un estado de carga (`.app-boot`), nunca la pantalla de
   acceso a medio pintar.
 
+### Acciones destructivas y justificaciones
+
+Las operaciones que una regla de negocio obliga a justificar (anular pago, causación, lote, solicitud
+o vale; rechazar solicitud o vale) siguen una sola pauta en todas las vistas:
+
+- El campo de motivo **nunca viene precargado**: lo escribe quien decide.
+- El botón que ejecuta la acción permanece **inhabilitado** hasta que el motivo alcanza el mínimo que
+  exige la regla (10 caracteres para anular, 5 para rechazar), y su `title` explica por qué.
+- El campo se **vacía al terminar** la operación, para que la justificación de una acción no quede
+  disponible para la siguiente.
+- El resultado se comunica por el aviso de la vista citando la regla aplicada, y el registro queda en
+  la bitácora de auditoría con el texto escrito.
+
 ---
 
 ## 7. Componentes y clases canónicas

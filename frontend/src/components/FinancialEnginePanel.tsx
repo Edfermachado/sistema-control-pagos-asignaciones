@@ -16,6 +16,9 @@ import {
   LiveProject,
 } from './CatalogsAndAssignmentsWorkspace';
 
+const JUSTIFICATION_HINT =
+  'Escriba el motivo (mínimo 10 caracteres) para habilitar esta acción justificada (RN-PAG-01/03)';
+
 export interface LiveAccrual {
   id: string;
   periodStart: string;
@@ -219,13 +222,13 @@ export function FinancialEnginePanel({
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
   const [payDate, setPayDate] = useState('2026-02-20');
 
-  // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos
-  const [annulReason, setAnnulReason] = useState(
-    'Corrección contable autorizada por Gerencia Administrativa FACYT (RN-PAG-03)',
-  );
-  const [reqRejectionReason, setReqRejectionReason] = useState(
-    'Observación presupuestaria de Gerencia (RN-PAG-01)',
-  );
+  // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos (RN-PAG-01/03).
+  // El campo arranca vacío: ninguna anulación ni rechazo puede ejecutarse con un
+  // texto precargado por la interfaz, debe escribirlo quien decide.
+  const [annulReason, setAnnulReason] = useState('');
+  const [reqRejectionReason, setReqRejectionReason] = useState('');
+  const hasAnnulReason = annulReason.trim().length >= 10;
+  const hasRejectionReason = reqRejectionReason.trim().length >= 10;
 
   const activeRequestAccrualIds = new Set(
     paymentRequests
@@ -409,6 +412,7 @@ export function FinancialEnginePanel({
           ? 'Solicitud APROBADA por Gerencia.'
           : 'Solicitud RECHAZADA con motivo registrado.',
       );
+      setReqRejectionReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -487,6 +491,7 @@ export function FinancialEnginePanel({
         'success',
         'Pago anulado transaccionalmente. La deuda retornó a las causaciones originales (RN-PAG-03).',
       );
+      setAnnulReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -508,6 +513,7 @@ export function FinancialEnginePanel({
         body: { reason: annulReason },
       });
       onNotify('success', 'Causación anulada con justificación en bitácora.');
+      setAnnulReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -529,6 +535,7 @@ export function FinancialEnginePanel({
         body: { reason: annulReason },
       });
       onNotify('success', 'Lote de causación anulado con justificación.');
+      setAnnulReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -550,6 +557,7 @@ export function FinancialEnginePanel({
         body: { reason: annulReason },
       });
       onNotify('success', 'Solicitud de pago anulada con justificación.');
+      setAnnulReason('');
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -826,6 +834,8 @@ export function FinancialEnginePanel({
                                 type="button"
                                 className="btn btn--danger btn--sm"
                                 onClick={() => handleAnnulAccrual(row.id)}
+                                disabled={!hasAnnulReason}
+                                title={JUSTIFICATION_HINT}
                               >
                                 Anular causación
                               </button>
@@ -904,6 +914,8 @@ export function FinancialEnginePanel({
                               type="button"
                               className="btn btn--danger btn--sm"
                               onClick={() => handleAnnulBatch(batch.id)}
+                              disabled={!hasAnnulReason}
+                              title={JUSTIFICATION_HINT}
                             >
                               Anular lote
                             </button>
@@ -1113,6 +1125,8 @@ export function FinancialEnginePanel({
                                   onClick={() =>
                                     handleReviewRequest(req.id, 'RECHAZADA')
                                   }
+                                  disabled={!hasRejectionReason}
+                                  title={JUSTIFICATION_HINT}
                                 >
                                   Rechazar
                                 </button>
@@ -1138,6 +1152,8 @@ export function FinancialEnginePanel({
                                 type="button"
                                 className="btn btn--danger btn--sm"
                                 onClick={() => handleAnnulRequest(req.id)}
+                                disabled={!hasAnnulReason}
+                                title={JUSTIFICATION_HINT}
                               >
                                 Anular solicitud
                               </button>
@@ -1366,6 +1382,8 @@ export function FinancialEnginePanel({
                               type="button"
                               className="btn btn--danger btn--sm"
                               onClick={() => handleAnnulPayment(p.id)}
+                              disabled={!hasAnnulReason}
+                              title={JUSTIFICATION_HINT}
                             >
                               Anular con reversión FIFO
                             </button>
