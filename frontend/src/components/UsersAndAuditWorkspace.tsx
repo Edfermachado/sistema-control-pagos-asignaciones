@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { UserRole } from '../types/domain.types';
 import { apiRequest } from '../utils/api-client.util';
+import { TableFilterBar } from './TableFilterBar';
+import { TablePagination } from './TablePagination';
+import {
+  filterTableByProperty,
+  paginateTableItems,
+  searchTableItems,
+} from '../utils/table-filter.util';
 
 export interface LiveUser {
   id: string;
@@ -72,6 +79,57 @@ export function UsersAndAuditWorkspace({
       Object.fromEntries(parameters.map((parameter) => [parameter.id, parameter.value])),
     );
   }, [parameters]);
+
+  // Estados para filtrado y paginación de usuarios
+  const [userSearch, setUserSearch] = useState('');
+  const [userRoleFilter, setUserRoleFilter] = useState('');
+  const [userPage, setUserPage] = useState(1);
+
+  // Estados para filtrado y paginación de auditoría
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditActionFilter, setAuditActionFilter] = useState('');
+  const [auditPage, setAuditPage] = useState(1);
+
+  // Usuarios filtrados y paginados
+  const filteredUsersByRole = filterTableByProperty(
+    users,
+    'role',
+    userRoleFilter as UserRole | '',
+  );
+  const filteredUsers = searchTableItems(
+    filteredUsersByRole,
+    userSearch,
+    ['email', 'fullName', 'role'],
+  );
+  const paginatedUsers = paginateTableItems(
+    filteredUsers,
+    userPage,
+    8,
+  );
+
+  // Auditoría filtrada y paginada
+  const filteredAuditByAction = filterTableByProperty(
+    auditLogs,
+    'action',
+    auditActionFilter,
+  );
+  const filteredAuditLogs = searchTableItems(
+    filteredAuditByAction,
+    auditSearch,
+    [
+      'tableName',
+      'recordId',
+      'action',
+      'userRole',
+      (log) => log.user?.fullName,
+      (log) => log.user?.email,
+    ],
+  );
+  const paginatedAuditLogs = paginateTableItems(
+    filteredAuditLogs,
+    auditPage,
+    12,
+  );
 
   const handleCreateParameter = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +298,34 @@ export function UsersAndAuditWorkspace({
               </button>
             </form>
 
+            <TableFilterBar
+              searchPlaceholder="Buscar por correo o nombre..."
+              searchQuery={userSearch}
+              onSearchChange={(q) => {
+                setUserSearch(q);
+                setUserPage(1);
+              }}
+              filterLabel="Rol"
+              filterValue={userRoleFilter}
+              filterOptions={[
+                { label: 'Todos los roles', value: 'ALL' },
+                { label: 'Administrador (ADMIN)', value: UserRole.ADMIN },
+                { label: 'Generador (GENERADOR)', value: UserRole.GENERADOR },
+                { label: 'Receptor (RECEPTOR)', value: UserRole.RECEPTOR },
+              ]}
+              onFilterChange={(v) => {
+                setUserRoleFilter(v);
+                setUserPage(1);
+              }}
+              resultCount={filteredUsers.length}
+              totalCount={users.length}
+              onReset={() => {
+                setUserSearch('');
+                setUserRoleFilter('');
+                setUserPage(1);
+              }}
+            />
+
             <div className="table-scroll">
               <table className="table">
                 <thead>
@@ -252,15 +338,16 @@ export function UsersAndAuditWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {users.length === 0 && (
+                  {paginatedUsers.items.length === 0 && (
                     <tr className="table__empty">
                       <td colSpan={5}>
-                        Sin usuarios registrados. Use el formulario de alta para
-                        crear la primera cuenta.
+                        {users.length === 0
+                          ? 'Sin usuarios registrados. Use el formulario de alta para crear la primera cuenta.'
+                          : 'No se encontraron usuarios que coincidan con la búsqueda o filtro.'}
                       </td>
                     </tr>
                   )}
-                  {users.map((u) => (
+                  {paginatedUsers.items.map((u) => (
                     <tr key={u.id}>
                       <td className="nowrap">{u.email}</td>
                       <td className="table__strong">{u.fullName}</td>
@@ -290,6 +377,15 @@ export function UsersAndAuditWorkspace({
                 </tbody>
               </table>
             </div>
+
+            <TablePagination
+              currentPage={paginatedUsers.currentPage}
+              totalPages={paginatedUsers.totalPages}
+              totalItems={paginatedUsers.totalItems}
+              startIndex={paginatedUsers.startIndex}
+              endIndex={paginatedUsers.endIndex}
+              onPageChange={setUserPage}
+            />
           </div>
         </section>
       )}
@@ -431,6 +527,34 @@ export function UsersAndAuditWorkspace({
           </div>
         </div>
         <div className="sheet__body sheet__body--flush">
+          <TableFilterBar
+            searchPlaceholder="Buscar por tabla, ID de registro, acción o usuario..."
+            searchQuery={auditSearch}
+            onSearchChange={(q) => {
+              setAuditSearch(q);
+              setAuditPage(1);
+            }}
+            filterLabel="Acción"
+            filterValue={auditActionFilter}
+            filterOptions={[
+              { label: 'Todas las acciones', value: 'ALL' },
+              { label: 'INSERT (Creación)', value: 'INSERT' },
+              { label: 'UPDATE (Modificación)', value: 'UPDATE' },
+              { label: 'DELETE (Eliminación)', value: 'DELETE' },
+            ]}
+            onFilterChange={(v) => {
+              setAuditActionFilter(v);
+              setAuditPage(1);
+            }}
+            resultCount={filteredAuditLogs.length}
+            totalCount={auditLogs.length}
+            onReset={() => {
+              setAuditSearch('');
+              setAuditActionFilter('');
+              setAuditPage(1);
+            }}
+          />
+
           <div className="table-scroll">
             <table className="table">
               <thead>
@@ -444,15 +568,16 @@ export function UsersAndAuditWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {auditLogs.length === 0 && (
+                {paginatedAuditLogs.items.length === 0 && (
                   <tr className="table__empty">
                     <td colSpan={6}>
-                      Sin registros de auditoría. Las operaciones sobre la base
-                      de datos quedarán registradas aquí.
+                      {auditLogs.length === 0
+                        ? 'Sin registros de auditoría. Las operaciones sobre la base de datos quedarán registradas aquí.'
+                        : 'No se encontraron registros de auditoría que coincidan con la búsqueda o filtro.'}
                     </td>
                   </tr>
                 )}
-                {auditLogs.map((log) => (
+                {paginatedAuditLogs.items.map((log) => (
                   <tr key={log.id}>
                     <td className="nowrap">
                       {String(log.createdAt).slice(0, 19).replace('T', ' ')} UTC
@@ -496,6 +621,15 @@ export function UsersAndAuditWorkspace({
               </tbody>
             </table>
           </div>
+
+          <TablePagination
+            currentPage={paginatedAuditLogs.currentPage}
+            totalPages={paginatedAuditLogs.totalPages}
+            totalItems={paginatedAuditLogs.totalItems}
+            startIndex={paginatedAuditLogs.startIndex}
+            endIndex={paginatedAuditLogs.endIndex}
+            onPageChange={setAuditPage}
+          />
         </div>
       </section>
     </div>

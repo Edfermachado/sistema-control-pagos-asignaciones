@@ -8,6 +8,13 @@ import {
 } from '../types/domain.types';
 import { apiRequest } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
+import { TableFilterBar } from './TableFilterBar';
+import { TablePagination } from './TablePagination';
+import {
+  filterTableByProperty,
+  paginateTableItems,
+  searchTableItems,
+} from '../utils/table-filter.util';
 
 export interface LiveProject {
   id: string;
@@ -148,6 +155,76 @@ export function CatalogsAndAssignmentsWorkspace({
   const [newPeriodLabel, setNewPeriodLabel] = useState('Corte personalizado');
 
   const effectivePeriodGroupId = periodGroupId || paymentGroups[0]?.id || '';
+
+  // Estados de búsqueda, filtros y paginación
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectAreaFilter, setProjectAreaFilter] = useState('');
+  const [projectPage, setProjectPage] = useState(1);
+
+  const [beneficiarySearch, setBeneficiarySearch] = useState('');
+  const [beneficiaryStatusFilter, setBeneficiaryStatusFilter] = useState('');
+  const [beneficiaryPage, setBeneficiaryPage] = useState(1);
+
+  const [assignmentSearch, setAssignmentSearch] = useState('');
+  const [assignmentProjectFilter, setAssignmentProjectFilter] = useState('');
+  const [assignmentPage, setAssignmentPage] = useState(1);
+
+  // Proyectos filtrados y paginados
+  const filteredProjectsByArea = filterTableByProperty(
+    projects,
+    'area',
+    projectAreaFilter as ProjectArea | '',
+  );
+  const filteredProjects = searchTableItems(
+    filteredProjectsByArea,
+    projectSearch,
+    ['code', 'name', 'scope'],
+  );
+  const paginatedProjects = paginateTableItems(
+    filteredProjects,
+    projectPage,
+    8,
+  );
+
+  // Beneficiarios filtrados y paginados
+  const filteredBeneficiariesByStatus =
+    beneficiaryStatusFilter === 'ACTIVO'
+      ? beneficiaries.filter((b) => b.isActive)
+      : beneficiaryStatusFilter === 'INACTIVO'
+        ? beneficiaries.filter((b) => !b.isActive)
+        : beneficiaries;
+  const filteredBeneficiaries = searchTableItems(
+    filteredBeneficiariesByStatus,
+    beneficiarySearch,
+    ['dni', 'fullName', 'email', 'bankInfo'],
+  );
+  const paginatedBeneficiaries = paginateTableItems(
+    filteredBeneficiaries,
+    beneficiaryPage,
+    8,
+  );
+
+  // Asignaciones filtradas y paginadas
+  const filteredAssignmentsByProject = filterTableByProperty(
+    assignments,
+    'projectId',
+    assignmentProjectFilter,
+  );
+  const filteredAssignments = searchTableItems(
+    filteredAssignmentsByProject,
+    assignmentSearch,
+    [
+      (a) => a.beneficiary?.fullName,
+      (a) => a.beneficiary?.dni,
+      (a) => a.project?.code,
+      (a) => a.project?.name,
+    ],
+  );
+  const paginatedAssignments = paginateTableItems(
+    filteredAssignments,
+    assignmentPage,
+    8,
+  );
 
   useEffect(() => {
     const loadPeriods = async () => {
@@ -567,6 +644,34 @@ export function CatalogsAndAssignmentsWorkspace({
               </form>
             )}
 
+            <TableFilterBar
+              searchPlaceholder="Buscar por código, nombre o ámbito..."
+              searchQuery={projectSearch}
+              onSearchChange={(q) => {
+                setProjectSearch(q);
+                setProjectPage(1);
+              }}
+              filterLabel="Área"
+              filterValue={projectAreaFilter}
+              filterOptions={[
+                { label: 'Todas las áreas', value: 'ALL' },
+                { label: 'Física', value: ProjectArea.FISICA },
+                { label: 'Química', value: ProjectArea.QUIMICA },
+                { label: 'Biología', value: ProjectArea.BIOLOGIA },
+              ]}
+              onFilterChange={(v) => {
+                setProjectAreaFilter(v);
+                setProjectPage(1);
+              }}
+              resultCount={filteredProjects.length}
+              totalCount={projects.length}
+              onReset={() => {
+                setProjectSearch('');
+                setProjectAreaFilter('');
+                setProjectPage(1);
+              }}
+            />
+
             <div className="table-scroll">
               <table className="table">
                 <thead>
@@ -581,15 +686,16 @@ export function CatalogsAndAssignmentsWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {projects.length === 0 && (
+                  {paginatedProjects.items.length === 0 && (
                     <tr className="table__empty">
                       <td colSpan={canManageProjects ? 7 : 6}>
-                        No hay proyectos en el catálogo. Registre el primero con
-                        el formulario superior.
+                        {projects.length === 0
+                          ? 'No hay proyectos en el catálogo. Registre el primero con el formulario superior.'
+                          : 'No se encontraron proyectos que coincidan con la búsqueda o filtro.'}
                       </td>
                     </tr>
                   )}
-                  {projects.map((p) => (
+                  {paginatedProjects.items.map((p) => (
                     <tr key={p.id}>
                       <td className="nowrap">{p.code}</td>
                       <td className="table__strong">{p.name}</td>
@@ -646,6 +752,15 @@ export function CatalogsAndAssignmentsWorkspace({
                 </tbody>
               </table>
             </div>
+
+            <TablePagination
+              currentPage={paginatedProjects.currentPage}
+              totalPages={paginatedProjects.totalPages}
+              totalItems={paginatedProjects.totalItems}
+              startIndex={paginatedProjects.startIndex}
+              endIndex={paginatedProjects.endIndex}
+              onPageChange={setProjectPage}
+            />
           </div>
         </div>
       </section>
@@ -991,6 +1106,33 @@ export function CatalogsAndAssignmentsWorkspace({
               </form>
             )}
 
+            <TableFilterBar
+              searchPlaceholder="Buscar por cédula, nombre, correo o banco..."
+              searchQuery={beneficiarySearch}
+              onSearchChange={(q) => {
+                setBeneficiarySearch(q);
+                setBeneficiaryPage(1);
+              }}
+              filterLabel="Estado"
+              filterValue={beneficiaryStatusFilter}
+              filterOptions={[
+                { label: 'Todos los estados', value: 'ALL' },
+                { label: 'Activos', value: 'ACTIVO' },
+                { label: 'Inactivos', value: 'INACTIVO' },
+              ]}
+              onFilterChange={(v) => {
+                setBeneficiaryStatusFilter(v);
+                setBeneficiaryPage(1);
+              }}
+              resultCount={filteredBeneficiaries.length}
+              totalCount={beneficiaries.length}
+              onReset={() => {
+                setBeneficiarySearch('');
+                setBeneficiaryStatusFilter('');
+                setBeneficiaryPage(1);
+              }}
+            />
+
             <div className="table-scroll">
               <table className="table">
                 <thead>
@@ -1004,15 +1146,16 @@ export function CatalogsAndAssignmentsWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {beneficiaries.length === 0 && (
+                  {paginatedBeneficiaries.items.length === 0 && (
                     <tr className="table__empty">
                       <td colSpan={canManageBeneficiaries ? 6 : 5}>
-                        No hay beneficiarios registrados. Registre una persona
-                        para asignarle pagos.
+                        {beneficiaries.length === 0
+                          ? 'No hay beneficiarios registrados. Registre una persona para asignarle pagos.'
+                          : 'No se encontraron beneficiarios que coincidan con la búsqueda o filtro.'}
                       </td>
                     </tr>
                   )}
-                  {beneficiaries.map((b) => (
+                  {paginatedBeneficiaries.items.map((b) => (
                     <tr key={b.id}>
                       <td className="nowrap">{b.dni}</td>
                       <td className="table__strong">{b.fullName}</td>
@@ -1050,6 +1193,15 @@ export function CatalogsAndAssignmentsWorkspace({
                 </tbody>
               </table>
             </div>
+
+            <TablePagination
+              currentPage={paginatedBeneficiaries.currentPage}
+              totalPages={paginatedBeneficiaries.totalPages}
+              totalItems={paginatedBeneficiaries.totalItems}
+              startIndex={paginatedBeneficiaries.startIndex}
+              endIndex={paginatedBeneficiaries.endIndex}
+              onPageChange={setBeneficiaryPage}
+            />
           </div>
         </div>
       </section>
@@ -1170,6 +1322,35 @@ export function CatalogsAndAssignmentsWorkspace({
               </form>
             )}
 
+            <TableFilterBar
+              searchPlaceholder="Buscar por beneficiario, cédula o proyecto..."
+              searchQuery={assignmentSearch}
+              onSearchChange={(q) => {
+                setAssignmentSearch(q);
+                setAssignmentPage(1);
+              }}
+              filterLabel="Proyecto"
+              filterValue={assignmentProjectFilter}
+              filterOptions={[
+                { label: 'Todos los proyectos', value: 'ALL' },
+                ...projects.map((p) => ({
+                  label: `${p.code} — ${p.name}`,
+                  value: p.id,
+                })),
+              ]}
+              onFilterChange={(v) => {
+                setAssignmentProjectFilter(v);
+                setAssignmentPage(1);
+              }}
+              resultCount={filteredAssignments.length}
+              totalCount={assignments.length}
+              onReset={() => {
+                setAssignmentSearch('');
+                setAssignmentProjectFilter('');
+                setAssignmentPage(1);
+              }}
+            />
+
             <div className="table-scroll">
               <table className="table">
                 <thead>
@@ -1186,15 +1367,16 @@ export function CatalogsAndAssignmentsWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {assignments.length === 0 && (
+                  {paginatedAssignments.items.length === 0 && (
                     <tr className="table__empty">
                       <td colSpan={canEditAssignments ? 7 : 6}>
-                        No hay asignaciones registradas. Vincule un beneficiario
-                        a un proyecto y a un grupo de pago.
+                        {assignments.length === 0
+                          ? 'No hay asignaciones registradas. Vincule un beneficiario a un proyecto y a un grupo de pago.'
+                          : 'No se encontraron asignaciones que coincidan con la búsqueda o filtro.'}
                       </td>
                     </tr>
                   )}
-                  {assignments.map((a) => (
+                  {paginatedAssignments.items.map((a) => (
                     <tr key={a.id}>
                       <td className="table__strong">
                         {a.beneficiary?.fullName ?? a.beneficiaryId}
@@ -1237,6 +1419,15 @@ export function CatalogsAndAssignmentsWorkspace({
                 </tbody>
               </table>
             </div>
+
+            <TablePagination
+              currentPage={paginatedAssignments.currentPage}
+              totalPages={paginatedAssignments.totalPages}
+              totalItems={paginatedAssignments.totalItems}
+              startIndex={paginatedAssignments.startIndex}
+              endIndex={paginatedAssignments.endIndex}
+              onPageChange={setAssignmentPage}
+            />
           </div>
         </div>
       </section>

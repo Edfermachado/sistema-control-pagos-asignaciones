@@ -34,6 +34,12 @@ import {
 import { apiRequest } from './utils/api-client.util';
 import { formatUsdCurrency } from './utils/currency.util';
 import { getRoleDisplayLabel } from './utils/rbac.util';
+import { TableFilterBar } from './components/TableFilterBar';
+import { TablePagination } from './components/TablePagination';
+import {
+  paginateTableItems,
+  searchTableItems,
+} from './utils/table-filter.util';
 
 type WorkspaceTab =
   | 'RESUMEN'
@@ -270,6 +276,8 @@ export function App(): React.ReactElement {
   const [auditLogs, setAuditLogs] = useState<LiveAuditRecord[]>([]);
   const [summary, setSummary] = useState<ExecutiveSummaryData | null>(null);
   const [summaryProjectFilter, setSummaryProjectFilter] = useState<string>('');
+  const [summarySearchQuery, setSummarySearchQuery] = useState<string>('');
+  const [summaryPage, setSummaryPage] = useState<number>(1);
 
   const handleNotify = useCallback(
     (type: 'success' | 'error', message: string) => {
@@ -442,7 +450,17 @@ export function App(): React.ReactElement {
       (tab !== 'MOTOR_FINANCIERO' && tab !== 'CAJA_CHICA'),
   );
   const meta = WORKSPACE_META[activeTab];
-  const balanceRows = summary?.beneficiaryBalances ?? [];
+  const rawBalanceRows = summary?.beneficiaryBalances ?? [];
+  const filteredBalanceRows = searchTableItems(
+    rawBalanceRows,
+    summarySearchQuery,
+    ['beneficiaryDni', 'beneficiaryName'],
+  );
+  const paginatedBalanceData = paginateTableItems(
+    filteredBalanceRows,
+    summaryPage,
+    10,
+  );
 
   return (
     <div className="shell">
@@ -686,6 +704,20 @@ export function App(): React.ReactElement {
                   </div>
                 </div>
                 <div className="sheet__body sheet__body--flush">
+                  <TableFilterBar
+                    searchPlaceholder="Buscar por cédula o beneficiario..."
+                    searchQuery={summarySearchQuery}
+                    onSearchChange={(q) => {
+                      setSummarySearchQuery(q);
+                      setSummaryPage(1);
+                    }}
+                    resultCount={filteredBalanceRows.length}
+                    totalCount={rawBalanceRows.length}
+                    onReset={() => {
+                      setSummarySearchQuery('');
+                      setSummaryPage(1);
+                    }}
+                  />
                   <div className="table-scroll">
                     <table className="table">
                       <thead>
@@ -704,15 +736,16 @@ export function App(): React.ReactElement {
                         </tr>
                       </thead>
                       <tbody>
-                        {balanceRows.length === 0 && (
+                        {paginatedBalanceData.items.length === 0 && (
                           <tr className="table__empty">
                             <td colSpan={5}>
-                              Sin causaciones registradas para el filtro actual.
-                              Genere un lote de causación en el espacio 3.
+                              {rawBalanceRows.length === 0
+                                ? 'Sin causaciones registradas para el filtro actual. Genere un lote de causación en el espacio 3.'
+                                : 'No se encontraron beneficiarios que coincidan con la búsqueda.'}
                             </td>
                           </tr>
                         )}
-                        {balanceRows.map((row) => (
+                        {paginatedBalanceData.items.map((row) => (
                           <tr key={row.beneficiaryId}>
                             <td className="nowrap">{row.beneficiaryDni}</td>
                             <td className="table__strong">
@@ -732,6 +765,14 @@ export function App(): React.ReactElement {
                       </tbody>
                     </table>
                   </div>
+                  <TablePagination
+                    currentPage={paginatedBalanceData.currentPage}
+                    totalPages={paginatedBalanceData.totalPages}
+                    totalItems={paginatedBalanceData.totalItems}
+                    startIndex={paginatedBalanceData.startIndex}
+                    endIndex={paginatedBalanceData.endIndex}
+                    onPageChange={setSummaryPage}
+                  />
                 </div>
               </section>
             </>

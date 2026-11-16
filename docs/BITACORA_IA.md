@@ -296,3 +296,26 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * **Smoke test API:** `68/68`.
   * **10 capturas** (5 vistas × 1440×900 y 390×844): 0 errores de consola, 0 desbordes, 0 recortes, 0 fallos de contraste y 0 estilos inline.
   * Informe completo con el checklist de pruebas: [`docs/QA_VISTAS_Y_PRUEBAS.md`](./QA_VISTAS_Y_PRUEBAS.md).
+
+---
+
+### Interacción #16 — Implementación de la lógica de filtrado, búsqueda y paginación en tablas del frontend
+* **Fecha:** Noviembre 2026 · **Rama:** `dervis`
+* **Herramientas / Modelos:** Antigravity (Gemini 3.8 Flash)
+* **Indicación (Prompt) del Usuario:**
+  > *"crea la logica del filtro y las tablas"*
+* **Motivación y Arquitectura:**
+  En vistas con alto volumen de datos (beneficiarios, proyectos, asignaciones y bitácora de auditoría), las tablas sin paginación ni búsqueda dificultan la consulta y la evaluación. Siguiendo `ESTANDARES_DESARROLLO_CLEAN_CODE.md` (`CC-01` sin `any`, `CC-02` funciones puras deterministas, `TEST-01` pruebas unitarias 1:1 con patrón AAA) y `DESIGN.md` (cero estilos inline, uso estricto de tokens de diseño):
+* **Implementación:**
+  1. **`frontend/src/utils/table-filter.util.ts`**: Utilidades puras deterministas para búsqueda insensible a mayúsculas/minúsculas (`searchTableItems`), filtrado por propiedad (`filterTableByProperty`) y paginación segura con límites de página (`paginateTableItems`).
+  2. **`frontend/src/utils/table-filter.util.spec.ts`**: Suite completa de 9 pruebas unitarias con patrón AAA cubriendo casos felices, consultas vacías, funciones extractoras personalizadas y límites de página en listas vacías.
+  3. **`frontend/src/components/TableFilterBar.tsx`**: Control de búsqueda reactivo con input semántico, selectores de filtro opcionales, contador de resultados en vivo y botón para restablecer filtros.
+  4. **`frontend/src/components/TablePagination.tsx`**: Paginador con numeración tabular, límites de registros mostrados y navegación de páginas accesible.
+  5. **`frontend/src/styles/design-system.css`**: Incorporación de tokens y clases `.table-toolbar`, `.table-pagination`, `.table-pagination__btn` sin dependencias externas ni estilos inline.
+  6. **Integración en vistas:**
+     - **`App.tsx`**: Tabla de estado de cuenta por beneficiario con buscador por cédula/nombre y paginación.
+     - **`CatalogsAndAssignmentsWorkspace.tsx`**: Tablas de Proyectos (filtro por área y texto), Beneficiarios (filtro por estado activo/inactivo y texto) y Asignaciones (filtro por proyecto y texto).
+     - **`UsersAndAuditWorkspace.tsx`**: Tablas de Usuarios (filtro por rol y texto) y Bitácora de Auditoría (filtro por acción `INSERT`/`UPDATE`/`DELETE` y texto).
+* **Verificación técnica:**
+  - **Pruebas Frontend:** 6 suites / `36/36` pruebas pasando en verde con Vitest (+9 pruebas nuevas).
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso con cero advertencias de tipo y cero estilos inline.
