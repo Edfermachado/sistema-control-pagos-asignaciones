@@ -92,6 +92,15 @@ describe('AuditService (RN-AUD-03 Trazabilidad Completa Append-Only)', () => {
       expect(logs).toHaveLength(1);
       expect(prismaMock.auditLog.findMany).toHaveBeenCalledWith({
         where: { tableName: 'projects' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         take: 50,
       });
@@ -107,6 +116,15 @@ describe('AuditService (RN-AUD-03 Trazabilidad Completa Append-Only)', () => {
       // Assert
       expect(prismaMock.auditLog.findMany).toHaveBeenCalledWith({
         where: {},
+        include: {
+          user: {
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
         take: 100,
       });

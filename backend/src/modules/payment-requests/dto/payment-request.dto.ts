@@ -30,7 +30,7 @@ export class ReviewPaymentRequestDto {
     message:
       '[RN-PAG-01] La decisión de revisión debe ser APROBADA o RECHAZADA.',
   })
-  decision!: PaymentRequestStatus.APROBADA | PaymentRequestStatus.RECHAZADA;
+  decision!: PaymentRequestStatus;
 
   @IsOptional()
   @IsString()

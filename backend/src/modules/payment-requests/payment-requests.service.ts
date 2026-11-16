@@ -142,7 +142,7 @@ export class PaymentRequestsService {
     }
 
     assertValidPaymentRequestTransition(
-      existing.status as unknown as PaymentRequestStatus,
+      existing.status,
       PaymentRequestStatus.ENVIADA,
     );
 
@@ -183,10 +183,7 @@ export class PaymentRequestsService {
       throw new NotFoundException(`La solicitud de pago '${id}' no existe.`);
     }
 
-    assertValidPaymentRequestTransition(
-      existing.status as unknown as PaymentRequestStatus,
-      dto.decision,
-    );
+    assertValidPaymentRequestTransition(existing.status, dto.decision);
 
     if (
       dto.decision === PaymentRequestStatus.RECHAZADA &&
@@ -239,7 +236,7 @@ export class PaymentRequestsService {
     }
 
     assertPaymentRequestCanBeClosed(
-      existing.status as unknown as PaymentRequestStatus,
+      existing.status,
       existing.totalAmount.toString(),
       existing.paidAmount.toString(),
     );

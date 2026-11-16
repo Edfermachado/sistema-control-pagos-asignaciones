@@ -65,7 +65,7 @@ export class AccrualsService {
 
     assertProjectAllowsNewAccruals(
       {
-        status: project.status as unknown as ProjectStatus,
+        status: project.status,
         startDate: project.startDate,
         endDate: project.endDate,
       },
@@ -107,6 +107,10 @@ export class AccrualsService {
     const items: AccrualPreviewItem[] = [];
 
     for (const assignment of assignments) {
+      if (assignment.beneficiary && assignment.beneficiary.isActive === false) {
+        continue;
+      }
+
       const calc = calculateProratedAccrual({
         amountPerPeriod: assignment.amountPerPeriod.toString(),
         periodStart,
@@ -172,8 +176,8 @@ export class AccrualsService {
     const existingAccruals = await this.prisma.accrual.findMany({
       where: {
         assignmentId: { in: preview.items.map((i) => i.assignmentId) },
-        periodStart,
-        periodEnd,
+        periodStart: { lte: periodEnd },
+        periodEnd: { gte: periodStart },
         status: { not: AccrualStatus.ANULADO },
       },
     });

@@ -40,19 +40,25 @@ const ASSIGNMENTS = {
   alejandroFisica: '55555555-5555-4555-8555-555555555501',
   valeriaQuimica: '55555555-5555-4555-8555-555555555502',
   valeriaBiologia: '55555555-5555-4555-8555-555555555503',
+  gabrielBiologia: '55555555-5555-4555-8555-555555555504',
 } as const;
 
 const BATCHES = {
   fisicaQ1: '66666666-6666-4666-8666-666666666601',
   fisicaQ2: '66666666-6666-4666-8666-666666666602',
+  quimicaQ1: '66666666-6666-4666-8666-666666666603',
+  biologiaM10: '66666666-6666-4666-8666-666666666604',
 } as const;
 
 const ACCRUALS = {
   fisicaQ1: '77777777-7777-4777-8777-777777777701',
   fisicaQ2: '77777777-7777-4777-8777-777777777702',
+  quimicaQ1: '77777777-7777-4777-8777-777777777703',
+  biologiaM10: '77777777-7777-4777-8777-777777777704',
 } as const;
 
 const PAYMENT_REQUEST = '88888888-8888-4888-8888-888888888801';
+const PAYMENT_REQUEST_BIO = '88888888-8888-4888-8888-888888888802';
 const PAYMENT = '99999999-9999-4999-8999-999999999901';
 const PETTY_CASH = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbb01';
 const PETTY_CASH_PERIODS = {
@@ -166,6 +172,15 @@ async function main(): Promise<void> {
       startDate: new Date('2026-03-01T00:00:00Z'),
       endDate: new Date('2026-12-31T00:00:00Z'),
     },
+    {
+      id: ASSIGNMENTS.gabrielBiologia,
+      beneficiaryId: BENEFICIARIES.gabriel,
+      projectId: PROJECTS.biologia,
+      paymentGroupId: PAYMENT_GROUPS.semanal,
+      amountPerPeriod: '140.00',
+      startDate: new Date('2026-03-01T00:00:00Z'),
+      endDate: new Date('2026-12-31T00:00:00Z'),
+    },
   ];
 
   for (const a of assignments) {
@@ -197,6 +212,26 @@ async function main(): Promise<void> {
       periodEnd: new Date('2026-10-31T00:00:00Z'),
       totalDays: 16,
       totalAmount: '450.00',
+    },
+    {
+      id: BATCHES.quimicaQ1,
+      code: 'LOTE-QUI-2026-Q1',
+      projectId: PROJECTS.quimica,
+      paymentGroupId: PAYMENT_GROUPS.quincenal,
+      periodStart: new Date('2026-11-01T00:00:00Z'),
+      periodEnd: new Date('2026-11-15T00:00:00Z'),
+      totalDays: 15,
+      totalAmount: '150.00',
+    },
+    {
+      id: BATCHES.biologiaM10,
+      code: 'LOTE-BIO-2026-M10',
+      projectId: PROJECTS.biologia,
+      paymentGroupId: PAYMENT_GROUPS.mensual,
+      periodStart: new Date('2026-10-01T00:00:00Z'),
+      periodEnd: new Date('2026-10-31T00:00:00Z'),
+      totalDays: 31,
+      totalAmount: '600.00',
     },
   ];
 
@@ -239,6 +274,36 @@ async function main(): Promise<void> {
       balanceDue: '300.00',
       status: AccrualStatus.PARCIAL,
     },
+    {
+      id: ACCRUALS.quimicaQ1,
+      batchId: BATCHES.quimicaQ1,
+      assignmentId: ASSIGNMENTS.valeriaQuimica,
+      beneficiaryId: BENEFICIARIES.valeria,
+      projectId: PROJECTS.quimica,
+      periodStart: new Date('2026-11-01T00:00:00Z'),
+      periodEnd: new Date('2026-11-15T00:00:00Z'),
+      activeDays: 5,
+      totalPeriodDays: 15,
+      proratedAmount: '150.00',
+      paidAmount: '0.00',
+      balanceDue: '150.00',
+      status: AccrualStatus.PENDIENTE,
+    },
+    {
+      id: ACCRUALS.biologiaM10,
+      batchId: BATCHES.biologiaM10,
+      assignmentId: ASSIGNMENTS.valeriaBiologia,
+      beneficiaryId: BENEFICIARIES.valeria,
+      projectId: PROJECTS.biologia,
+      periodStart: new Date('2026-10-01T00:00:00Z'),
+      periodEnd: new Date('2026-10-31T00:00:00Z'),
+      activeDays: 31,
+      totalPeriodDays: 31,
+      proratedAmount: '600.00',
+      paidAmount: '0.00',
+      balanceDue: '600.00',
+      status: AccrualStatus.PENDIENTE,
+    },
   ];
 
   for (const accrual of accruals) {
@@ -249,7 +314,7 @@ async function main(): Promise<void> {
     });
   }
 
-  // Solicitud de pago ENTREGADA con pago parcial FIFO (RN-PAG-01 / RN-PAG-02)
+  // Solicitudes de pago de demostración (RN-PAG-01 / RN-PAG-02)
   await prisma.paymentRequest.upsert({
     where: { code: 'SOL-FIS-2026-001' },
     update: {},
@@ -262,18 +327,23 @@ async function main(): Promise<void> {
       totalAmount: '900.00',
       paidAmount: '600.00',
       status: PaymentRequestStatus.ENTREGADA,
-      items: {
-        create: [
-          {
-            accrualId: ACCRUALS.fisicaQ1,
-            requestedAmount: '450.00',
-          },
-          {
-            accrualId: ACCRUALS.fisicaQ2,
-            requestedAmount: '450.00',
-          },
-        ],
-      },
+      sentAt: new Date('2026-11-01T10:00:00Z'),
+      reviewedAt: new Date('2026-11-02T14:30:00Z'),
+    },
+  });
+
+  await prisma.paymentRequest.upsert({
+    where: { code: 'SOL-BIO-2026-001' },
+    update: {},
+    create: {
+      id: PAYMENT_REQUEST_BIO,
+      code: 'SOL-BIO-2026-001',
+      projectId: PROJECTS.biologia,
+      createdById: USERS.generador,
+      totalAmount: '600.00',
+      paidAmount: '0.00',
+      status: PaymentRequestStatus.ENVIADA,
+      sentAt: new Date('2026-11-04T09:30:00Z'),
     },
   });
 
@@ -289,6 +359,12 @@ async function main(): Promise<void> {
       paymentRequestId: PAYMENT_REQUEST,
       accrualId: ACCRUALS.fisicaQ2,
       requestedAmount: '450.00',
+    },
+    {
+      id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee03',
+      paymentRequestId: PAYMENT_REQUEST_BIO,
+      accrualId: ACCRUALS.biologiaM10,
+      requestedAmount: '600.00',
     },
   ];
 
@@ -419,7 +495,23 @@ async function main(): Promise<void> {
       settledAmount: '134.50',
       returnedAmount: '0.00',
       invoiceReference: 'FACT-FIS-2026-1042',
+      attachmentUrl: '/uploads/factura-fis-2026-1042.pdf',
       status: PettyCashVoucherStatus.RENDIDO,
+    },
+  });
+
+  await prisma.pettyCashVoucher.upsert({
+    where: { code: 'VALE-FIS-2026-11A' },
+    update: {},
+    create: {
+      id: 'dddddddd-dddd-4ddd-8ddd-dddddddddd02',
+      code: 'VALE-FIS-2026-11A',
+      periodId: PETTY_CASH_PERIODS.noviembre,
+      requestedById: USERS.generador,
+      beneficiaryName: 'TSU. Luis Herrera',
+      concept: 'Adquisición de lentes colimadores de repuesto',
+      requestedAmount: '45.00',
+      status: PettyCashVoucherStatus.SOLICITADO,
     },
   });
 

@@ -33,6 +33,7 @@ export function assertValidYearMonth(yearMonth: string): string {
 export function calculateOpeningAvailableBalance(
   carryoverBalance: string | number | Decimal,
   initialReplenishment: string | number | Decimal,
+  authorizedAmount?: string | number | Decimal,
 ): string {
   const carryoverDec = toUsdDecimal(carryoverBalance);
   const replenishmentDec = toUsdDecimal(initialReplenishment);
@@ -48,6 +49,15 @@ export function calculateOpeningAvailableBalance(
     throw new BadRequestException(
       '[RN-CAJA-02] La apertura mensual de caja chica debe contar con un saldo disponible mayor a 0.00 USD.',
     );
+  }
+
+  if (authorizedAmount !== undefined && authorizedAmount !== null) {
+    const authorizedDec = toUsdDecimal(authorizedAmount);
+    if (totalOpening.gt(authorizedDec)) {
+      throw new BadRequestException(
+        `[RN-CAJA-02] El saldo inicial de apertura ($${totalOpening.toFixed(2)}) supera el tope autorizado de la caja chica ($${authorizedDec.toFixed(2)}).`,
+      );
+    }
   }
 
   return totalOpening.toFixed(2);

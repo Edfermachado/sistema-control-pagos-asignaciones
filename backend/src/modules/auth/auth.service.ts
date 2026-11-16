@@ -51,7 +51,7 @@ export class AuthService {
       );
     }
 
-    const role = user.role as unknown as UserRole;
+    const role = user.role;
     const secret = process.env.JWT_SECRET ?? DEFAULT_JWT_SECRET;
     const accessToken = signJwtToken(
       {

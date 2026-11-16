@@ -9,6 +9,7 @@ import {
 export interface FifoAccrualCandidate {
   id: string;
   periodStart: Date;
+  periodEnd?: Date;
   createdAt?: Date;
   paidAmount: string | number | Decimal;
   balanceDue: string | number | Decimal;
@@ -39,6 +40,13 @@ export function sortAccrualsForFifo(
     const startDiff = a.periodStart.getTime() - b.periodStart.getTime();
     if (startDiff !== 0) {
       return startDiff;
+    }
+
+    if (a.periodEnd && b.periodEnd) {
+      const endDiff = a.periodEnd.getTime() - b.periodEnd.getTime();
+      if (endDiff !== 0) {
+        return endDiff;
+      }
     }
 
     const createdA = a.createdAt ? a.createdAt.getTime() : 0;

@@ -105,6 +105,7 @@ export class AnnulmentsService {
         data: {
           paidAmount: updatedRequestPaid,
           status: reopenedStatus,
+          ...(payment.paymentRequest.closedAt ? { closedAt: null } : {}),
         },
       });
 
@@ -190,6 +191,30 @@ export class AnnulmentsService {
           balanceDue: '0.00',
         },
       });
+
+      if (accrual.batchId && tx.accrualBatch) {
+        const parentBatch = await tx.accrualBatch.findUnique({
+          where: { id: accrual.batchId },
+        });
+        if (parentBatch) {
+          const reducedBatchTotal = DecimalMaxZero(
+            toUsdDecimal(parentBatch.totalAmount.toString()).minus(
+              toUsdDecimal(
+                (accrual.proratedAmount ?? accrual.balanceDue).toString(),
+              ),
+            ),
+          );
+          await tx.accrualBatch.update({
+            where: { id: accrual.batchId },
+            data: {
+              totalAmount: reducedBatchTotal,
+              ...(toUsdDecimal(reducedBatchTotal).eq(0)
+                ? { status: AccrualBatchStatus.ANULADO }
+                : {}),
+            },
+          });
+        }
+      }
 
       const annulmentRecord = await tx.annulment.create({
         data: {
@@ -362,7 +387,7 @@ export class AnnulmentsService {
     }
 
     assertValidPaymentRequestTransition(
-      request.status as unknown as PaymentRequestStatus,
+      request.status,
       PaymentRequestStatus.ANULADA,
     );
 

@@ -12,7 +12,7 @@ export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
   @Get('summary')
-  @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR, UserRole.RECEPTOR)
   async getSummary(@Query('projectId') projectId?: string) {
     return this.reportsService.getExecutiveSummaryAndDebts(projectId);
   }

@@ -7,7 +7,7 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { diskStorage, MulterDiskFile } from 'multer';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { UserRole } from '../../common/constants/domain.enums';
@@ -58,7 +58,7 @@ export class UploadsController {
       },
     }),
   )
-  async upload(@UploadedFile() file?: Express.Multer.File) {
+  async upload(@UploadedFile() file?: MulterDiskFile) {
     if (!file) {
       throw new BadRequestException(
         '[RN-CAJA-03] Debe adjuntar un archivo de comprobante.',

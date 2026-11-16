@@ -115,6 +115,22 @@ export class PettyCashService {
       orderBy: { yearMonth: 'desc' },
     });
 
+    if (lastClosedPeriod?.yearMonth && yearMonth <= lastClosedPeriod.yearMonth) {
+      throw new BadRequestException(
+        `[RN-CAJA-02] El período a abrir (${yearMonth}) debe ser cronológicamente posterior al último período cerrado (${lastClosedPeriod.yearMonth}).`,
+      );
+    }
+
+    const pettyCashRecord = await this.prisma.pettyCash.findUnique({
+      where: { id: pettyCashId },
+    });
+
+    if (pettyCashRecord && pettyCashRecord.status === PettyCashStatus.CERRADA) {
+      throw new BadRequestException(
+        '[RN-CAJA-01] No se pueden abrir períodos en una caja chica que se encuentra CERRADA.',
+      );
+    }
+
     const carryoverBalance = lastClosedPeriod?.closingBalance
       ? lastClosedPeriod.closingBalance.toString()
       : '0.00';
@@ -122,6 +138,7 @@ export class PettyCashService {
     const availableBalance = calculateOpeningAvailableBalance(
       carryoverBalance,
       dto.initialReplenishment,
+      pettyCashRecord?.authorizedAmount?.toString(),
     );
 
     const createdPeriod = await this.prisma.pettyCashPeriod.create({
@@ -534,11 +551,7 @@ export class PettyCashService {
       );
     }
 
-    assertPeriodCanBeClosed(
-      period.vouchers.map(
-        (v) => v.status as unknown as PettyCashVoucherStatus,
-      ),
-    );
+    assertPeriodCanBeClosed(period.vouchers.map((v) => v.status));
 
     const closingBalance = period.availableBalance.toString();
 

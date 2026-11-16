@@ -57,6 +57,17 @@ export interface LivePaymentRequest {
   status: PaymentRequestStatus;
   rejectionReason?: string | null;
   project?: { code: string; name: string };
+  items?: Array<{
+    id: string;
+    accrualId: string;
+    requestedAmount: string | number;
+    accrual?: {
+      id: string;
+      beneficiaryId: string;
+      balanceDue: string | number;
+      beneficiary?: { fullName: string; dni: string };
+    };
+  }>;
 }
 
 export interface LivePayment {
@@ -208,15 +219,32 @@ export function FinancialEnginePanel({
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
   const [payDate, setPayDate] = useState('2026-02-20');
 
-  // 4. Motivo para Anulaciones Justificadas Inmutables
+  // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos
   const [annulReason, setAnnulReason] = useState(
     'Corrección contable autorizada por Gerencia Administrativa FACYT (RN-PAG-03)',
+  );
+  const [reqRejectionReason, setReqRejectionReason] = useState(
+    'Observación presupuestaria de Gerencia (RN-PAG-01)',
+  );
+
+  const activeRequestAccrualIds = new Set(
+    paymentRequests
+      .filter((r) =>
+        [
+          PaymentRequestStatus.CREADA,
+          PaymentRequestStatus.ENVIADA,
+          PaymentRequestStatus.APROBADA,
+          PaymentRequestStatus.ENTREGADA,
+        ].includes(r.status),
+      )
+      .flatMap((r) => (r.items ?? []).map((item) => item.accrualId)),
   );
 
   const hasPendingBalance = (accrual: LiveAccrual): boolean =>
     (accrual.status === AccrualStatus.PENDIENTE ||
       accrual.status === AccrualStatus.PARCIAL) &&
-    Number(accrual.balanceDue) > 0;
+    Number(accrual.balanceDue) > 0 &&
+    !activeRequestAccrualIds.has(accrual.id);
 
   const firstProjectWithPendingAccruals = projects.find((p) =>
     accruals.some((a) => a.projectId === p.id && hasPendingBalance(a)),
@@ -353,6 +381,16 @@ export function FinancialEnginePanel({
     id: string,
     decision: 'APROBADA' | 'RECHAZADA',
   ) => {
+    if (
+      decision === 'RECHAZADA' &&
+      (!reqRejectionReason || reqRejectionReason.trim().length < 5)
+    ) {
+      onNotify(
+        'error',
+        'Ingrese un motivo de rechazo de al menos 5 caracteres (RN-PAG-01).',
+      );
+      return;
+    }
     try {
       await apiRequest(`/payment-requests/${id}/review`, {
         method: 'PATCH',
@@ -362,8 +400,7 @@ export function FinancialEnginePanel({
             ? { decision: 'APROBADA' }
             : {
                 decision: 'RECHAZADA',
-                rejectionReason:
-                  'Observación presupuestaria de Gerencia (RN-PAG-01)',
+                rejectionReason: reqRejectionReason.trim(),
               },
       });
       onNotify(
@@ -984,6 +1021,21 @@ export function FinancialEnginePanel({
               </form>
             )}
 
+            {isReceptor && (
+              <div className="field">
+                <label className="field__label" htmlFor="req-reject-reason">
+                  Motivo de rechazo de solicitud (RN-PAG-01)
+                </label>
+                <input
+                  id="req-reject-reason"
+                  className="input"
+                  value={reqRejectionReason}
+                  onChange={(e) => setReqRejectionReason(e.target.value)}
+                  placeholder="Especifique el motivo en caso de rechazar una solicitud enviada"
+                />
+              </div>
+            )}
+
             <div className="table-scroll">
               <table className="table">
                 <thead>
@@ -1025,6 +1077,11 @@ export function FinancialEnginePanel({
                         <span className={requestBadgeClass(req.status)}>
                           {req.status}
                         </span>
+                        {req.rejectionReason && (
+                          <div className="muted">
+                            Rechazo: {req.rejectionReason}
+                          </div>
+                        )}
                       </td>
                       <td>
                         <div className="btn-group">

@@ -74,8 +74,8 @@ export function PettyCashAndReportsPanel({
 
   // 2. Abrir Período Mensual
   const [periodPettyCashId, setPeriodPettyCashId] = useState('');
-  const [periodYearMonth, setPeriodYearMonth] = useState('2026-03');
-  const [periodReplenishment, setPeriodReplenishment] = useState('150.00');
+  const [periodYearMonth, setPeriodYearMonth] = useState('2026-12');
+  const [periodReplenishment, setPeriodReplenishment] = useState('134.50');
 
   // 3. Solicitar Vale
   const [voucherPeriodId, setVoucherPeriodId] = useState('');
@@ -584,58 +584,73 @@ export function PettyCashAndReportsPanel({
               </form>
             </div>
           </section>
+        </>
+      )}
 
-          <section className="sheet">
-            <div className="sheet__head">
-              <div>
-                <h2 className="sheet__title">Rendición de vale desembolsado</h2>
-                <p className="sheet__hint">
-                  Datos para rendir un vale desembolsado y motivos de rechazo o
-                  anulación (RN-CAJA-03).
-                </p>
-              </div>
+      {(isGenerador || isReceptor) && (
+        <section className="sheet">
+          <div className="sheet__head">
+            <div>
+              <h2 className="sheet__title">
+                {isGenerador
+                  ? 'Rendición de vale desembolsado y anulación'
+                  : 'Control de rechazo y anulación de vales'}
+              </h2>
+              <p className="sheet__hint">
+                {isGenerador
+                  ? 'Datos de factura/comprobante para rendir un vale desembolsado y motivo de anulación (RN-CAJA-03 / RN-GLOB-04).'
+                  : 'Motivos obligatorios para rechazar o anular justificadamente vales de caja chica (RN-CAJA-03 / RN-GLOB-04).'}
+              </p>
             </div>
-            <div className="sheet__body">
-              <div className="form-grid">
-                <div className="field">
-                  <label className="field__label" htmlFor="settle-amount">
-                    Monto gastado según factura (USD)
-                  </label>
-                  <input
-                    id="settle-amount"
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={settleAmount}
-                    onChange={(e) => setSettleAmount(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="settle-invoice">
-                    N° factura / comprobante
-                  </label>
-                  <input
-                    id="settle-invoice"
-                    className="input"
-                    value={settleInvoice}
-                    onChange={(e) => setSettleInvoice(e.target.value)}
-                  />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="settle-file">
-                    Archivo del comprobante (PDF/PNG/JPEG)
-                  </label>
-                  <input
-                    id="settle-file"
-                    className="input"
-                    type="file"
-                    accept="application/pdf,image/png,image/jpeg"
-                    onChange={(e) => setSettleFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
+          </div>
+          <div className="sheet__body">
+            <div className="form-grid">
+              {isGenerador && (
+                <>
+                  <div className="field">
+                    <label className="field__label" htmlFor="settle-amount">
+                      Monto gastado según factura (USD)
+                    </label>
+                    <input
+                      id="settle-amount"
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      value={settleAmount}
+                      onChange={(e) => setSettleAmount(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="settle-invoice">
+                      N° factura / comprobante
+                    </label>
+                    <input
+                      id="settle-invoice"
+                      className="input"
+                      value={settleInvoice}
+                      onChange={(e) => setSettleInvoice(e.target.value)}
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="settle-file">
+                      Archivo del comprobante (PDF/PNG/JPEG)
+                    </label>
+                    <input
+                      id="settle-file"
+                      className="input"
+                      type="file"
+                      accept="application/pdf,image/png,image/jpeg"
+                      onChange={(e) =>
+                        setSettleFile(e.target.files?.[0] ?? null)
+                      }
+                    />
+                  </div>
+                </>
+              )}
+              {isReceptor && (
                 <div className="field">
                   <label className="field__label" htmlFor="reject-reason">
-                    Motivo de rechazo de vale
+                    Motivo de rechazo de vale (RN-CAJA-03)
                   </label>
                   <input
                     id="reject-reason"
@@ -644,21 +659,21 @@ export function PettyCashAndReportsPanel({
                     onChange={(e) => setVoucherRejectionReason(e.target.value)}
                   />
                 </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="annul-reason">
-                    Motivo de anulación de vale
-                  </label>
-                  <input
-                    id="annul-reason"
-                    className="input"
-                    value={voucherAnnulReason}
-                    onChange={(e) => setVoucherAnnulReason(e.target.value)}
-                  />
-                </div>
+              )}
+              <div className="field">
+                <label className="field__label" htmlFor="annul-reason">
+                  Motivo de anulación de vale (RN-GLOB-04)
+                </label>
+                <input
+                  id="annul-reason"
+                  className="input"
+                  value={voucherAnnulReason}
+                  onChange={(e) => setVoucherAnnulReason(e.target.value)}
+                />
               </div>
             </div>
-          </section>
-        </>
+          </div>
+        </section>
       )}
 
       {pettyCashes.length === 0 && (

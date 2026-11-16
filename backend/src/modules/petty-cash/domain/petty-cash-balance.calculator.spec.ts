@@ -48,7 +48,7 @@ describe('petty-cash-balance.calculator (RN-CAJA-01 a RN-CAJA-04)', () => {
       expect(opening).toBe('80.00');
     });
 
-    it('debe lanzar BadRequestException si la suma inicial es 0 o si algún valor es negativo (Violación RN-CAJA-02)', () => {
+    it('debe lanzar BadRequestException si la suma inicial es 0, algún valor es negativo o supera el tope autorizado (Violación RN-CAJA-02)', () => {
       // Arrange & Act & Assert
       expect(() => calculateOpeningAvailableBalance('0.00', '0.00')).toThrow(
         BadRequestException,
@@ -56,6 +56,9 @@ describe('petty-cash-balance.calculator (RN-CAJA-01 a RN-CAJA-04)', () => {
       expect(() => calculateOpeningAvailableBalance('-10.00', '100.00')).toThrow(
         '[RN-CAJA-02]',
       );
+      expect(() =>
+        calculateOpeningAvailableBalance('65.50', '150.00', '200.00'),
+      ).toThrow('[RN-CAJA-02]');
     });
   });
 

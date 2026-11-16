@@ -32,13 +32,14 @@ describe('fifo-allocator.calculator (RN-PAG-02 Prelación FIFO para Pagos Parcia
       expect(sorted[1].id).toBe('acc-feb');
     });
 
-    it('debe desempatar por createdAt y luego por id cuando periodStart es idéntico (Edge Case)', () => {
+    it('debe desempatar por periodEnd, luego por createdAt y finalmente por id cuando periodStart es idéntico (Edge Case)', () => {
       // Arrange
       const samePeriod = new Date('2026-01-01T00:00:00Z');
       const unsorted = [
         {
           id: 'acc-b',
           periodStart: samePeriod,
+          periodEnd: new Date('2026-01-15T00:00:00Z'),
           createdAt: new Date('2026-01-16T10:00:00Z'),
           paidAmount: '0.00',
           balanceDue: '100.00',
@@ -46,7 +47,8 @@ describe('fifo-allocator.calculator (RN-PAG-02 Prelación FIFO para Pagos Parcia
         {
           id: 'acc-a',
           periodStart: samePeriod,
-          createdAt: new Date('2026-01-16T09:00:00Z'),
+          periodEnd: new Date('2026-01-07T00:00:00Z'),
+          createdAt: new Date('2026-01-16T12:00:00Z'),
           paidAmount: '0.00',
           balanceDue: '100.00',
         },
