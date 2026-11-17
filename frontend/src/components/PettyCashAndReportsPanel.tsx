@@ -66,8 +66,7 @@ export function PettyCashAndReportsPanel({
   const isGenerador = activeRole === UserRole.GENERADOR;
   const isReceptor = activeRole === UserRole.RECEPTOR;
 
-  // 1. Crear Caja Chica
-  const [boxCode, setBoxCode] = useState('CC-QUI-2026-02');
+  // 1. Crear Caja Chica (código autogenerado por el sistema)
   const [boxName, setBoxName] = useState('Caja Chica Reactivos Química FACYT');
   const [boxProjectId, setBoxProjectId] = useState('');
   const [boxAuthAmount, setBoxAuthAmount] = useState('250.00');
@@ -77,9 +76,8 @@ export function PettyCashAndReportsPanel({
   const [periodYearMonth, setPeriodYearMonth] = useState('2026-12');
   const [periodReplenishment, setPeriodReplenishment] = useState('134.50');
 
-  // 3. Solicitar Vale
+  // 3. Solicitar Vale (código autogenerado por el sistema)
   const [voucherPeriodId, setVoucherPeriodId] = useState('');
-  const [voucherCode, setVoucherCode] = useState('VALE-2026-009');
   const [voucherBeneficiary, setVoucherBeneficiary] = useState(
     'TSU. Carlos Pérez',
   );
@@ -108,17 +106,19 @@ export function PettyCashAndReportsPanel({
       return;
     }
     try {
-      await apiRequest('/petty-cashes', {
+      const created = await apiRequest<LivePettyCash>('/petty-cashes', {
         method: 'POST',
         token,
         body: {
-          code: boxCode,
           name: boxName,
           projectId: targetProject,
           authorizedAmount: boxAuthAmount,
         },
       });
-      onNotify('success', `Caja chica '${boxCode}' creada correctamente.`);
+      onNotify(
+        'success',
+        `Caja chica '${created?.code ?? boxName}' creada correctamente.`,
+      );
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -191,17 +191,22 @@ export function PettyCashAndReportsPanel({
       return;
     }
     try {
-      await apiRequest(`/petty-cashes/periods/${targetPeriod}/vouchers`, {
-        method: 'POST',
-        token,
-        body: {
-          code: voucherCode,
-          beneficiaryName: voucherBeneficiary,
-          concept: voucherConcept,
-          requestedAmount: voucherAmount,
+      const created = await apiRequest<LivePettyCashVoucher>(
+        `/petty-cashes/periods/${targetPeriod}/vouchers`,
+        {
+          method: 'POST',
+          token,
+          body: {
+            beneficiaryName: voucherBeneficiary,
+            concept: voucherConcept,
+            requestedAmount: voucherAmount,
+          },
         },
-      });
-      onNotify('success', `Vale '${voucherCode}' solicitado.`);
+      );
+      onNotify(
+        'success',
+        `Vale '${created?.code ?? 'GENERADO'}' solicitado.`,
+      );
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -360,15 +365,14 @@ export function PettyCashAndReportsPanel({
               <form className="form-grid" onSubmit={handleCreatePettyCash}>
                 <div className="field">
                   <label className="field__label" htmlFor="box-code">
-                    Código de la caja
+                    Código de la caja (sistema)
                   </label>
                   <input
                     id="box-code"
                     className="input"
-                    value={boxCode}
-                    onChange={(e) => setBoxCode(e.target.value)}
-                    placeholder="CC-QUI-02"
-                    required
+                    value="Autogenerado por el sistema"
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="field">
@@ -411,6 +415,8 @@ export function PettyCashAndReportsPanel({
                     className="input"
                     type="number"
                     step="0.01"
+                    min="0.01"
+                    max="9999999999.99"
                     value={boxAuthAmount}
                     onChange={(e) => setBoxAuthAmount(e.target.value)}
                     placeholder="0.00"
@@ -481,6 +487,8 @@ export function PettyCashAndReportsPanel({
                     className="input"
                     type="number"
                     step="0.01"
+                    min="0"
+                    max="9999999999.99"
                     value={periodReplenishment}
                     onChange={(e) => setPeriodReplenishment(e.target.value)}
                     placeholder="0.00"
@@ -527,15 +535,14 @@ export function PettyCashAndReportsPanel({
                 </div>
                 <div className="field">
                   <label className="field__label" htmlFor="voucher-code">
-                    Código del vale
+                    Código del vale (sistema)
                   </label>
                   <input
                     id="voucher-code"
                     className="input"
-                    value={voucherCode}
-                    onChange={(e) => setVoucherCode(e.target.value)}
-                    placeholder="VALE-2026-009"
-                    required
+                    value="Autogenerado por el sistema"
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="field">
@@ -573,6 +580,8 @@ export function PettyCashAndReportsPanel({
                     className="input"
                     type="number"
                     step="0.01"
+                    min="0.01"
+                    max="9999999999.99"
                     value={voucherAmount}
                     onChange={(e) => setVoucherAmount(e.target.value)}
                     placeholder="0.00"
@@ -617,6 +626,8 @@ export function PettyCashAndReportsPanel({
                       className="input"
                       type="number"
                       step="0.01"
+                      min="0"
+                      max="9999999999.99"
                       value={settleAmount}
                       onChange={(e) => setSettleAmount(e.target.value)}
                     />

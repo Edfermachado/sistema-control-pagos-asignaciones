@@ -1,9 +1,9 @@
-import { IsDateString, IsNotEmpty, IsString } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class GenerateAccrualBatchDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código único del lote de causación es obligatorio.' })
-  code!: string;
+  code?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El ID del proyecto es obligatorio.' })

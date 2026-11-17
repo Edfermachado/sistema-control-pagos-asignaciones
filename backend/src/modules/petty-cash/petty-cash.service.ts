@@ -11,6 +11,7 @@ import {
   PettyCashVoucherStatus,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { buildSystemDocumentCode } from '../../common/domain/document-code.generator';
 import { assertPositiveUsdAmount } from '../../common/domain/money.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -39,11 +40,13 @@ export class PettyCashService {
    * Crea una Caja Chica asignada a un Proyecto (RN-CAJA-01).
    */
   async createPettyCash(dto: CreatePettyCashDto, actor: AuthenticatedUser) {
-    const cleanCode = dto.code.trim().toUpperCase();
     const authorizedDec = assertPositiveUsdAmount(
       dto.authorizedAmount,
       'authorizedAmount',
     );
+    const cleanCode = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.generateNextPettyCashCode();
 
     const existing = await this.prisma.pettyCash.findUnique({
       where: { code: cleanCode },
@@ -239,9 +242,22 @@ export class PettyCashService {
       'requestedAmount',
     );
 
+    const cleanVoucherCode = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.generateNextVoucherCode(period.yearMonth);
+
+    const existingVoucher = await this.prisma.pettyCashVoucher.findUnique({
+      where: { code: cleanVoucherCode },
+    });
+    if (existingVoucher) {
+      throw new ConflictException(
+        `[RN-CAJA-03] Ya existe un vale registrado con el código '${cleanVoucherCode}'.`,
+      );
+    }
+
     const voucher = await this.prisma.pettyCashVoucher.create({
       data: {
-        code: dto.code.trim().toUpperCase(),
+        code: cleanVoucherCode,
         periodId,
         requestedById: actor.id,
         beneficiaryName: dto.beneficiaryName.trim(),
@@ -651,5 +667,53 @@ export class PettyCashService {
       },
       orderBy: { code: 'asc' },
     });
+  }
+
+  private async generateNextPettyCashCode(): Promise<string> {
+    const year = String(new Date().getUTCFullYear());
+    let seq =
+      (typeof this.prisma.pettyCash.count === 'function'
+        ? await this.prisma.pettyCash.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: 'CC',
+        contextCode: year,
+        sequence: seq,
+        padLength: 2,
+      });
+      const existing = await this.prisma.pettyCash.findUnique({
+        where: { code: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
+  }
+
+  private async generateNextVoucherCode(yearMonth?: string): Promise<string> {
+    const context = yearMonth || String(new Date().getUTCFullYear());
+    let seq =
+      (typeof this.prisma.pettyCashVoucher.count === 'function'
+        ? await this.prisma.pettyCashVoucher.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: 'VALE',
+        contextCode: context,
+        sequence: seq,
+        padLength: 3,
+      });
+      const existing = await this.prisma.pettyCashVoucher.findUnique({
+        where: { code: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
   }
 }

@@ -10,6 +10,7 @@ import {
   PaymentRequestStatus,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { buildSystemDocumentCode } from '../../common/domain/document-code.generator';
 import { toUsdDecimal } from '../../common/domain/money.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -36,7 +37,10 @@ export class PaymentRequestsService {
     dto: CreatePaymentRequestDto,
     actor: AuthenticatedUser,
   ) {
-    const cleanCode = dto.code.trim().toUpperCase();
+    const cleanCode = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.generateNextRequestCode();
+
     const existing = await this.prisma.paymentRequest.findUnique({
       where: { code: cleanCode },
     });
@@ -281,5 +285,29 @@ export class PaymentRequestsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  private async generateNextRequestCode(): Promise<string> {
+    const year = String(new Date().getUTCFullYear());
+    let seq =
+      (typeof this.prisma.paymentRequest.count === 'function'
+        ? await this.prisma.paymentRequest.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: 'SOL',
+        contextCode: year,
+        sequence: seq,
+        padLength: 3,
+      });
+      const existing = await this.prisma.paymentRequest.findUnique({
+        where: { code: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
   }
 }

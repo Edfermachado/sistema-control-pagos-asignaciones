@@ -386,3 +386,19 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   * **`impeccable detect`:** 0 hallazgos sobre los archivos y sobre la aplicación en ejecución.
 
 ---
+
+
+---
+
+### Interacción #17 — Protección contra desbordamiento `NUMERIC(12, 2)` y generación automática de códigos de documentos y vales
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity (Gemini)
+* **Indicación (Prompt) del Usuario:**
+  > *"Corrige lo siguiente: ... ERROR: numeric field overflow ... A field with precision 12, scale 2 must round to an absolute value less than 10^10 ... Y haz que la generación de codigos dependa del sistema, no tiene sentido que el usuario pueda editar el formato de los codigod de documento o vales"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`backend/src/common/constants/domain.enums.ts`, `backend/src/common/domain/money.helper.ts` y `money.helper.spec.ts`** (`RN-GLOB-02`): Definición de `MAX_USD_AMOUNT = '9999999999.99'` y validación en `toUsdDecimal` para rechazar con `BadRequestException` cualquier monto que exceda la precisión `NUMERIC(12, 2)` de PostgreSQL antes de llegar a la capa de datos.
+  2. **`backend/src/common/domain/document-code.generator.ts` y `document-code.generator.spec.ts`** (`CC-03`, `TEST-01`): Generador puro determinista `buildSystemDocumentCode` con pruebas unitarias AAA.
+  3. **`projects.service.ts`, `accruals.service.ts`, `payment-requests.service.ts`, `payments.service.ts`, `petty-cash.service.ts` y sus DTOs**: Generación automática y libre de colisiones de códigos institucionales (`FIS-2026-XX`, `LOTE-YYYY-MM-XXX`, `SOL-YYYY-XXX`, `REC-YYYY-XXXX`, `CC-YYYY-XX`, `VALE-YYYY-MM-XXX`) cuando el cliente no envía código.
+  4. **`CatalogsAndAssignmentsWorkspace.tsx`, `FinancialEnginePanel.tsx` y `PettyCashAndReportsPanel.tsx`**: Los campos de código de proyecto, lote, solicitud, recibo, caja chica y vale pasan a ser de solo lectura (`Autogenerado por el sistema`), y todos los inputs monetarios incluyen `min` y `max="9999999999.99"`.
+* **Explicación Técnica para la Defensa:**
+  * Se blindó la frontera entre aplicación y base de datos garantizando que ningún importe supere $10^{10} - 0.01$ USD (`NUMERIC(12, 2)`), y se centralizó la numeración correlativa de documentos y vales en el servidor para impedir códigos arbitrarios o inconsistentes desde el cliente.

@@ -22,6 +22,7 @@ export {
 
 export const CURRENCY_CODE = 'USD' as const;
 export const DECIMAL_PLACES = 2 as const;
+export const MAX_USD_AMOUNT = '9999999999.99' as const;
 export const MIN_ANNULMENT_REASON_LENGTH = 10 as const;
 export const MIN_REJECTION_REASON_LENGTH = 5 as const;
 

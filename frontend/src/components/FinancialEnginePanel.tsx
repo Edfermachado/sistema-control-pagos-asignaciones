@@ -176,8 +176,7 @@ export function FinancialEnginePanel({
   const isGenerador = activeRole === UserRole.GENERADOR;
   const isReceptor = activeRole === UserRole.RECEPTOR;
 
-  // 1. Estado Lote de Causación
-  const [batchCode, setBatchCode] = useState('LOTE-QUI-2026-11A');
+  // 1. Estado Lote de Causación (código autogenerado por el sistema)
   const [batchProjectId, setBatchProjectId] = useState('');
   const [batchGroupId, setBatchGroupId] = useState('');
   const [periodStart, setPeriodStart] = useState('2026-02-01');
@@ -209,13 +208,11 @@ export function FinancialEnginePanel({
     void loadBatchPeriods();
   }, [effectiveBatchGroupId, token]);
 
-  // 2. Estado Nueva Solicitud de Pago
-  const [reqCode, setReqCode] = useState('SOL-2026-0009');
+  // 2. Estado Nueva Solicitud de Pago (código autogenerado por el sistema)
   const [reqProjectId, setReqProjectId] = useState('');
   const [reqAccrualIds, setReqAccrualIds] = useState<string[]>([]);
 
-  // 3. Estado Ejecución de Pago FIFO
-  const [payReceiptCode, setPayReceiptCode] = useState('REC-2026-0009');
+  // 3. Estado Ejecución de Pago FIFO (código de recibo autogenerado por el sistema)
   const [payRequestId, setPayRequestId] = useState('');
   const [payBeneficiaryId, setPayBeneficiaryId] = useState('');
   const [payAmount, setPayAmount] = useState('300.00');
@@ -283,7 +280,6 @@ export function FinancialEnginePanel({
           method: 'POST',
           token,
           body: {
-            code: batchCode,
             projectId: targetProject,
             paymentGroupId: targetGroup,
             periodStart,
@@ -310,21 +306,23 @@ export function FinancialEnginePanel({
       return;
     }
     try {
-      await apiRequest('/accruals/batches', {
-        method: 'POST',
-        token,
-        body: {
-          code: batchCode,
-          projectId: targetProject,
-          paymentGroupId: targetGroup,
-          periodStart,
-          periodEnd,
+      const created = await apiRequest<{ batch?: { code?: string } }>(
+        '/accruals/batches',
+        {
+          method: 'POST',
+          token,
+          body: {
+            projectId: targetProject,
+            paymentGroupId: targetGroup,
+            periodStart,
+            periodEnd,
+          },
         },
-      });
+      );
       setPreviewResult(null);
       onNotify(
         'success',
-        `Lote '${batchCode}' causado y persistido con prorrateo exacto (RN-CAUS-01).`,
+        `Lote '${created?.batch?.code ?? 'GENERADO'}' causado y persistido con prorrateo exacto (RN-CAUS-01).`,
       );
       await onRefresh();
     } catch (err) {
@@ -347,18 +345,20 @@ export function FinancialEnginePanel({
       return;
     }
     try {
-      await apiRequest('/payment-requests', {
-        method: 'POST',
-        token,
-        body: {
-          code: reqCode,
-          projectId: targetProject,
-          accrualIds: reqAccrualIds,
+      const created = await apiRequest<LivePaymentRequest>(
+        '/payment-requests',
+        {
+          method: 'POST',
+          token,
+          body: {
+            projectId: targetProject,
+            accrualIds: reqAccrualIds,
+          },
         },
-      });
+      );
       onNotify(
         'success',
-        `Solicitud '${reqCode}' creada por $${selectedRequestedTotal.toFixed(2)} USD.`,
+        `Solicitud '${created?.code ?? 'GENERADA'}' creada por $${selectedRequestedTotal.toFixed(2)} USD.`,
       );
       setReqAccrualIds([]);
       await onRefresh();
@@ -451,21 +451,23 @@ export function FinancialEnginePanel({
     }
 
     try {
-      await apiRequest('/payments', {
-        method: 'POST',
-        token,
-        body: {
-          receiptCode: payReceiptCode,
-          paymentRequestId: targetRequest,
-          beneficiaryId: targetBeneficiary,
-          amount: payAmount,
-          paymentDate: payDate,
-          reference: payReference,
+      const created = await apiRequest<{ payment?: { receiptCode?: string } }>(
+        '/payments',
+        {
+          method: 'POST',
+          token,
+          body: {
+            paymentRequestId: targetRequest,
+            beneficiaryId: targetBeneficiary,
+            amount: payAmount,
+            paymentDate: payDate,
+            reference: payReference,
+          },
         },
-      });
+      );
       onNotify(
         'success',
-        `Pago '${payReceiptCode}' por $${payAmount} USD aplicado automáticamente por orden de antigüedad FIFO (RN-PAG-02).`,
+        `Pago '${created?.payment?.receiptCode ?? 'GENERADO'}' por $${payAmount} USD aplicado automáticamente por orden de antigüedad FIFO (RN-PAG-02).`,
       );
       await onRefresh();
     } catch (err) {
@@ -600,14 +602,14 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="batch-code">
-                      Código de lote
+                      Código de lote (sistema)
                     </label>
                     <input
                       id="batch-code"
                       className="input"
-                      value={batchCode}
-                      onChange={(e) => setBatchCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
@@ -956,14 +958,14 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="req-code">
-                      Código de solicitud
+                      Código de solicitud (sistema)
                     </label>
                     <input
                       id="req-code"
                       className="input"
-                      value={reqCode}
-                      onChange={(e) => setReqCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
@@ -1201,14 +1203,14 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="pay-receipt">
-                      Código de recibo
+                      Código de recibo (sistema)
                     </label>
                     <input
                       id="pay-receipt"
                       className="input"
-                      value={payReceiptCode}
-                      onChange={(e) => setPayReceiptCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
@@ -1266,6 +1268,8 @@ export function FinancialEnginePanel({
                       className="input"
                       type="number"
                       step="0.01"
+                      min="0.01"
+                      max="9999999999.99"
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
                       required

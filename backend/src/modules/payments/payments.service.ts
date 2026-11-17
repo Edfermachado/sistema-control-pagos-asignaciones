@@ -10,6 +10,7 @@ import {
   PaymentStatus,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { buildSystemDocumentCode } from '../../common/domain/document-code.generator';
 import { toUsdDecimal } from '../../common/domain/money.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -28,7 +29,10 @@ export class PaymentsService {
    * Nota RN-CAT-02: Permite pagar deudas ya causadas aunque el proyecto haya vencido.
    */
   async registerPayment(dto: RegisterPaymentDto, actor: AuthenticatedUser) {
-    const cleanReceipt = dto.receiptCode.trim().toUpperCase();
+    const cleanReceipt = dto.receiptCode?.trim()
+      ? dto.receiptCode.trim().toUpperCase()
+      : await this.generateNextReceiptCode(dto.paymentDate);
+
     const existingReceipt = await this.prisma.payment.findUnique({
       where: { receiptCode: cleanReceipt },
     });
@@ -190,5 +194,33 @@ export class PaymentsService {
       },
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  private async generateNextReceiptCode(
+    paymentDateIso: string,
+  ): Promise<string> {
+    const year =
+      String(paymentDateIso ?? '').slice(0, 4) ||
+      String(new Date().getUTCFullYear());
+    let seq =
+      (typeof this.prisma.payment.count === 'function'
+        ? await this.prisma.payment.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: 'REC',
+        contextCode: year,
+        sequence: seq,
+        padLength: 4,
+      });
+      const existing = await this.prisma.payment.findUnique({
+        where: { receiptCode: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
   }
 }

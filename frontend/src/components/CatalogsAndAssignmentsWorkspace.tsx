@@ -249,13 +249,12 @@ export function CatalogsAndAssignmentsWorkspace({
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiRequest(
+      const saved = await apiRequest<LiveProject>(
         editingProjectId ? `/projects/${editingProjectId}` : '/projects',
         {
           method: editingProjectId ? 'PATCH' : 'POST',
           token,
           body: {
-            ...(editingProjectId ? {} : { code: projCode }),
             name: projName,
             area: projArea,
             scope: projScope,
@@ -268,7 +267,7 @@ export function CatalogsAndAssignmentsWorkspace({
         'success',
         editingProjectId
           ? `Proyecto '${projName}' actualizado.`
-          : `Proyecto '${projCode}' creado correctamente.`,
+          : `Proyecto '${saved?.code ?? projName}' creado con código asignado por el sistema.`,
       );
       setEditingProjectId(null);
       await onRefresh();
@@ -551,15 +550,18 @@ export function CatalogsAndAssignmentsWorkspace({
               <form onSubmit={handleSaveProject} className="form-grid">
                 <div className="field">
                   <label className="field__label" htmlFor="proj-code">
-                    Código
+                    Código (sistema)
                   </label>
                   <input
                     id="proj-code"
                     className="input"
-                    value={projCode}
-                    onChange={(e) => setProjCode(e.target.value)}
-                    required
-                    disabled={Boolean(editingProjectId)}
+                    value={
+                      editingProjectId
+                        ? projCode
+                        : 'Autogenerado por el sistema'
+                    }
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="field">
@@ -1286,6 +1288,8 @@ export function CatalogsAndAssignmentsWorkspace({
                     className="input"
                     type="number"
                     step="0.01"
+                    min="0.01"
+                    max="9999999999.99"
                     value={asigAmount}
                     onChange={(e) => setAsigAmount(e.target.value)}
                     required

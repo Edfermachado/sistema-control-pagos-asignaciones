@@ -9,9 +9,9 @@ import {
 import { PaymentRequestStatus } from '../../../common/constants/domain.enums';
 
 export class CreatePaymentRequestDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código de la solicitud de pago es obligatorio.' })
-  code!: string;
+  code?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El ID del proyecto es obligatorio.' })
