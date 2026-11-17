@@ -28,7 +28,7 @@ export class PaymentRequestsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   /**
    * Crea una Solicitud de Pago agrupando causaciones con deuda pendiente del proyecto (RN-PAG-01).

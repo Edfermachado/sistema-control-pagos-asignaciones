@@ -811,7 +811,7 @@ export function PettyCashAndReportsPanel({
                             <td className="num">{usedPercent}%</td>
                             <td className="num">
                               {per.closingBalance !== null &&
-                              per.closingBalance !== undefined
+                                per.closingBalance !== undefined
                                 ? formatUsdCurrency(Number(per.closingBalance))
                                 : '—'}
                             </td>
@@ -909,10 +909,10 @@ export function PettyCashAndReportsPanel({
                           <td className="num">
                             {v.settledAmount
                               ? `${formatUsdCurrency(
-                                  Number(v.settledAmount),
-                                )} (Vuelto: ${formatUsdCurrency(
-                                  Number(v.returnedAmount),
-                                )})`
+                                Number(v.settledAmount),
+                              )} (Vuelto: ${formatUsdCurrency(
+                                Number(v.returnedAmount),
+                              )})`
                               : '—'}
                           </td>
                           <td>
@@ -998,16 +998,16 @@ export function PettyCashAndReportsPanel({
                                 (isReceptor &&
                                   (v.status === 'DESEMBOLSADO' ||
                                     v.status === 'RENDIDO'))) && (
-                                <button
-                                  type="button"
-                                  className="btn btn--danger btn--sm"
-                                  onClick={() => handleAnnulVoucher(v.id)}
-                                  disabled={!hasVoucherAnnulReason}
-                                  title="Escriba el motivo de anulación (mínimo 10 caracteres) para habilitar esta acción (RN-GLOB-04)"
-                                >
-                                  Anular
-                                </button>
-                              )}
+                                  <button
+                                    type="button"
+                                    className="btn btn--danger btn--sm"
+                                    onClick={() => handleAnnulVoucher(v.id)}
+                                    disabled={!hasVoucherAnnulReason}
+                                    title="Escriba el motivo de anulación (mínimo 10 caracteres) para habilitar esta acción (RN-GLOB-04)"
+                                  >
+                                    Anular
+                                  </button>
+                                )}
                             </div>
                           </td>
                         </tr>

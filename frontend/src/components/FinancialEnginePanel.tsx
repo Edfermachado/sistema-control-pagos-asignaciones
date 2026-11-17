@@ -402,9 +402,9 @@ export function FinancialEnginePanel({
           decision === 'APROBADA'
             ? { decision: 'APROBADA' }
             : {
-                decision: 'RECHAZADA',
-                rejectionReason: reqRejectionReason.trim(),
-              },
+              decision: 'RECHAZADA',
+              rejectionReason: reqRejectionReason.trim(),
+            },
       });
       onNotify(
         'success',
