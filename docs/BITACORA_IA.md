@@ -485,3 +485,23 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos transformados).
   - **Triggers SQL, Docker y Smoke Test:** Aplicado `database/03_audit_triggers.sql` en `scpa_postgres` (verificados 6 triggers `trg_immutable_amount_*` `BEFORE UPDATE` y bloqueo efectivo de modificación sobre `payment_requests.total_amount`), contenedor `scpa_backend` reconstruido y `node scripts/api-smoke-test.mjs` ejecutado en vivo con resultado `68 OK / 0 FAIL`.
 
+### Interacción #25 — Auditoría y Adecuación Integral de Unit Tests 1:1 (`TEST-01`) y Flujos E2E (`RN-*`)
+* **Prompt / Solicitud del Usuario:** `"Ahora audita todos los unitest y test, así como asegurate que los test de los flows esten correctamente adecuados los requerimientos y objetivos"`
+* **Respuesta / Acción Realizada:**
+  1. **Completitud 1:1 en Backend (`TEST-01`):**
+     - `backend/src/modules/payment-groups/payment-groups.service.spec.ts`: Añadido bloque `describe('removePeriod', ...)` (Happy Path con auditoría `DELETE_PAYMENT_GROUP_PERIOD`, `NotFoundException` si no existe o pertenece a otro grupo, `ConflictException` si tiene lotes asociados `RN-CAT-03`), más casos de error en `updatePaymentGroup` y `createPeriod`.
+     - `backend/src/modules/uploads/domain/upload-file.helper.spec.ts`: Completados 3 escenarios AAA por helper (`isAllowedUploadMimeType`, `buildStoredFileName`) y añadido bloque `describe('UploadsController.upload', ...)` probando `MAX_UPLOAD_SIZE_MB` dinámico, ausencia de `PrismaService` y rechazo por archivo faltante o exceso de tamaño (`RN-CAJA-03`).
+     - `backend/src/modules/parameters/parameters.service.spec.ts`: Completados 3 escenarios AAA por método (`findAll`, `create`, `update`, `remove`) incluyendo actualización parcial e invariantes `RN-SEG-02`.
+  2. **Completitud 1:1 en Frontend (`TEST-01`):**
+     - `frontend/src/utils/api-client.util.spec.ts`: Añadidos bloques AAA completos para `apiRequest` y `downloadAuthenticatedPdf`, además de completar los 3 escenarios en `buildAuthHeaders`, `extractApiErrorMessage` y `uploadAuthenticatedFile`.
+     - `frontend/src/utils/range-validity.util.spec.ts` y `ux-workflows.util.spec.ts`: Añadido `describe('toIsoDateSlice', ...)` y completados 3 escenarios AAA en `getNextSequentialYearMonth`, `getPayableBeneficiariesForRequest`, `validateInlineJustification`, `getDefaultVoucherSettlementDraft`, `summarizeAccrualSelection`, `analyzeBeneficiaryProjectAvailability`, `simulateFifoPaymentPreview` e `isConfirmationArmed`.
+  3. **Adecuación de Flujos E2E a Requerimientos (`RN-*`):**
+     - `backend/src/common/system-flows/full-system-flows.spec.ts`: Ampliado el repositorio en memoria tipado (cero `any`) para soportar `UsersService`, `ParametersService` y `ReportsService`, agregando **Flujo 4** (multiplicidad en 2 proyectos `RN-CAT-04`, rechazo con liberación de causación `RN-PAG-01` y liquidación tras cierre de proyecto `RN-CAT-02`) y **Flujo 5** (gobernanza `ADMIN`, parámetros dinámicos `PETTY_CASH_REQUIRE_ATTACHMENT=false` y `PAYMENT_REQUEST_SCOPE=PROJECT_ACCRUALS`, cuadre `RN-AUD-01` y los 3 PDFs oficiales + marca de agua `RN-AUD-02`).
+     - `frontend/src/utils/system-flows.spec.ts`: Verificación de recausación tras lote `ANULADO` en `Flujo 1` (`RN-CAUS-04`) y nuevo **Flujo 4** sobre ciclo de sesión, persistencia y guardas por URL/rol (`RN-SEG-02`).
+     - `scripts/api-smoke-test.mjs`: Ampliado de 68 a 72 verificaciones en vivo añadiendo rechazo con reutilización de causación (`RN-PAG-01`), edición `PATCH /api/users/:id`, validación de `paymentHistory` en `/api/reports/summary` y descarga `GET /api/reports/summary/pdf`.
+* **Verificación técnica:**
+  - **Limpieza estática (`CC-01` / `FE-01`):** `0` usos de `: any` en archivos `.ts`/`.tsx` de `backend/src/` y `frontend/src/`; `0` estilos inline (`style={{`).
+  - **Backend (Jest + Build):** `32/32` suites / `256/256` tests en verde (`jest --runInBand`); `nest build` exitoso.
+  - **Frontend (Vitest + Build):** `11/11` archivos / `104/104` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos).
+  - **Smoke Test API en vivo:** `node scripts/api-smoke-test.mjs` finalizado con **`72 OK / 0 FAIL`**.
+

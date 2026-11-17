@@ -63,13 +63,13 @@ Con los contenedores levantados:
 node scripts/api-smoke-test.mjs
 ```
 
-El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, anulación de lote/solicitud/vale, cierre, PDFs con marca de agua, carga de comprobantes, caja chica completa, parámetros, usuarios y auditoría con triggers. **Resultado actual: 68/68 verificaciones en verde.**
+El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, solicitud, rechazo y reutilización de causación, aprobación, pago parcial/total FIFO, sobrepago, anulación con reversión, anulación de lote/solicitud/vale, cierre, PDFs (incluyendo estado de cuenta general) con marca de agua, carga de comprobantes, caja chica completa, parámetros, creación/edición de usuarios y auditoría con triggers. **Resultado actual: 72/72 verificaciones en verde.**
 
 ### 2.4 Pruebas unitarias
 
 ```bash
-npm --prefix backend test -- --runInBand   # 32 suites / 238 tests
-npm --prefix frontend test                 # 11 suites / 78 tests
+npm --prefix backend test -- --runInBand   # 32 suites / 256 tests
+npm --prefix frontend test                 # 11 suites / 104 tests
 ```
 
 ### 2.5 Ejecución manual (sin Docker)
@@ -106,12 +106,12 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | :--- | :--- |
 | `backend` compila (`nest build`) | ✅ |
 | `frontend` compila (`tsc -b && vite build`) | ✅ |
-| Backend: 32 suites / 238 pruebas | ✅ 238/238 |
-| Frontend: 11 suites / 78 pruebas | ✅ 78/78 |
+| Backend: 32 suites / 256 pruebas | ✅ 256/256 |
+| Frontend: 11 suites / 104 pruebas | ✅ 104/104 |
 | `docker compose up -d --build` | ✅ |
 | Login de los 3 roles con el seed SQL | ✅ |
 | Health check con conexión a PostgreSQL | ✅ |
-| Prueba de humo API end-to-end | ✅ 68/68 |
+| Prueba de humo API end-to-end | ✅ 72/72 |
 | Verificación de UI en navegador (Chromium headless) | ✅ Sin errores de consola |
 | Dashboard, catálogos, motor financiero, caja chica, usuarios y auditoría | ✅ Cargan datos reales de la API |
 | Cambio de rol GENERADOR → ADMIN → RECEPTOR con JWT automático | ✅ |
@@ -237,7 +237,7 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 ### Resuelto en las rondas finales (UX, E2E y Consultas)
 
 8. **Pruebas de integración E2E de flujos completos**
-   - Además de las pruebas unitarias 1:1 y el script `scripts/api-smoke-test.mjs` (68 verificaciones reales), el sistema cuenta con suites de flujos E2E completos en Backend ([full-system-flows.spec.ts](../backend/src/common/system-flows/full-system-flows.spec.ts)) y Frontend ([system-flows.spec.ts](../frontend/src/utils/system-flows.spec.ts)).
+   - Además de las pruebas unitarias 1:1 y el script `scripts/api-smoke-test.mjs` (72 verificaciones reales), el sistema cuenta con suites de flujos E2E completos en Backend ([full-system-flows.spec.ts](../backend/src/common/system-flows/full-system-flows.spec.ts)) y Frontend ([system-flows.spec.ts](../frontend/src/utils/system-flows.spec.ts)).
 
 9. **Gestión de sesión, rutas por vista y edición de usuarios**
    - Implementado login portal, cierre de sesión explícito (`/login`), rutas protegidas por URL (`/resumen`, `/catalogos`, `/causacion`, `/cajas-chicas`, `/auditoria`) con persistencia en `sessionStorage` y edición completa de usuarios (`PATCH /api/users/:id`).
@@ -267,6 +267,6 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ## 7. Conclusión
 
-El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 238 pruebas de backend (incluidos flujos E2E), 78 pruebas de frontend (incluidos flujos E2E) y una prueba de humo end-to-end contra PostgreSQL.
+El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 256 pruebas de backend (incluidos 5 flujos E2E integrales), 104 pruebas de frontend (incluidos 4 flujos E2E) y una prueba de humo end-to-end contra PostgreSQL (72/72 verificaciones).
 
 Todos los pendientes funcionales del PDF, las mejoras de UX (acciones inline por fila, selección masiva, detección preventiva de traslapes, previsualización FIFO y confirmaciones de dos pasos) y las carencias detectadas en la auditoría final (parámetros globales conectados, transacción íntegra en pagos, triggers `BEFORE DELETE` en PostgreSQL, edición de usuarios e historial de pagos + PDF en `/resumen`) **ya fueron implementados y verificados**. Únicamente permanecen como mejoras opcionales futuras OpenAPI/Swagger, CI automatizado y migraciones Prisma versionadas para entornos productivos externos.

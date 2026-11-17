@@ -119,14 +119,14 @@ cp backend/.env.example backend/.env
 npm --prefix backend install
 npm --prefix backend run prisma:generate
 
-# 2. Ejecutar las 32 suites de Pruebas en Backend (238 tests unitarios y de flujos completos E2E con patrón AAA)
+# 2. Ejecutar las 32 suites de Pruebas en Backend (256 tests unitarios y de flujos completos E2E con patrón AAA)
 npm --prefix backend test -- --runInBand
 
 # 3. Poblar datos iniciales de prueba completos (catálogos, asignaciones,
 #    causaciones, solicitud, pago FIFO y caja chica con arrastre)
 npm --prefix backend run prisma:seed
 
-# 4. Instalar dependencias y ejecutar las 11 suites de Pruebas en Frontend (78 tests en Vitest, incl. flujos E2E)
+# 4. Instalar dependencias y ejecutar las 11 suites de Pruebas en Frontend (104 tests en Vitest, incl. flujos E2E)
 npm --prefix frontend install
 npm --prefix frontend test
 

@@ -176,7 +176,7 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | Fallos de contraste AA (5 vistas × 2 tamaños) | 0 |
 | `impeccable detect` (archivos y URL) | 0 hallazgos |
 | Rutas: deep link, recarga, guard por rol, 404 e historial | 12/12 comprobaciones OK |
-| Frontend Vitest tras el enrutado y cierre UX/E2E | 11 suites / **78** pruebas en verde |
+| Frontend Vitest tras el enrutado y cierre UX/E2E | 11 suites / **104** pruebas en verde |
 
 ---
 
@@ -239,9 +239,9 @@ cp .env.example .env
 docker compose up -d --build          # web :5173 · API :3000 · PostgreSQL :55432
 
 # 2. Pruebas automáticas
-node scripts/api-smoke-test.mjs                       # 68 comprobaciones de API
-npm --prefix backend test -- --runInBand              # 238 pruebas (32 suites, incl. E2E)
-npm --prefix frontend test                            # 78 pruebas (11 suites, incl. E2E)
+node scripts/api-smoke-test.mjs                       # 72 comprobaciones de API
+npm --prefix backend test -- --runInBand              # 256 pruebas (32 suites, incl. E2E)
+npm --prefix frontend test                            # 104 pruebas (11 suites, incl. E2E)
 
 # 3. Detector de anti-patrones de interfaz
 export IMPECCABLE_HOME="E:/Vigilia/SisInf/proyecto/repo/.opencode/.cache/impeccable"

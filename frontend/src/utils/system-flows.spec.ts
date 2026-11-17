@@ -23,6 +23,21 @@ import {
 } from './range-validity.util';
 import { getRoleDisplayLabel, getRolePermissions } from './rbac.util';
 import {
+  buildUserSession,
+  clearSession,
+  getClearedSessionState,
+  loadSession,
+  saveSession,
+  type StorageLike,
+} from './session.util';
+import {
+  canAccessWorkspace,
+  findWorkspaceByPath,
+  firstAllowedPath,
+  pathForWorkspace,
+  visibleWorkspaces,
+} from '../routes/workspaces';
+import {
   filterTableByProperty,
   paginateTableItems,
   searchTableItems,
@@ -196,6 +211,36 @@ describe('Flujos Completos del Sistema (Frontend E2E)', () => {
     });
     expect(validAfterFirstBatch.map((p) => p.id)).toEqual(['per-nov2']);
 
+    // Al anular el lote de Noviembre 1ra, el período vuelve a habilitarse para recausar (RN-CAUS-04)
+    const validAfterAnnulledBatch = filterValidCutoffPeriodsForProject({
+      periods: cutoffPeriods,
+      project,
+      paymentGroupId: 'pg-quincenal',
+      assignments: updatedAssignments,
+      existingBatches: [
+        {
+          id: 'lote-oct2',
+          projectId: project.id,
+          paymentGroupId: 'pg-quincenal',
+          periodStart: '2026-10-16',
+          periodEnd: '2026-10-31',
+          status: 'GENERADO',
+        },
+        {
+          id: 'lote-nov1',
+          projectId: project.id,
+          paymentGroupId: 'pg-quincenal',
+          periodStart: '2026-11-01',
+          periodEnd: '2026-11-15',
+          status: 'ANULADO',
+        },
+      ],
+    });
+    expect(validAfterAnnulledBatch.map((p) => p.id)).toEqual([
+      'per-nov1',
+      'per-nov2',
+    ]);
+
     // 4. Act & Assert: Consolidación masiva de causaciones en Solicitud de Pago (UX #2)
     const accruals = [
       {
@@ -349,5 +394,59 @@ describe('Flujos Completos del Sistema (Frontend E2E)', () => {
     expect(isConfirmationArmed('CLOSE_REQ:req-1', 'CLOSE_BOX:box-1')).toBe(
       false,
     );
+  });
+
+  it('Flujo 4: Ciclo de Sesión, Persistencia y Guardas de Enrutamiento por Rol (RN-SEG-02)', () => {
+    // 1. Arrange: Almacenamiento en memoria simulando sessionStorage
+    const store = new Map<string, string>();
+    const storage: StorageLike = {
+      getItem: (key) => (store.has(key) ? (store.get(key) as string) : null),
+      setItem: (key, value) => void store.set(key, value),
+      removeItem: (key) => void store.delete(key),
+    };
+
+    // 2. Act & Assert: Autenticación y persistencia de ADMIN + restricción de rutas de dinero
+    const adminSession = buildUserSession({
+      id: 'usr-admin',
+      email: '  ADMIN@UC.EDU.VE ',
+      fullName: 'Carlos Rivas',
+      role: UserRole.ADMIN,
+      accessToken: 'jwt_admin_flow_1234567890',
+    });
+    saveSession(adminSession, storage);
+    const restoredAdmin = loadSession(storage);
+    expect(restoredAdmin?.email).toBe('admin@uc.edu.ve');
+    expect(visibleWorkspaces(UserRole.ADMIN).map((w) => w.key)).toEqual([
+      'RESUMEN',
+      'CATALOGOS',
+      'AUDITORIA',
+    ]);
+    const motorWs = findWorkspaceByPath('/causacion')!;
+    const cajasWs = findWorkspaceByPath('/cajas-chicas')!;
+    const auditoriaWs = findWorkspaceByPath('/auditoria')!;
+    expect(canAccessWorkspace(motorWs, UserRole.ADMIN)).toBe(false);
+    expect(canAccessWorkspace(cajasWs, UserRole.ADMIN)).toBe(false);
+    expect(canAccessWorkspace(auditoriaWs, UserRole.ADMIN)).toBe(true);
+
+    // 3. Act & Assert: Cambio a GENERADOR (bloqueado en /auditoria, habilitado en /causacion y /cajas-chicas)
+    expect(visibleWorkspaces(UserRole.GENERADOR)).toHaveLength(4);
+    expect(canAccessWorkspace(auditoriaWs, UserRole.GENERADOR)).toBe(false);
+    expect(canAccessWorkspace(motorWs, UserRole.GENERADOR)).toBe(true);
+    expect(canAccessWorkspace(cajasWs, UserRole.GENERADOR)).toBe(true);
+    expect(firstAllowedPath(UserRole.GENERADOR)).toBe(pathForWorkspace('RESUMEN'));
+
+    // 4. Act & Assert: RECEPTOR ve los 5 espacios, rutas inválidas devuelven undefined y logout limpia sesión
+    expect(visibleWorkspaces(UserRole.RECEPTOR)).toHaveLength(5);
+    expect(canAccessWorkspace(auditoriaWs, UserRole.RECEPTOR)).toBe(true);
+    expect(findWorkspaceByPath('/ruta-inexistente')).toBeUndefined();
+
+    clearSession(storage);
+    const clearedState = getClearedSessionState();
+    expect(loadSession(storage)).toBeNull();
+    expect(clearedState).toEqual({
+      token: null,
+      currentUser: null,
+      isConnectedToApi: false,
+    });
   });
 });

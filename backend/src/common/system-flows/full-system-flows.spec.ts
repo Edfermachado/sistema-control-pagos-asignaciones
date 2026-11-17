@@ -7,11 +7,14 @@ import { AnnulmentsService } from '../../modules/annulments/annulments.service';
 import { AssignmentsService } from '../../modules/assignments/assignments.service';
 import { AuditService } from '../../modules/audit/audit.service';
 import { BeneficiariesService } from '../../modules/beneficiaries/beneficiaries.service';
+import { ParametersService } from '../../modules/parameters/parameters.service';
 import { PaymentGroupsService } from '../../modules/payment-groups/payment-groups.service';
 import { PaymentRequestsService } from '../../modules/payment-requests/payment-requests.service';
 import { PaymentsService } from '../../modules/payments/payments.service';
 import { PettyCashService } from '../../modules/petty-cash/petty-cash.service';
 import { ProjectsService } from '../../modules/projects/projects.service';
+import { ReportsService } from '../../modules/reports/reports.service';
+import { UsersService } from '../../modules/users/users.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import {
   AccrualBatchStatus,
@@ -60,6 +63,8 @@ function createInMemoryPrisma(): PrismaService {
     row ? { ...row } : null;
 
   const db = {
+    users: [] as RowRecord[],
+    systemParameters: [] as RowRecord[],
     projects: [] as RowRecord[],
     paymentGroups: [] as RowRecord[],
     paymentGroupPeriods: [] as RowRecord[],
@@ -76,6 +81,17 @@ function createInMemoryPrisma(): PrismaService {
     pettyCashPeriods: [] as RowRecord[],
     pettyCashVouchers: [] as RowRecord[],
     auditLogs: [] as RowRecord[],
+  };
+
+  const resolveUserSummary = (
+    userId: unknown,
+    fallbackName: string,
+  ): { id: string; fullName: string } => {
+    const found = db.users.find((u) => u.id === userId);
+    if (found) {
+      return { id: String(found.id), fullName: String(found.fullName) };
+    }
+    return { id: String(userId ?? ''), fullName: fallbackName };
   };
 
   const toTimestamp = (value: unknown): number => {
@@ -129,6 +145,58 @@ function createInMemoryPrisma(): PrismaService {
   const client = {
     $transaction: async <T>(cb: (tx: PrismaService) => Promise<T>): Promise<T> =>
       cb(client as unknown as PrismaService),
+
+    user: {
+      findUnique: async ({ where = {} }: QueryArgs) =>
+        clone(
+          db.users.find((u) =>
+            where.id ? u.id === where.id : u.email === where.email,
+          ) ?? null,
+        ),
+      findMany: async ({ where }: QueryArgs = {}) =>
+        db.users
+          .filter((u) => matchesWhere(u, where))
+          .map((u) => ({
+            id: u.id,
+            email: u.email,
+            fullName: u.fullName,
+            role: u.role,
+            isActive: u.isActive,
+            createdAt: u.createdAt,
+          })),
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('usr'), createdAt: new Date(), ...data };
+        db.users.push(rec);
+        return clone(rec);
+      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.users, where, data),
+    },
+
+    systemParameter: {
+      findMany: async () =>
+        [...db.systemParameters]
+          .sort((a, b) => String(a.key).localeCompare(String(b.key)))
+          .map((r) => ({ ...r })),
+      findUnique: async ({ where = {} }: QueryArgs) =>
+        clone(
+          db.systemParameters.find((p) =>
+            where.id ? p.id === where.id : p.key === where.key,
+          ) ?? null,
+        ),
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('prm'), updatedAt: new Date(), ...data };
+        db.systemParameters.push(rec);
+        return clone(rec);
+      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.systemParameters, where, data),
+      delete: async ({ where = {} }: QueryArgs) => {
+        const idx = db.systemParameters.findIndex((p) => p.id === where.id);
+        const [removed] = db.systemParameters.splice(idx, 1);
+        return removed;
+      },
+    },
 
     project: {
       count: async () => db.projects.length,
@@ -308,10 +376,25 @@ function createInMemoryPrisma(): PrismaService {
     accrual: {
       findUnique: async ({ where = {} }: QueryArgs) =>
         clone(db.accruals.find((a) => a.id === where.id) ?? null),
-      findMany: async ({ where }: QueryArgs = {}) =>
+      findMany: async ({ where, include }: QueryArgs = {}) =>
         db.accruals
           .filter((a) => matchesWhere(a, where))
-          .map((a) => ({ ...a })),
+          .map((a) => ({
+            ...a,
+            ...(include?.beneficiary
+              ? {
+                  beneficiary: db.beneficiaries.find(
+                    (b) => b.id === a.beneficiaryId,
+                  ),
+                }
+              : {}),
+            ...(include?.project
+              ? { project: db.projects.find((p) => p.id === a.projectId) }
+              : {}),
+            ...(include?.batch
+              ? { batch: db.accrualBatches.find((b) => b.id === a.batchId) }
+              : {}),
+          })),
       create: async ({ data = {} }: QueryArgs) => {
         const rec: RowRecord = { id: nextId('acc'), createdAt: new Date(), ...data };
         db.accruals.push(rec);
@@ -335,14 +418,42 @@ function createInMemoryPrisma(): PrismaService {
         if (!rec) return null;
         return clone({
           ...rec,
+          ...(include?.project
+            ? { project: db.projects.find((p) => p.id === rec.projectId) }
+            : {}),
+          ...(include?.createdBy
+            ? {
+                createdBy: resolveUserSummary(
+                  rec.createdById,
+                  'Coordinador General',
+                ),
+              }
+            : {}),
+          ...(include?.reviewedBy
+            ? {
+                reviewedBy: rec.reviewedById
+                  ? resolveUserSummary(rec.reviewedById, 'Gerente Administracion')
+                  : null,
+              }
+            : {}),
           ...(include?.items
             ? {
                 items: db.paymentRequestItems
                   .filter((i) => i.paymentRequestId === rec.id)
-                  .map((i) => ({
-                    ...i,
-                    accrual: db.accruals.find((a) => a.id === i.accrualId),
-                  })),
+                  .map((i) => {
+                    const acc = db.accruals.find((a) => a.id === i.accrualId);
+                    return {
+                      ...i,
+                      accrual: acc
+                        ? {
+                            ...acc,
+                            beneficiary: db.beneficiaries.find(
+                              (b) => b.id === acc.beneficiaryId,
+                            ),
+                          }
+                        : undefined,
+                    };
+                  }),
               }
             : {}),
           ...(include?.payments
@@ -406,8 +517,26 @@ function createInMemoryPrisma(): PrismaService {
           where.id ? p.id === where.id : p.receiptCode === where.receiptCode,
         );
         if (!rec) return null;
+        const req = db.paymentRequests.find(
+          (r) => r.id === rec.paymentRequestId,
+        );
         return clone({
           ...rec,
+          ...(include?.beneficiary
+            ? {
+                beneficiary: db.beneficiaries.find(
+                  (b) => b.id === rec.beneficiaryId,
+                ),
+              }
+            : {}),
+          ...(include?.deliveredBy
+            ? {
+                deliveredBy: resolveUserSummary(
+                  rec.deliveredById,
+                  'Gerente Administracion',
+                ),
+              }
+            : {}),
           ...(include?.allocations
             ? {
                 allocations: db.paymentAllocations
@@ -420,14 +549,44 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
           ...(include?.paymentRequest
             ? {
-                paymentRequest: db.paymentRequests.find(
-                  (r) => r.id === rec.paymentRequestId,
-                ),
+                paymentRequest: req
+                  ? {
+                      ...req,
+                      project: db.projects.find((p) => p.id === req.projectId),
+                    }
+                  : undefined,
               }
             : {}),
         });
       },
-      findMany: async () => db.payments.map((p) => ({ ...p })),
+      findMany: async ({ where }: QueryArgs = {}) => {
+        const reqFilter = where?.paymentRequest as RowRecord | undefined;
+        return db.payments
+          .filter((p) => {
+            if (!reqFilter) return true;
+            const req = db.paymentRequests.find(
+              (r) => r.id === p.paymentRequestId,
+            );
+            return req ? matchesWhere(req, reqFilter) : false;
+          })
+          .map((p) => {
+            const req = db.paymentRequests.find(
+              (r) => r.id === p.paymentRequestId,
+            );
+            return {
+              ...p,
+              beneficiary: db.beneficiaries.find(
+                (b) => b.id === p.beneficiaryId,
+              ),
+              paymentRequest: req
+                ? {
+                    ...req,
+                    project: db.projects.find((pr) => pr.id === req.projectId),
+                  }
+                : undefined,
+            };
+          });
+      },
       create: async ({ data = {} }: QueryArgs) => {
         const rec: RowRecord = { id: nextId('pay'), createdAt: new Date(), ...data };
         db.payments.push(rec);
@@ -594,6 +753,8 @@ describe('Flujos Completos del Sistema (Backend E2E Integración)', () => {
     return {
       prisma,
       auditService,
+      usersService: new UsersService(prisma, auditService),
+      parametersService: new ParametersService(prisma, auditService),
       projectsService: new ProjectsService(prisma, auditService),
       paymentGroupsService: new PaymentGroupsService(prisma, auditService),
       beneficiariesService: new BeneficiariesService(prisma, auditService),
@@ -603,6 +764,7 @@ describe('Flujos Completos del Sistema (Backend E2E Integración)', () => {
       paymentsService: new PaymentsService(prisma, auditService),
       annulmentsService: new AnnulmentsService(prisma, auditService),
       pettyCashService: new PettyCashService(prisma, auditService),
+      reportsService: new ReportsService(prisma),
     };
   }
 
@@ -1012,6 +1174,445 @@ describe('Flujos Completos del Sistema (Backend E2E Integración)', () => {
       receptorActor,
     );
     expect(closedBox.status).toBe(PettyCashStatus.CERRADA);
+  });
+
+  it('Flujo 4: Multiplicidad en proyectos distintos (RN-CAT-04), rechazo con liberación de causaciones (RN-PAG-01) y liquidación tras cierre de proyecto (RN-CAT-02)', async () => {
+    // Arrange
+    const sys = bootstrapServices();
+    const year = new Date().getUTCFullYear();
+
+    const projectA = await sys.projectsService.createProject(
+      {
+        name: 'Física de Plasma',
+        area: ProjectArea.FISICA,
+        scope: ProjectScope.INTERNO,
+        startDate: `${year}-01-01`,
+        endDate: `${year}-12-31`,
+      },
+      generadorActor,
+    );
+    const projectB = await sys.projectsService.createProject(
+      {
+        name: 'Catálisis Heterogénea',
+        area: ProjectArea.QUIMICA,
+        scope: ProjectScope.EXTERNO,
+        startDate: `${year}-01-01`,
+        endDate: `${year}-12-31`,
+      },
+      generadorActor,
+    );
+    const group = await sys.paymentGroupsService.createPaymentGroup(
+      {
+        name: 'Quincenal Multidominio',
+        periodicity: Periodicity.QUINCENAL,
+        cutoffRules: '15 y fin de mes',
+      },
+      adminActor,
+    );
+    const periods = await sys.paymentGroupsService.findPeriods(group.id);
+    const nov1 = periods.find(
+      (p) => p.periodStart.toISOString().slice(0, 10) === `${year}-11-01`,
+    )!;
+    const nov2 = periods.find(
+      (p) => p.periodStart.toISOString().slice(0, 10) === `${year}-11-16`,
+    )!;
+
+    const investigator = await sys.beneficiariesService.createBeneficiary(
+      { dni: 'V-16222333', fullName: 'Dr. Carlos Navarro' },
+      generadorActor,
+    );
+
+    // 1. Act & Assert (RN-CAT-04): Un mismo beneficiario puede estar activo simultáneamente en 2 proyectos distintos
+    const asigA = await sys.assignmentsService.createAssignment(
+      {
+        beneficiaryId: investigator.id,
+        projectId: projectA.id,
+        paymentGroupId: group.id,
+        amountPerPeriod: '400.00',
+        startDate: `${year}-10-01`,
+        endDate: `${year}-12-31`,
+      },
+      generadorActor,
+    );
+    const asigB = await sys.assignmentsService.createAssignment(
+      {
+        beneficiaryId: investigator.id,
+        projectId: projectB.id,
+        paymentGroupId: group.id,
+        amountPerPeriod: '250.00',
+        startDate: `${year}-10-01`,
+        endDate: `${year}-12-31`,
+      },
+      generadorActor,
+    );
+    expect(asigA.isActive).toBe(true);
+    expect(asigB.isActive).toBe(true);
+
+    const batchA = await sys.accrualsService.generateAccrualBatch(
+      {
+        projectId: projectA.id,
+        paymentGroupId: group.id,
+        periodStart: nov1.periodStart.toISOString().slice(0, 10),
+        periodEnd: nov1.periodEnd.toISOString().slice(0, 10),
+      },
+      generadorActor,
+    );
+    const batchB = await sys.accrualsService.generateAccrualBatch(
+      {
+        projectId: projectB.id,
+        paymentGroupId: group.id,
+        periodStart: nov1.periodStart.toISOString().slice(0, 10),
+        periodEnd: nov1.periodEnd.toISOString().slice(0, 10),
+      },
+      generadorActor,
+    );
+    expect(batchA.accruals[0].proratedAmount).toBe('400.00');
+    expect(batchB.accruals[0].proratedAmount).toBe('250.00');
+
+    // 2. Act & Assert (RN-PAG-01): Solicitud rechazada queda inmutable pero libera la causación
+    const sol1 = await sys.paymentRequestsService.createPaymentRequest(
+      { projectId: projectA.id, accrualIds: [batchA.accruals[0].id] },
+      generadorActor,
+    );
+    await sys.paymentRequestsService.sendPaymentRequest(sol1.id, generadorActor);
+    const rejected = await sys.paymentRequestsService.reviewPaymentRequest(
+      sol1.id,
+      {
+        decision: PaymentRequestStatus.RECHAZADA,
+        rejectionReason: 'Soporte de actividades requiere corrección',
+      },
+      receptorActor,
+    );
+    expect(rejected.status).toBe(PaymentRequestStatus.RECHAZADA);
+
+    await expect(
+      sys.paymentRequestsService.reviewPaymentRequest(
+        sol1.id,
+        { decision: PaymentRequestStatus.APROBADA },
+        receptorActor,
+      ),
+    ).rejects.toThrow(BadRequestException);
+
+    // La causación liberada se incluye en una segunda solicitud corregida
+    const sol2 = await sys.paymentRequestsService.createPaymentRequest(
+      { projectId: projectA.id, accrualIds: [batchA.accruals[0].id] },
+      generadorActor,
+    );
+    await sys.paymentRequestsService.sendPaymentRequest(sol2.id, generadorActor);
+
+    // 3. Act & Assert (RN-CAT-02): Al cerrar Proyecto A, bloquea nuevas asignaciones y lotes, pero permite pagar sol2
+    await sys.projectsService.updateProjectStatus(
+      projectA.id,
+      ProjectStatus.CERRADO,
+      adminActor,
+    );
+
+    await expect(
+      sys.assignmentsService.createAssignment(
+        {
+          beneficiaryId: investigator.id,
+          projectId: projectA.id,
+          paymentGroupId: group.id,
+          amountPerPeriod: '100.00',
+          startDate: `${year}-11-16`,
+        },
+        generadorActor,
+      ),
+    ).rejects.toThrow('[RN-CAT-02]');
+
+    await expect(
+      sys.accrualsService.generateAccrualBatch(
+        {
+          projectId: projectA.id,
+          paymentGroupId: group.id,
+          periodStart: nov2.periodStart.toISOString().slice(0, 10),
+          periodEnd: nov2.periodEnd.toISOString().slice(0, 10),
+        },
+        generadorActor,
+      ),
+    ).rejects.toThrow('[RN-CAT-02]');
+
+    await sys.paymentRequestsService.reviewPaymentRequest(
+      sol2.id,
+      { decision: PaymentRequestStatus.APROBADA },
+      receptorActor,
+    );
+    const postClosePay = await sys.paymentsService.registerPayment(
+      {
+        paymentRequestId: sol2.id,
+        beneficiaryId: investigator.id,
+        amount: '400.00',
+        paymentDate: `${year}-11-28`,
+        reference: 'LIQUIDACION-POST-CIERRE',
+      },
+      receptorActor,
+    );
+    expect(postClosePay.fifoSummary.remainingDebtAfterPayment).toBe('0.00');
+    const closedSol2 = await sys.paymentRequestsService.closePaymentRequest(
+      sol2.id,
+      receptorActor,
+    );
+    expect(closedSol2.status).toBe(PaymentRequestStatus.CERRADA);
+  });
+
+  it('Flujo 5: Gobernanza ADMIN (Users + Parameters), efectos dinámicos en ejecución y Reportes/PDFs Oficiales (RN-AUD-01/02)', async () => {
+    // Arrange
+    const sys = bootstrapServices();
+    const year = new Date().getUTCFullYear();
+
+    // 1. Act & Assert (RN-SEG-02): ADMIN gestiona usuarios y no puede auto-desactivarse ni auto-degradarse
+    const extraAdmin = await sys.usersService.createUser(
+      {
+        email: 'admin.aux@uc.edu.ve',
+        fullName: 'Admin Auxiliar',
+        password: 'PasswordUC2026!',
+        role: UserRole.ADMIN,
+      },
+      adminActor,
+    );
+    const extraAdminActor: AuthenticatedUser = {
+      id: extraAdmin.id,
+      email: extraAdmin.email,
+      fullName: extraAdmin.fullName,
+      role: UserRole.ADMIN,
+    };
+
+    const genUser = await sys.usersService.createUser(
+      {
+        email: 'coord.nuevo@uc.edu.ve',
+        fullName: 'Dra. Sofía Mendoza',
+        password: 'PasswordUC2026!',
+        role: UserRole.GENERADOR,
+      },
+      extraAdminActor,
+    );
+    const updatedGen = await sys.usersService.updateUser(
+      genUser.id,
+      { fullName: 'Dra. Sofía Mendoza de Pérez' },
+      extraAdminActor,
+    );
+    expect(updatedGen.fullName).toBe('Dra. Sofía Mendoza de Pérez');
+
+    const recUser = await sys.usersService.createUser(
+      {
+        email: 'gerente.nuevo@uc.edu.ve',
+        fullName: 'Lic. Jorge Duarte',
+        password: 'PasswordUC2026!',
+        role: UserRole.RECEPTOR,
+      },
+      extraAdminActor,
+    );
+
+    await expect(
+      sys.usersService.toggleUserActiveStatus(
+        extraAdminActor.id,
+        false,
+        extraAdminActor,
+      ),
+    ).rejects.toThrow('[RN-SEG-02]');
+    await expect(
+      sys.usersService.updateUser(
+        extraAdminActor.id,
+        { role: UserRole.GENERADOR },
+        extraAdminActor,
+      ),
+    ).rejects.toThrow('[RN-SEG-02]');
+
+    // 2. Configuración dinámica de parámetros globales
+    await sys.parametersService.create(
+      {
+        key: 'PETTY_CASH_REQUIRE_ATTACHMENT',
+        value: 'false',
+        description: 'Permitir rendición sin adjunto obligatorio en contingencia',
+      },
+      extraAdminActor,
+    );
+    await sys.parametersService.create(
+      {
+        key: 'PAYMENT_REQUEST_SCOPE',
+        value: 'PROJECT_ACCRUALS',
+        description: 'Aplicar FIFO sobre todas las deudas pendientes del proyecto',
+      },
+      extraAdminActor,
+    );
+
+    const genActorLive: AuthenticatedUser = {
+      id: genUser.id,
+      email: genUser.email,
+      fullName: updatedGen.fullName,
+      role: UserRole.GENERADOR,
+    };
+    const recActorLive: AuthenticatedUser = {
+      id: recUser.id,
+      email: recUser.email,
+      fullName: recUser.fullName,
+      role: UserRole.RECEPTOR,
+    };
+
+    // 3. Efecto de PETTY_CASH_REQUIRE_ATTACHMENT = false en caja chica
+    const project = await sys.projectsService.createProject(
+      {
+        name: 'Microscopía Electrónica',
+        area: ProjectArea.BIOLOGIA,
+        scope: ProjectScope.INTERNO,
+        startDate: `${year}-01-01`,
+        endDate: `${year}-12-31`,
+      },
+      genActorLive,
+    );
+    const box = await sys.pettyCashService.createPettyCash(
+      { name: 'Caja Microscopía', projectId: project.id, authorizedAmount: '200.00' },
+      genActorLive,
+    );
+    const period = await sys.pettyCashService.openMonthlyPeriod(
+      box.id,
+      { yearMonth: `${year}-11`, initialReplenishment: '200.00' },
+      genActorLive,
+    );
+    await sys.pettyCashService.approvePeriodOpening(period.id, recActorLive);
+    const voucher = await sys.pettyCashService.requestVoucher(
+      period.id,
+      {
+        beneficiaryName: 'Técnico Luis',
+        concept: 'Mantenimiento preventivo',
+        requestedAmount: '100.00',
+      },
+      genActorLive,
+    );
+    await sys.pettyCashService.approveVoucher(voucher.id, recActorLive);
+    await sys.pettyCashService.disburseVoucher(voucher.id, recActorLive);
+    const settledWithoutFile = await sys.pettyCashService.settleVoucher(
+      voucher.id,
+      { settledAmount: '80.00', invoiceReference: 'FACT-9001' },
+      genActorLive,
+    );
+    expect(settledWithoutFile.voucher.status).toBe(PettyCashVoucherStatus.RENDIDO);
+    expect(settledWithoutFile.newAvailableBalance).toBe('120.00');
+
+    // 4. Efecto de PAYMENT_REQUEST_SCOPE = PROJECT_ACCRUALS y ReportsService (RN-AUD-01/02)
+    const group = await sys.paymentGroupsService.createPaymentGroup(
+      {
+        name: 'Quincenal Reportes E2E',
+        periodicity: Periodicity.QUINCENAL,
+        cutoffRules: '15 y 30',
+      },
+      extraAdminActor,
+    );
+    const pgPeriods = await sys.paymentGroupsService.findPeriods(group.id);
+    const q1 = pgPeriods.find(
+      (p) => p.periodStart.toISOString().slice(0, 10) === `${year}-11-01`,
+    )!;
+    const q2 = pgPeriods.find(
+      (p) => p.periodStart.toISOString().slice(0, 10) === `${year}-11-16`,
+    )!;
+
+    const ben = await sys.beneficiariesService.createBeneficiary(
+      { dni: 'V-14888999', fullName: 'Dra. Beatriz Paredes' },
+      genActorLive,
+    );
+    await sys.assignmentsService.createAssignment(
+      {
+        beneficiaryId: ben.id,
+        projectId: project.id,
+        paymentGroupId: group.id,
+        amountPerPeriod: '300.00',
+        startDate: `${year}-10-01`,
+        endDate: `${year}-12-31`,
+      },
+      genActorLive,
+    );
+    const batch1 = await sys.accrualsService.generateAccrualBatch(
+      {
+        projectId: project.id,
+        paymentGroupId: group.id,
+        periodStart: q1.periodStart.toISOString().slice(0, 10),
+        periodEnd: q1.periodEnd.toISOString().slice(0, 10),
+      },
+      genActorLive,
+    );
+    const batch2 = await sys.accrualsService.generateAccrualBatch(
+      {
+        projectId: project.id,
+        paymentGroupId: group.id,
+        periodStart: q2.periodStart.toISOString().slice(0, 10),
+        periodEnd: q2.periodEnd.toISOString().slice(0, 10),
+      },
+      genActorLive,
+    );
+
+    // Solicitud solo lista Q2 ($300), pero al estar PAYMENT_REQUEST_SCOPE=PROJECT_ACCRUALS FIFO abona Q1 (más antigua)
+    const reqScope = await sys.paymentRequestsService.createPaymentRequest(
+      { projectId: project.id, accrualIds: [batch2.accruals[0].id] },
+      genActorLive,
+    );
+    await sys.paymentRequestsService.sendPaymentRequest(reqScope.id, genActorLive);
+    await sys.paymentRequestsService.reviewPaymentRequest(
+      reqScope.id,
+      { decision: PaymentRequestStatus.APROBADA },
+      recActorLive,
+    );
+
+    const payment = await sys.paymentsService.registerPayment(
+      {
+        paymentRequestId: reqScope.id,
+        beneficiaryId: ben.id,
+        amount: '300.00',
+        paymentDate: `${year}-11-25`,
+        reference: 'TRANSF-SCOPE-01',
+      },
+      recActorLive,
+    );
+    expect(payment.allocations[0].accrualId).toBe(batch1.accruals[0].id);
+
+    // 5. Consultas clave (RN-AUD-01) y generación de los 3 PDFs (RN-AUD-02)
+    const summary = await sys.reportsService.getExecutiveSummaryAndDebts(
+      project.id,
+    );
+    expect(summary.totalAccruedUsd).toBe('600.00');
+    expect(summary.totalPaidUsd).toBe('300.00');
+    expect(summary.totalPendingDebtUsd).toBe('300.00');
+    expect(summary.beneficiaryBalances).toHaveLength(1);
+    expect(summary.beneficiaryBalances[0].oldestUnpaidPeriodStart).toBe(
+      `${year}-11-16`,
+    );
+    expect(summary.paymentHistory).toHaveLength(1);
+    expect(summary.paymentHistory[0].receiptCode).toBe(
+      payment.payment.receiptCode,
+    );
+
+    const summaryPdf = await sys.reportsService.generateExecutiveSummaryPdf(
+      project.id,
+    );
+    const receiptPdf = await sys.reportsService.generateIndividualReceiptPdf(
+      payment.payment.id,
+    );
+    const requestPdf =
+      await sys.reportsService.generateConsolidatedRequestPdf(reqScope.id);
+
+    expect(summaryPdf.buffer.toString('utf8').startsWith('%PDF-1.4')).toBe(true);
+    expect(summaryPdf.buffer.toString('utf8')).toContain(
+      payment.payment.receiptCode,
+    );
+    expect(receiptPdf.buffer.toString('utf8').startsWith('%PDF-1.4')).toBe(true);
+    expect(requestPdf.buffer.toString('utf8').startsWith('%PDF-1.4')).toBe(true);
+    expect(requestPdf.buffer.toString('utf8')).toContain('Sofia Mendoza');
+
+    // Al anular el pago, el PDF individual debe mostrar marca de agua ANULADO y el resumen revertirse
+    await sys.annulmentsService.annulPayment(
+      payment.payment.id,
+      'Reverso de prueba para validar marca de agua en reporte',
+      recActorLive,
+    );
+    const annulledPdf = await sys.reportsService.generateIndividualReceiptPdf(
+      payment.payment.id,
+    );
+    expect(annulledPdf.buffer.toString('utf8')).toContain('(ANULADO) Tj');
+    expect(annulledPdf.buffer.toString('utf8')).toContain('0.7071');
+
+    const summaryAfterAnnul =
+      await sys.reportsService.getExecutiveSummaryAndDebts(project.id);
+    expect(summaryAfterAnnul.totalPaidUsd).toBe('0.00');
+    expect(summaryAfterAnnul.totalPendingDebtUsd).toBe('600.00');
   });
 });
 

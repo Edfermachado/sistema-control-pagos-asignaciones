@@ -12,7 +12,32 @@ import {
 
 describe('ux-workflows.util', () => {
   describe('validateInlineJustification', () => {
-    it('debe rechazar motivos con menos caracteres tras recortar espacios y calcular caracteres faltantes', () => {
+    it('debe aceptar motivos que cumplen la longitud mínima (Happy Path)', () => {
+      // Arrange
+      const reason = 'Error de carga en monto';
+
+      // Act
+      const result = validateInlineJustification(reason, 10);
+
+      // Assert
+      expect(result.valid).toBe(true);
+      expect(result.remainingChars).toBe(0);
+    });
+
+    it('debe aceptar un motivo con la longitud exacta mínima tras recortar espacios (Edge Case)', () => {
+      // Arrange
+      const exactTen = '  1234567890  ';
+
+      // Act
+      const result = validateInlineJustification(exactTen, 10);
+
+      // Assert
+      expect(result.valid).toBe(true);
+      expect(result.trimmed).toBe('1234567890');
+      expect(result.remainingChars).toBe(0);
+    });
+
+    it('debe rechazar motivos con menos caracteres tras recortar espacios y calcular caracteres faltantes (Violación RN-GLOB-04)', () => {
       // Arrange
       const reason = '   Error   ';
 
@@ -24,22 +49,10 @@ describe('ux-workflows.util', () => {
       expect(result.trimmed).toBe('Error');
       expect(result.remainingChars).toBe(5);
     });
-
-    it('debe aceptar motivos que cumplen la longitud mínima', () => {
-      // Arrange
-      const reason = 'Error de carga en monto';
-
-      // Act
-      const result = validateInlineJustification(reason, 10);
-
-      // Assert
-      expect(result.valid).toBe(true);
-      expect(result.remainingChars).toBe(0);
-    });
   });
 
   describe('getDefaultVoucherSettlementDraft', () => {
-    it('debe usar el monto desembolsado como borrador y tope máximo permitidos', () => {
+    it('debe usar el monto desembolsado como borrador y tope máximo permitidos (Happy Path)', () => {
       // Arrange
       const voucher = { requestedAmount: '50.00', disbursedAmount: '45.50' };
 
@@ -51,7 +64,7 @@ describe('ux-workflows.util', () => {
       expect(draft.maxAllowedAmount).toBe(45.5);
     });
 
-    it('debe usar el monto solicitado cuando no existe disbursedAmount', () => {
+    it('debe usar el monto solicitado cuando no existe disbursedAmount (Edge Case)', () => {
       // Arrange
       const voucher = { requestedAmount: 60, disbursedAmount: null };
 
@@ -62,6 +75,18 @@ describe('ux-workflows.util', () => {
       expect(draft.settledAmount).toBe('60.00');
       expect(draft.maxAllowedAmount).toBe(60);
     });
+
+    it('debe sanear montos negativos o inválidos a 0.00 (Caso Borde Inválido)', () => {
+      // Arrange
+      const invalidVoucher = { requestedAmount: '-20.00', disbursedAmount: '' };
+
+      // Act
+      const draft = getDefaultVoucherSettlementDraft(invalidVoucher);
+
+      // Assert
+      expect(draft.settledAmount).toBe('0.00');
+      expect(draft.maxAllowedAmount).toBe(0);
+    });
   });
 
   describe('summarizeAccrualSelection y toggleAllEligibleAccruals', () => {
@@ -71,7 +96,7 @@ describe('ux-workflows.util', () => {
       { id: 'a3', balanceDue: '100.00', beneficiaryId: 'b1' },
     ];
 
-    it('debe calcular subtotal, beneficiarios únicos y allSelected', () => {
+    it('debe calcular subtotal, beneficiarios únicos y allSelected (Happy Path)', () => {
       // Arrange
       const selectedIds = ['a1', 'a2'];
 
@@ -86,7 +111,7 @@ describe('ux-workflows.util', () => {
       expect(summary.uniqueBeneficiariesCount).toBe(2);
     });
 
-    it('debe seleccionar todas al faltar alguna y limpiar cuando ya están todas seleccionadas', () => {
+    it('debe seleccionar todas al faltar alguna y limpiar cuando ya están todas seleccionadas (Edge Case)', () => {
       // Arrange & Act
       const allSelected = toggleAllEligibleAccruals(eligible, ['a1']);
       const cleared = toggleAllEligibleAccruals(eligible, allSelected);
@@ -94,6 +119,17 @@ describe('ux-workflows.util', () => {
       // Assert
       expect(allSelected).toEqual(['a1', 'a2', 'a3']);
       expect(cleared).toEqual([]);
+    });
+
+    it('debe retornar ceros y lista vacía cuando no existen causaciones elegibles (Caso Vacío)', () => {
+      // Arrange & Act
+      const summary = summarizeAccrualSelection([], []);
+      const toggled = toggleAllEligibleAccruals([], []);
+
+      // Assert
+      expect(summary.allSelected).toBe(false);
+      expect(summary.totalSelectedUsd).toBe(0);
+      expect(toggled).toEqual([]);
     });
   });
 
@@ -104,7 +140,7 @@ describe('ux-workflows.util', () => {
       endDate: '2026-12-31',
     };
 
-    it('debe detectar traslape contra asignación existente y sugerir el tramo libre', () => {
+    it('debe detectar traslape contra asignación existente y sugerir el tramo libre (Happy Path)', () => {
       // Arrange
       const assignments = [
         {
@@ -140,7 +176,7 @@ describe('ux-workflows.util', () => {
       });
     });
 
-    it('debe ignorar asignaciones inactivas y calcular múltiples huecos libres', () => {
+    it('debe ignorar asignaciones inactivas y calcular múltiples huecos libres (Edge Case)', () => {
       // Arrange
       const assignments = [
         {
@@ -177,10 +213,29 @@ describe('ux-workflows.util', () => {
         { startDate: '2026-09-01', endDate: '2026-12-31' },
       ]);
     });
+
+    it('debe retornar disponibilidad vacía de forma segura cuando falta proyecto o beneficiario (Caso Vacío)', () => {
+      // Arrange & Act
+      const analysis = analyzeBeneficiaryProjectAvailability({
+        project: undefined,
+        beneficiaryId: '',
+        assignments: [],
+        proposedStart: '2026-01-01',
+        proposedEnd: '2026-12-31',
+      });
+
+      // Assert
+      expect(analysis).toEqual({
+        occupiedRanges: [],
+        freeSubRanges: [],
+        hasOverlapConflict: false,
+        suggestedRange: null,
+      });
+    });
   });
 
   describe('simulateFifoPaymentPreview', () => {
-    it('debe repartir un pago parcial cronológicamente marcando la más antigua PAGADO y la segunda PARCIAL', () => {
+    it('debe repartir un pago parcial cronológicamente marcando la más antigua PAGADO y la segunda PARCIAL (Happy Path)', () => {
       // Arrange
       const allAccruals = [
         {
@@ -251,7 +306,42 @@ describe('ux-workflows.util', () => {
       ]);
     });
 
-    it('debe marcar isValidAmount=false si supera la deuda pendiente en la solicitud', () => {
+    it('debe marcar isValidAmount=false cuando el monto es 0 o vacío manteniendo calculada la deuda pendiente (Edge Case)', () => {
+      // Arrange
+      const allAccruals = [
+        {
+          id: 'acc-1',
+          beneficiaryId: 'ben-1',
+          periodStart: '2026-10-01',
+          periodEnd: '2026-10-15',
+          balanceDue: '150.00',
+          status: AccrualStatus.PENDIENTE,
+        },
+      ];
+
+      // Act
+      const preview = simulateFifoPaymentPreview({
+        paymentAmount: '0',
+        requestItems: [
+          {
+            accrual: {
+              id: 'acc-1',
+              beneficiaryId: 'ben-1',
+              balanceDue: '150.00',
+            },
+          },
+        ],
+        allAccruals,
+        beneficiaryId: 'ben-1',
+      });
+
+      // Assert
+      expect(preview.isValidAmount).toBe(false);
+      expect(preview.totalBeneficiaryDebtInRequestUsd).toBe(150);
+      expect(preview.steps[0].allocatedUsd).toBe(0);
+    });
+
+    it('debe marcar isValidAmount=false si supera la deuda pendiente en la solicitud (Violación RN-PAG-02)', () => {
       // Arrange
       const allAccruals = [
         {
@@ -287,11 +377,34 @@ describe('ux-workflows.util', () => {
   });
 
   describe('isConfirmationArmed', () => {
-    it('debe validar coincidencia exacta de clave de confirmación en dos pasos', () => {
-      // Arrange & Act & Assert
-      expect(isConfirmationArmed('CLOSE_REQ:r1', 'CLOSE_REQ:r1')).toBe(true);
-      expect(isConfirmationArmed('CLOSE_REQ:r1', 'CLOSE_REQ:r2')).toBe(false);
-      expect(isConfirmationArmed(null, 'CLOSE_REQ:r1')).toBe(false);
+    it('debe retornar true cuando la clave armada coincide exactamente con la acción objetivo (Happy Path)', () => {
+      // Arrange
+      const armedKey = 'CLOSE_REQ:r1';
+
+      // Act
+      const armed = isConfirmationArmed(armedKey, 'CLOSE_REQ:r1');
+
+      // Assert
+      expect(armed).toBe(true);
+    });
+
+    it('debe retornar false cuando corresponde a otra fila o acción distinta (Edge Case)', () => {
+      // Arrange
+      const armedKey = 'CLOSE_REQ:r1';
+
+      // Act
+      const armed = isConfirmationArmed(armedKey, 'CLOSE_REQ:r2');
+
+      // Assert
+      expect(armed).toBe(false);
+    });
+
+    it('debe retornar false cuando no existe ninguna confirmación armada (Caso Nulo)', () => {
+      // Arrange & Act
+      const armed = isConfirmationArmed(null, 'CLOSE_REQ:r1');
+
+      // Assert
+      expect(armed).toBe(false);
     });
   });
 });
