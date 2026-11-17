@@ -72,6 +72,28 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
       expect(buffer.toString('utf8')).toContain('DOCUMENTO VACIO');
     });
 
+    it('debe dividir automáticamente en múltiples páginas cuando bodyLines supera 42 líneas (Edge Case)', () => {
+      // Arrange
+      const manyLines = Array.from(
+        { length: 90 },
+        (_, i) => `Linea ${i + 1}: Registro de detalle`,
+      );
+
+      // Act
+      const buffer = buildSimplePdfBuffer(
+        'REPORTE EXTENSO',
+        'Todos los proyectos',
+        manyLines,
+      );
+      const textContent = buffer.toString('utf8');
+
+      // Assert
+      expect(textContent).toContain('/Count 3');
+      expect(textContent).toContain('(Pagina 1 de 3)');
+      expect(textContent).toContain('(Pagina 3 de 3)');
+      expect(textContent).toContain('Linea 90: Registro de detalle');
+    });
+
     it('debe lanzar BadRequestException si el título del PDF está vacío (Violación RN-AUD-02)', () => {
       // Arrange & Act & Assert
       expect(() => buildSimplePdfBuffer('   ', 'Sub', [])).toThrow(

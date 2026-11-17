@@ -234,7 +234,7 @@ una variante, se extiende la hoja de estilos con un token existente.
 
 | Vista | Regla propia |
 |---|---|
-| **1. Resumen y deudas** | Abre con `.ledger` (tres cifras + lateral). Debajo, un único folio con el estado de cuenta por beneficiario y el filtro de proyecto en la cabecera del folio. Nada más. |
+| **1. Resumen y deudas** | Abre con `.ledger` (tres cifras + lateral). Debajo, el folio de estado de cuenta por beneficiario (con filtro por proyecto y exportación a PDF) y el folio de historial de pagos ejecutados (`RN-AUD-01`). |
 | **2. Catálogos y asignaciones** | Cuatro bloques (proyectos, grupos de pago y cortes, beneficiarios, asignaciones) en sub-pestañas `.subtabs` o en folios consecutivos; cada uno con su tabla y su formulario en `.form-grid` arriba del registro. Los formularios son parte del folio, no modales flotantes. |
 | **3. Causación, solicitudes y pagos** | Orden lógico del flujo: lote de causación → solicitud → revisión → pago FIFO → anulación. Cada paso es un folio con su código de norma en `.sheet__hint`. Las cifras de saldo usan `.num`; los estados, badges. |
 | **4. Cajas chicas y reportes** | Una caja = un folio; sus períodos y vales, en tablas dentro del mismo folio. El saldo disponible de la caja es la cifra dominante, en `.figure__value`. |

@@ -144,3 +144,50 @@ BEGIN
     END LOOP;
 END;
 $$;
+
+-- 5. Inmutabilidad de montos base en BD (RN-GLOB-03): prohibir UPDATE directo sobre montos originales
+CREATE OR REPLACE FUNCTION fn_block_financial_amount_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_col TEXT := TG_ARGV[0];
+    v_old_val NUMERIC;
+    v_new_val NUMERIC;
+BEGIN
+    v_old_val := (to_jsonb(OLD) ->> v_col)::numeric;
+    v_new_val := (to_jsonb(NEW) ->> v_col)::numeric;
+    IF v_old_val IS DISTINCT FROM v_new_val THEN
+        RAISE EXCEPTION 'RN-GLOB-03: Prohibido modificar % en %.', v_col, TG_TABLE_NAME;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DO $$
+DECLARE
+    idx INT;
+    amount_protected_specs TEXT[][] := ARRAY[
+        ['accruals', 'prorated_amount'],
+        ['payments', 'amount'],
+        ['payment_allocations', 'allocated_amount'],
+        ['payment_requests', 'total_amount'],
+        ['payment_request_items', 'requested_amount'],
+        ['petty_cash_vouchers', 'requested_amount']
+    ];
+BEGIN
+    FOR idx IN 1 .. array_length(amount_protected_specs, 1) LOOP
+        EXECUTE format(
+            'DROP TRIGGER IF EXISTS %I ON %I',
+            'trg_immutable_amount_' || amount_protected_specs[idx][1],
+            amount_protected_specs[idx][1]
+        );
+        EXECUTE format(
+            'CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION fn_block_financial_amount_mutation(%L)',
+            'trg_immutable_amount_' || amount_protected_specs[idx][1],
+            amount_protected_specs[idx][1],
+            amount_protected_specs[idx][2]
+        );
+    END LOOP;
+END;
+$$;

@@ -29,59 +29,85 @@ import {
 } from '../constants/domain.enums';
 import { AuthenticatedUser } from '../decorators/current-user.decorator';
 
+type RowRecord = Record<string, unknown>;
+
+interface FilterOperator {
+  in?: unknown[];
+  not?: unknown;
+  lte?: Date | string;
+  gte?: Date | string;
+}
+
+interface QueryArgs {
+  where?: RowRecord;
+  include?: Record<string, boolean | RowRecord>;
+  data?: RowRecord;
+  orderBy?: RowRecord;
+}
+
+interface BatchCreateArgs {
+  data: RowRecord[];
+}
+
 /**
- * Doble relacional en memoria con soporte transaccional para probar
- * flujos E2E completos entre los servicios reales de NestJS.
+ * Doble relacional en memoria tipado con soporte transaccional para probar
+ * flujos E2E completos entre los servicios reales de NestJS (sin usar any).
  */
 function createInMemoryPrisma(): PrismaService {
   let seq = 1;
   const nextId = (prefix: string) => `${prefix}-${seq++}`;
-  const clone = <T>(row: T | null): T | null => (row ? { ...row } : null);
+  const clone = <T extends RowRecord>(row: T | null): T | null =>
+    row ? { ...row } : null;
 
   const db = {
-    projects: [] as any[],
-    paymentGroups: [] as any[],
-    paymentGroupPeriods: [] as any[],
-    beneficiaries: [] as any[],
-    assignments: [] as any[],
-    accrualBatches: [] as any[],
-    accruals: [] as any[],
-    paymentRequests: [] as any[],
-    paymentRequestItems: [] as any[],
-    payments: [] as any[],
-    paymentAllocations: [] as any[],
-    annulments: [] as any[],
-    pettyCashes: [] as any[],
-    pettyCashPeriods: [] as any[],
-    pettyCashVouchers: [] as any[],
-    auditLogs: [] as any[],
+    projects: [] as RowRecord[],
+    paymentGroups: [] as RowRecord[],
+    paymentGroupPeriods: [] as RowRecord[],
+    beneficiaries: [] as RowRecord[],
+    assignments: [] as RowRecord[],
+    accrualBatches: [] as RowRecord[],
+    accruals: [] as RowRecord[],
+    paymentRequests: [] as RowRecord[],
+    paymentRequestItems: [] as RowRecord[],
+    payments: [] as RowRecord[],
+    paymentAllocations: [] as RowRecord[],
+    annulments: [] as RowRecord[],
+    pettyCashes: [] as RowRecord[],
+    pettyCashPeriods: [] as RowRecord[],
+    pettyCashVouchers: [] as RowRecord[],
+    auditLogs: [] as RowRecord[],
   };
 
-  const matchDateFilter = (val: Date, cond: any): boolean => {
-    if (!cond || typeof cond !== 'object' || cond instanceof Date) {
-      return val.getTime() === new Date(cond).getTime();
-    }
+  const toTimestamp = (value: unknown): number => {
+    if (value instanceof Date) return value.getTime();
+    return new Date(String(value)).getTime();
+  };
+
+  const isFilterOperator = (val: unknown): val is FilterOperator =>
+    Boolean(val) && typeof val === 'object' && !(val instanceof Date);
+
+  const matchDateFilter = (val: Date, cond: FilterOperator): boolean => {
     const time = val.getTime();
-    if (cond.lte && time > new Date(cond.lte).getTime()) return false;
-    if (cond.gte && time < new Date(cond.gte).getTime()) return false;
+    if (cond.lte && time > toTimestamp(cond.lte)) return false;
+    if (cond.gte && time < toTimestamp(cond.gte)) return false;
     return true;
   };
 
-  const matchValue = (rowVal: any, cond: any): boolean => {
-    if (cond && typeof cond === 'object' && !(cond instanceof Date)) {
-      if ('in' in cond) return cond.in.includes(rowVal);
+  const matchValue = (rowVal: unknown, cond: unknown): boolean => {
+    if (isFilterOperator(cond)) {
+      if (Array.isArray(cond.in)) return cond.in.includes(rowVal);
       if ('not' in cond) return rowVal !== cond.not;
-      if ('lte' in cond || 'gte' in cond) {
-        return matchDateFilter(new Date(rowVal), cond);
+      if (cond.lte !== undefined || cond.gte !== undefined) {
+        return matchDateFilter(new Date(toTimestamp(rowVal)), cond);
       }
     }
     if (rowVal instanceof Date || cond instanceof Date) {
-      return new Date(rowVal).getTime() === new Date(cond).getTime();
+      return toTimestamp(rowVal) === toTimestamp(cond);
     }
     return rowVal === cond;
   };
 
-  const matchesWhere = (row: any, where: Record<string, any> = {}): boolean => {
+  const matchesWhere = (row: RowRecord, where: RowRecord = {}): boolean => {
     for (const [key, cond] of Object.entries(where)) {
       if (cond === undefined) continue;
       if (!matchValue(row[key], cond)) return false;
@@ -89,87 +115,88 @@ function createInMemoryPrisma(): PrismaService {
     return true;
   };
 
-  const client: any = {
+  const updateRowById = (
+    table: RowRecord[],
+    where: RowRecord = {},
+    data: RowRecord = {},
+  ): RowRecord | null => {
+    const rec = table.find((r) => r.id === where.id);
+    if (!rec) return null;
+    Object.assign(rec, data);
+    return clone(rec);
+  };
+
+  const client = {
     $transaction: async <T>(cb: (tx: PrismaService) => Promise<T>): Promise<T> =>
-      cb(client),
+      cb(client as unknown as PrismaService),
 
     project: {
       count: async () => db.projects.length,
-      findUnique: async ({ where }: any) =>
+      findUnique: async ({ where = {} }: QueryArgs) =>
         clone(
           db.projects.find((p) =>
             where.id ? p.id === where.id : p.code === where.code,
           ) ?? null,
         ),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('proj'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('proj'), createdAt: new Date(), ...data };
         db.projects.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.projects.find((p) => p.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
-      findMany: async ({ where }: any = {}) =>
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.projects, where, data),
+      findMany: async ({ where }: QueryArgs = {}) =>
         db.projects.filter((p) => matchesWhere(p, where)).map((r) => ({ ...r })),
     },
 
     paymentGroup: {
-      findUnique: async ({ where }: any) =>
+      findUnique: async ({ where = {} }: QueryArgs) =>
         clone(
           db.paymentGroups.find((g) =>
             where.id ? g.id === where.id : g.name === where.name,
           ) ?? null,
         ),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('pg'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('pg'), createdAt: new Date(), ...data };
         db.paymentGroups.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.paymentGroups.find((g) => g.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
-      findMany: async ({ where }: any = {}) =>
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.paymentGroups, where, data),
+      findMany: async ({ where }: QueryArgs = {}) =>
         db.paymentGroups
           .filter((g) => matchesWhere(g, where))
           .map((r) => ({ ...r })),
     },
 
     paymentGroupPeriod: {
-      count: async ({ where }: any = {}) =>
+      count: async ({ where }: QueryArgs = {}) =>
         db.paymentGroupPeriods.filter((p) => matchesWhere(p, where)).length,
-      findFirst: async ({ where }: any = {}) =>
+      findFirst: async ({ where }: QueryArgs = {}) =>
         clone(
           db.paymentGroupPeriods.find((p) => matchesWhere(p, where)) ?? null,
         ),
-      findUnique: async ({ where }: any) =>
+      findUnique: async ({ where = {} }: QueryArgs) =>
         clone(
           db.paymentGroupPeriods.find((p) => p.id === where.id) ?? null,
         ),
-      findMany: async ({ where }: any = {}) =>
+      findMany: async ({ where }: QueryArgs = {}) =>
         db.paymentGroupPeriods
           .filter((p) => matchesWhere(p, where))
-          .sort(
-            (a, b) =>
-              new Date(a.periodStart).getTime() -
-              new Date(b.periodStart).getTime(),
-          )
+          .sort((a, b) => toTimestamp(a.periodStart) - toTimestamp(b.periodStart))
           .map((r) => ({ ...r })),
-      createMany: async ({ data }: any) => {
+      createMany: async ({ data }: BatchCreateArgs) => {
         for (const item of data) {
           db.paymentGroupPeriods.push({ id: nextId('pgp'), ...item });
         }
         return { count: data.length };
       },
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('pgp'), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('pgp'), ...data };
         db.paymentGroupPeriods.push(rec);
         return clone(rec);
       },
-      delete: async ({ where }: any) => {
+      delete: async ({ where = {} }: QueryArgs) => {
         const idx = db.paymentGroupPeriods.findIndex((p) => p.id === where.id);
         const [removed] = db.paymentGroupPeriods.splice(idx, 1);
         return removed;
@@ -177,27 +204,24 @@ function createInMemoryPrisma(): PrismaService {
     },
 
     beneficiary: {
-      findUnique: async ({ where }: any) =>
+      findUnique: async ({ where = {} }: QueryArgs) =>
         clone(
           db.beneficiaries.find((b) =>
             where.id ? b.id === where.id : b.dni === where.dni,
           ) ?? null,
         ),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('ben'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('ben'), createdAt: new Date(), ...data };
         db.beneficiaries.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.beneficiaries.find((b) => b.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.beneficiaries, where, data),
       findMany: async () => db.beneficiaries.map((r) => ({ ...r })),
     },
 
     assignment: {
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.assignments.find((a) => a.id === where.id);
         if (!rec) return null;
         return clone({
@@ -207,7 +231,7 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
         });
       },
-      findMany: async ({ where, include }: any = {}) =>
+      findMany: async ({ where, include }: QueryArgs = {}) =>
         db.assignments
           .filter((a) => matchesWhere(a, where))
           .map((a) => ({
@@ -230,8 +254,8 @@ function createInMemoryPrisma(): PrismaService {
                 }
               : {}),
           })),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('asig'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('asig'), createdAt: new Date(), ...data };
         db.assignments.push(rec);
         return clone({
           ...rec,
@@ -242,16 +266,13 @@ function createInMemoryPrisma(): PrismaService {
           ),
         });
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.assignments.find((a) => a.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.assignments, where, data),
     },
 
     accrualBatch: {
       count: async () => db.accrualBatches.length,
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.accrualBatches.find((b) =>
           where.id ? b.id === where.id : b.code === where.code,
         );
@@ -263,15 +284,15 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
         });
       },
-      findFirst: async ({ where }: any = {}) =>
+      findFirst: async ({ where }: QueryArgs = {}) =>
         clone(db.accrualBatches.find((b) => matchesWhere(b, where)) ?? null),
       findMany: async () =>
         db.accrualBatches.map((b) => ({
           ...b,
           accruals: db.accruals.filter((a) => a.batchId === b.id),
         })),
-      create: async ({ data }: any) => {
-        const rec = {
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = {
           id: nextId('batch'),
           status: AccrualBatchStatus.GENERADO,
           createdAt: new Date(),
@@ -280,31 +301,25 @@ function createInMemoryPrisma(): PrismaService {
         db.accrualBatches.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.accrualBatches.find((b) => b.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.accrualBatches, where, data),
     },
 
     accrual: {
-      findUnique: async ({ where }: any) =>
+      findUnique: async ({ where = {} }: QueryArgs) =>
         clone(db.accruals.find((a) => a.id === where.id) ?? null),
-      findMany: async ({ where }: any = {}) =>
+      findMany: async ({ where }: QueryArgs = {}) =>
         db.accruals
           .filter((a) => matchesWhere(a, where))
           .map((a) => ({ ...a })),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('acc'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('acc'), createdAt: new Date(), ...data };
         db.accruals.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.accruals.find((a) => a.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
-      updateMany: async ({ where, data }: any) => {
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.accruals, where, data),
+      updateMany: async ({ where, data = {} }: QueryArgs) => {
         const matching = db.accruals.filter((a) => matchesWhere(a, where));
         matching.forEach((a) => Object.assign(a, data));
         return { count: matching.length };
@@ -313,7 +328,7 @@ function createInMemoryPrisma(): PrismaService {
 
     paymentRequest: {
       count: async () => db.paymentRequests.length,
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.paymentRequests.find((r) =>
           where.id ? r.id === where.id : r.code === where.code,
         );
@@ -339,16 +354,18 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
         });
       },
-      findMany: async ({ where }: any = {}) =>
+      findMany: async ({ where }: QueryArgs = {}) =>
         db.paymentRequests
           .filter((r) => matchesWhere(r, where))
           .map((r) => ({ ...r })),
-      create: async ({ data }: any) => {
-        const { items, ...rest } = data;
-        const rec = { id: nextId('req'), createdAt: new Date(), ...rest };
+      create: async ({ data = {} }: QueryArgs) => {
+        const { items, ...rest } = data as RowRecord & {
+          items?: { create?: RowRecord[] };
+        };
+        const rec: RowRecord = { id: nextId('req'), createdAt: new Date(), ...rest };
         db.paymentRequests.push(rec);
-        const createdItems = (items?.create ?? []).map((item: any) => {
-          const itemRec = {
+        const createdItems = (items?.create ?? []).map((item) => {
+          const itemRec: RowRecord = {
             id: nextId('pri'),
             paymentRequestId: rec.id,
             ...item,
@@ -358,24 +375,23 @@ function createInMemoryPrisma(): PrismaService {
         });
         return clone({ ...rec, items: createdItems });
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.paymentRequests.find((r) => r.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.paymentRequests, where, data),
     },
 
     paymentRequestItem: {
-      findFirst: async ({ where }: any) => {
+      findFirst: async ({ where = {} }: QueryArgs) => {
         const found = db.paymentRequestItems.find((item) => {
           if (where.accrualId && !matchValue(item.accrualId, where.accrualId)) {
             return false;
           }
-          if (where.paymentRequest) {
+          if (where.paymentRequest && typeof where.paymentRequest === 'object') {
             const req = db.paymentRequests.find(
               (r) => r.id === item.paymentRequestId,
             );
-            return req ? matchesWhere(req, where.paymentRequest) : false;
+            return req
+              ? matchesWhere(req, where.paymentRequest as RowRecord)
+              : false;
           }
           return true;
         });
@@ -385,7 +401,7 @@ function createInMemoryPrisma(): PrismaService {
 
     payment: {
       count: async () => db.payments.length,
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.payments.find((p) =>
           where.id ? p.id === where.id : p.receiptCode === where.receiptCode,
         );
@@ -412,29 +428,26 @@ function createInMemoryPrisma(): PrismaService {
         });
       },
       findMany: async () => db.payments.map((p) => ({ ...p })),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('pay'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('pay'), createdAt: new Date(), ...data };
         db.payments.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.payments.find((p) => p.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.payments, where, data),
     },
 
     paymentAllocation: {
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('pal'), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('pal'), ...data };
         db.paymentAllocations.push(rec);
         return clone(rec);
       },
     },
 
     annulment: {
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('ann'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('ann'), createdAt: new Date(), ...data };
         db.annulments.push(rec);
         return clone(rec);
       },
@@ -443,7 +456,7 @@ function createInMemoryPrisma(): PrismaService {
 
     pettyCash: {
       count: async () => db.pettyCashes.length,
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.pettyCashes.find((c) =>
           where.id ? c.id === where.id : c.code === where.code,
         );
@@ -471,29 +484,28 @@ function createInMemoryPrisma(): PrismaService {
               ),
             })),
         })),
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('cc'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('cc'), createdAt: new Date(), ...data };
         db.pettyCashes.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.pettyCashes.find((c) => c.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.pettyCashes, where, data),
     },
 
     pettyCashPeriod: {
-      findFirst: async ({ where, orderBy }: any = {}) => {
+      findFirst: async ({ where, orderBy }: QueryArgs = {}) => {
         let rows = db.pettyCashPeriods.filter((per) =>
           matchesWhere(per, where),
         );
         if (orderBy?.yearMonth === 'desc') {
-          rows = rows.sort((a, b) => b.yearMonth.localeCompare(a.yearMonth));
+          rows = rows.sort((a, b) =>
+            String(b.yearMonth).localeCompare(String(a.yearMonth)),
+          );
         }
         return clone(rows[0] ?? null);
       },
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.pettyCashPeriods.find((per) => per.id === where.id);
         if (!rec) return null;
         return clone({
@@ -507,21 +519,18 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
         });
       },
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('pcp'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('pcp'), createdAt: new Date(), ...data };
         db.pettyCashPeriods.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.pettyCashPeriods.find((per) => per.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.pettyCashPeriods, where, data),
     },
 
     pettyCashVoucher: {
       count: async () => db.pettyCashVouchers.length,
-      findUnique: async ({ where, include }: any) => {
+      findUnique: async ({ where = {}, include }: QueryArgs) => {
         const rec = db.pettyCashVouchers.find((v) =>
           where.id ? v.id === where.id : v.code === where.code,
         );
@@ -537,21 +546,18 @@ function createInMemoryPrisma(): PrismaService {
             : {}),
         });
       },
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('val'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('val'), createdAt: new Date(), ...data };
         db.pettyCashVouchers.push(rec);
         return clone(rec);
       },
-      update: async ({ where, data }: any) => {
-        const rec = db.pettyCashVouchers.find((v) => v.id === where.id);
-        Object.assign(rec, data);
-        return clone(rec);
-      },
+      update: async ({ where, data }: QueryArgs) =>
+        updateRowById(db.pettyCashVouchers, where, data),
     },
 
     auditLog: {
-      create: async ({ data }: any) => {
-        const rec = { id: nextId('aud'), createdAt: new Date(), ...data };
+      create: async ({ data = {} }: QueryArgs) => {
+        const rec: RowRecord = { id: nextId('aud'), createdAt: new Date(), ...data };
         db.auditLogs.push(rec);
         return clone(rec);
       },
@@ -559,7 +565,7 @@ function createInMemoryPrisma(): PrismaService {
     },
   };
 
-  return client as PrismaService;
+  return client as unknown as PrismaService;
 }
 
 describe('Flujos Completos del Sistema (Backend E2E Integración)', () => {

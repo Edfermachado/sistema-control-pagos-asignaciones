@@ -79,8 +79,59 @@ export function sanitizePdfText(raw: string): string {
     .replace(/\)/g, '\\)');
 }
 
+const MAX_LINES_PER_PAGE = 42 as const;
+
+function buildPageContentStream(
+  cleanTitle: string,
+  subtitle: string,
+  lines: string[],
+  cleanWatermark: string,
+): string {
+  const streamCommands: string[] = [
+    'BT',
+    '/F1 14 Tf',
+    '50 760 Td',
+    `(UNIVERSIDAD DE CARABOBO - SISTEMA DE CONTROL DE PAGOS Y ASIGNACIONES) Tj`,
+    '0 -22 Td',
+    `/F1 12 Tf`,
+    `(${cleanTitle}) Tj`,
+  ];
+
+  if (subtitle) {
+    streamCommands.push('0 -16 Td', `/F1 10 Tf`, `(${subtitle}) Tj`);
+  }
+
+  streamCommands.push(
+    '0 -14 Td',
+    '(--------------------------------------------------------------------------------) Tj',
+  );
+
+  for (const line of lines) {
+    const safeLine = sanitizePdfText(line);
+    streamCommands.push('0 -14 Td', `(${safeLine}) Tj`);
+  }
+
+  streamCommands.push('ET');
+
+  if (cleanWatermark) {
+    streamCommands.push(
+      'q',
+      'BT',
+      '0.82 0.82 0.82 rg',
+      '/F1 58 Tf',
+      '0.7071 0.7071 -0.7071 0.7071 120 260 Tm',
+      `(${cleanWatermark}) Tj`,
+      'ET',
+      'Q',
+    );
+  }
+
+  return streamCommands.join('\n');
+}
+
 /**
- * Construye un archivo binario PDF 1.4 estándar válido con fuente Helvetica sin dependencias externas.
+ * Construye un archivo binario PDF 1.4 estándar válido con fuente Helvetica sin dependencias externas,
+ * soportando paginación automática cuando el detalle excede una página.
  * Cumple RN-AUD-02 y CC-03 (Función Pura de Dominio).
  */
 export function buildSimplePdfBuffer(
@@ -97,54 +148,45 @@ export function buildSimplePdfBuffer(
   }
 
   const cleanSubtitle = sanitizePdfText(subtitle).trim();
-  const streamCommands: string[] = [
-    'BT',
-    '/F1 14 Tf',
-    '50 760 Td',
-    `(UNIVERSIDAD DE CARABOBO - SISTEMA DE CONTROL DE PAGOS Y ASIGNACIONES) Tj`,
-    '0 -22 Td',
-    `/F1 12 Tf`,
-    `(${cleanTitle}) Tj`,
-  ];
-
-  if (cleanSubtitle) {
-    streamCommands.push('0 -16 Td', `/F1 10 Tf`, `(${cleanSubtitle}) Tj`);
-  }
-
-  streamCommands.push(
-    '0 -14 Td',
-    '(--------------------------------------------------------------------------------) Tj',
-  );
-
-  for (const line of bodyLines) {
-    const safeLine = sanitizePdfText(line);
-    streamCommands.push('0 -14 Td', `(${safeLine}) Tj`);
-  }
-
-  streamCommands.push('ET');
-
   const cleanWatermark = sanitizePdfText(options.watermark ?? '').trim();
-  if (cleanWatermark) {
-    streamCommands.push(
-      'q',
-      'BT',
-      '0.82 0.82 0.82 rg',
-      '/F1 58 Tf',
-      '0.7071 0.7071 -0.7071 0.7071 120 260 Tm',
-      `(${cleanWatermark}) Tj`,
-      'ET',
-      'Q',
-    );
+
+  const pageChunks: string[][] = [];
+  if (bodyLines.length === 0) {
+    pageChunks.push([]);
+  } else {
+    for (let i = 0; i < bodyLines.length; i += MAX_LINES_PER_PAGE) {
+      pageChunks.push(bodyLines.slice(i, i + MAX_LINES_PER_PAGE));
+    }
   }
-  const contentStream = streamCommands.join('\n');
+
+  const totalPages = pageChunks.length;
+  const pageObjectIds = pageChunks.map((_, idx) => 4 + idx * 2);
 
   const objects: string[] = [
     '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
-    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
-    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj\n',
-    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
-    `5 0 obj\n<< /Length ${Buffer.byteLength(contentStream, 'utf8')} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+    `2 0 obj\n<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${totalPages} >>\nendobj\n`,
+    '3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n',
   ];
+
+  for (let idx = 0; idx < pageChunks.length; idx++) {
+    const pageObjId = 4 + idx * 2;
+    const contentObjId = 5 + idx * 2;
+    const pageSubtitle =
+      totalPages > 1
+        ? `${cleanSubtitle ? `${cleanSubtitle} - ` : ''}(Pagina ${idx + 1} de ${totalPages})`
+        : cleanSubtitle;
+    const contentStream = buildPageContentStream(
+      cleanTitle,
+      pageSubtitle,
+      pageChunks[idx],
+      cleanWatermark,
+    );
+
+    objects.push(
+      `${pageObjId} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObjId} 0 R >>\nendobj\n`,
+      `${contentObjId} 0 obj\n<< /Length ${Buffer.byteLength(contentStream, 'utf8')} >>\nstream\n${contentStream}\nendstream\nendobj\n`,
+    );
+  }
 
   let pdfContent = '%PDF-1.4\n';
   const offsets: number[] = [0];

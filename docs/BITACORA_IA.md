@@ -470,3 +470,18 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde; `tsc -b && vite build` exitoso (`62` módulos, `0` estilos inline).
   - **Backend (Jest + Build):** `32/32` suites / `238/238` tests en verde; `nest build` exitoso.
   - **Triggers SQL, Docker y Smoke Test:** Triggers `BEFORE DELETE` aplicados en PostgreSQL, contenedores reconstruidos (`frontend`, `backend`) y `scripts/api-smoke-test.mjs` ejecutado en vivo.
+
+### Interacción #24 — Cierre de Detalles Finos de Inmutabilidad SQL, Paginación PDF, Límite Dinámico de Uploads y Tipado Estricto
+* **Prompt / Solicitud del Usuario:** Aprobación (`"Sí"`) para aplicar los 5 ajustes finales de cierre detectados en la auditoría integral del MVP.
+* **Respuesta / Acción Realizada:**
+  1. **Inmutabilidad de montos base en PostgreSQL (`RN-GLOB-03`):** En `database/03_audit_triggers.sql`, se agregó `fn_block_financial_amount_mutation()` (parametrizada por columna vía `TG_ARGV[0]` usando `to_jsonb(OLD)`/`to_jsonb(NEW)` para evitar resolución estática de columnas entre tablas) y los 6 triggers `BEFORE UPDATE` (`trg_immutable_amount_*`) sobre `accruals`, `payments`, `payment_allocations`, `payment_requests`, `payment_request_items` y `petty_cash_vouchers` para impedir alteraciones de montos base manteniendo libres las columnas operativas (`paid_amount`, `balance_due`, `status`, liquidación/desembolso).
+  2. **Paginación multipágina en exportación PDF (`RN-AUD-01`):** En `backend/src/modules/reports/domain/pdf-document.builder.ts`, se refactorizó `buildSimplePdfBuffer` con `MAX_LINES_PER_PAGE = 42` y el helper `buildPageContentStream` para emitir páginas consecutivas (`/Count N`, subtítulo `Pagina i de N`), junto con su prueba unitaria AAA en `pdf-document.builder.spec.ts`.
+  3. **Validación dinámica de tamaño máximo de adjuntos (`MAX_UPLOAD_SIZE_MB`):** En `backend/src/modules/uploads/uploads.controller.ts`, se inyectó `@Optional() prisma?: PrismaService` para leer el parámetro `MAX_UPLOAD_SIZE_MB` desde `system_parameters` durante `upload()`, eliminar el archivo físico temporal y lanzar `BadRequestException` si excede el umbral configurado.
+  4. **Eliminación total de `: any` (`CC-01`):** En `backend/src/common/system-flows/full-system-flows.spec.ts`, se reemplazaron todas las anotaciones `: any` del repositorio en memoria por tipos estrictos (`RowRecord`, `FilterOperator`, `QueryArgs`, `BatchCreateArgs`, `updateRowById`).
+  5. **Sincronización de `DESIGN.md`:** Se actualizó la fila de **Vista 1** (`/resumen`) en `DESIGN.md` para reflejar los dos folios implementados (saldos por beneficiario con exportación PDF e historial de pagos ejecutados `RN-AUD-01`).
+* **Verificación técnica:**
+  - **Limpieza estática (`CC-01` / `FE-01`):** `0` ocurrencias de `: any` en archivos `.ts`/`.tsx` de `backend/src/` y `frontend/src/`, y `0` estilos inline (`style={{`) en `frontend/src/`.
+  - **Backend (Jest + Build):** `32/32` suites / `239/239` tests en verde (`jest --runInBand`); `nest build` exitoso.
+  - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos transformados).
+  - **Triggers SQL, Docker y Smoke Test:** Aplicado `database/03_audit_triggers.sql` en `scpa_postgres` (verificados 6 triggers `trg_immutable_amount_*` `BEFORE UPDATE` y bloqueo efectivo de modificación sobre `payment_requests.total_amount`), contenedor `scpa_backend` reconstruido y `node scripts/api-smoke-test.mjs` ejecutado en vivo con resultado `68 OK / 0 FAIL`.
+
