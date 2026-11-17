@@ -505,3 +505,10 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   - **Frontend (Vitest + Build):** `11/11` archivos / `104/104` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos).
   - **Smoke Test API en vivo:** `node scripts/api-smoke-test.mjs` finalizado con **`72 OK / 0 FAIL`**.
 
+### Interacción #26 — Creación del Glosario y Guía Explicativa del Modelo de Negocio (`docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md`)
+* **Prompt / Solicitud del Usuario:** `"Ahora crea un documento explicando todos los terminos del modelo de negocios, como causaciones, caja chica etc"`
+* **Respuesta / Acción Realizada:**
+  1. Se redactó `docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md` cubriendo en profundidad todos los conceptos del dominio financiero y operativo de SCPA — FACYT: invariantes `RN-GLOB`, separación Beneficiario vs. Usuario y roles `ADMIN`/`GENERADOR`/`RECEPTOR` (`RN-SEG`), proyectos/grupos/cortes/asignaciones (`RN-CAT`), causación vs. pago, prorrateo por días calendario reales con ejemplos numéricos (`RN-CAUS`), máquina de estados de solicitudes y algoritmo FIFO (`RN-PAG`), flujo completo de cajas chicas, saldo disponible, vueltos y arrastre mensual (`RN-CAJA`), anulaciones justificadas, parámetros globales reales, PDFs oficiales, auditoría append-only (`RN-AUD`) y diccionario cruzado Español ↔ Entidad ↔ Tabla ↔ Regla `RN-*`.
+  2. Se enlazó el documento en `README.md` (secciones `3. Estructura del Repositorio` y `8. Documentación Adicional para Evaluación`).
+* **Verificación técnica:** Documento verificado contra `docs/REGLAS_DE_NEGOCIO.md`, `backend/prisma/schema.prisma`, `database/02_seed_data.sql` y `database/03_audit_triggers.sql`.
+

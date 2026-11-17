@@ -53,6 +53,7 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 ├── frontend/                 # Cliente Web SPA en React + Vite + TypeScript
 ├── database/                 # Scripts DDL de creación SQL y carga inicial (Seeds)
 ├── docs/
+│   ├── GLOSARIO_Y_MODELO_DE_NEGOCIO.md # Glosario de términos financieros, ejemplos y modelo de negocio
 │   ├── DECISIONES_TECNICAS_DEFENSA.md  # Justificación arquitectónica y guía para la defensa
 │   ├── INFORME_ESTADO_Y_PENDIENTES.md  # Auditoría, validaciones y trabajo pendiente
 │   └── BITACORA_IA.md                  # Registro de prompts y uso de IA (Entregable #5)
@@ -171,6 +172,7 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 
 ## 8. Documentación Adicional para Evaluación
 
+* 📖 [Glosario y Guía del Modelo de Negocio (`GLOSARIO_Y_MODELO_DE_NEGOCIO.md`)](./docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md) — definición pedagógica de causaciones, prorrateo, FIFO, cajas chicas, anulaciones y diccionario tabla-regla.
 * 🎨 [Identidad visual y sistema de diseño (`DESIGN.md`)](./DESIGN.md) — tokens, tipografía, prohibiciones anti-*AI slop* y criterios de aceptación de interfaz.
 * 📋 [Informe de Estado, Validación y Pendientes](./docs/INFORME_ESTADO_Y_PENDIENTES.md)
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)
