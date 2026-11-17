@@ -421,3 +421,28 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   4. **`frontend/src/components/PettyCashAndReportsPanel.tsx`**: Filtra proyectos activos al crear caja chica, filtra cajas sin período abierto al solicitar apertura mensual, calcula automáticamente el siguiente mes secuencial (`YYYY-MM`) y el tope máximo de reposición (`authorizedAmount - carryoverBalance`), y acota el monto máximo del vale al saldo disponible del período.
 * **Explicación Técnica para la Defensa:**
   * Se eliminó la fricción cognitiva y los rechazos `400/409` evitables en cliente haciendo que cada selector y control de fechas derive sus opciones válidas directamente de las invariantes del dominio (`RN-CAT`, `RN-CAUS`, `RN-PAG`, `RN-CAJA`), manteniendo la validación definitiva en el servidor.
+
+---
+
+### Interacción #20 — Implementación de las 5 Mejoras de UX y Suites de Pruebas de Flujos Completos del Sistema (E2E/Integración)
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity
+* **Indicación (Prompt) del Usuario:**
+  > *"Implementa las 5 mejoras, creando sus respectivos test y luego crea flujos para comprobar todo el sistemas que sean test validando flujos completos del sistema"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`frontend/src/utils/ux-workflows.util.ts` y `frontend/src/utils/ux-workflows.util.spec.ts`** (`CC-01`, `CC-02`, `TEST-01`): Utilidades puras con 11 pruebas unitarias AAA para validación de justificaciones inline (`validateInlineJustification`), borradores y topes de liquidación de vales (`getDefaultVoucherSettlementDraft`), selección masiva con subtotal en vivo (`summarizeAccrualSelection`, `toggleAllEligibleAccruals`), detección preventiva de traslapes y cálculo de sub-rangos libres (`analyzeBeneficiaryProjectAvailability`), simulación en tiempo real de imputación FIFO (`simulateFifoPaymentPreview`) y confirmación en dos pasos (`isConfirmationArmed`).
+  2. **`frontend/src/styles/design-system.css`**: Incorporación de clases `.inline-action-box`, `.selection-toolbar` y `.availability-panel` respetando los tokens del sistema de diseño sin estilos inline.
+  3. **`frontend/src/components/CatalogsAndAssignmentsWorkspace.tsx`** (Mejoras UX #3 y #5): Panel preventivo de disponibilidad y traslapes del beneficiario en el proyecto seleccionado con autocompletado de tramos libres en un clic, además de confirmación en dos pasos al desactivar asignaciones.
+  4. **`frontend/src/components/FinancialEnginePanel.tsx`** (Mejoras UX #1, #2, #4 y #5):
+     - Acciones inline autocontenidas por fila (anulación de causación, anulación de lote, rechazo y anulación de solicitud, anulación FIFO de pago) con contador de caracteres mínimos.
+     - Barra de selección masiva (`Seleccionar todas`) con chips de resumen en tiempo real al consolidar solicitudes de pago.
+     - Tabla de previsualización de imputación FIFO en vivo antes de registrar abonos parciales o totales.
+     - Confirmación explícita en dos pasos al cerrar solicitudes de pago.
+  5. **`frontend/src/components/PettyCashAndReportsPanel.tsx`** (Mejoras UX #1 y #5): Liquidación, rechazo y anulación inline directamente en cada fila de vales (con cálculo en vivo de vuelto a retornar) y confirmación en dos pasos para el cierre mensual con arrastre y el cierre definitivo de caja chica.
+  6. **Suites de Flujos Completos del Sistema (`frontend/src/utils/system-flows.spec.ts` y `backend/src/common/system-flows/full-system-flows.spec.ts`):**
+     - **Frontend E2E (3 flujos):** Ciclo completo financiero (asignación sin traslapes, cortes válidos, consolidación masiva y simulación FIFO parcial/total), ciclo de caja chica y matriz RBAC/tablas/confirmaciones.
+     - **Backend E2E (3 flujos):** Integración real entre los servicios NestJS (`ProjectsService`, `PaymentGroupsService`, `BeneficiariesService`, `AssignmentsService`, `AccrualsService`, `PaymentRequestsService`, `PaymentsService`, `AnnulmentsService`, `PettyCashService`, `AuditService`) sobre un doble relacional transaccional en memoria validando el ciclo financiero completo, la reversión transaccional FIFO y el arrastre mensual de caja chica.
+* **Verificación técnica:**
+  - **Frontend (Vitest):** `11/11` suites / `78/78` pruebas pasando en verde.
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso (`60` módulos transformados, `0` errores).
+  - **Backend (Jest):** `32/32` suites / `231/231` pruebas pasando en verde (`npm --prefix backend test -- --runInBand`).

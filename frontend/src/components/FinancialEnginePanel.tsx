@@ -17,6 +17,13 @@ import {
   toIsoDateSlice,
 } from '../utils/range-validity.util';
 import {
+  isConfirmationArmed,
+  simulateFifoPaymentPreview,
+  summarizeAccrualSelection,
+  toggleAllEligibleAccruals,
+  validateInlineJustification,
+} from '../utils/ux-workflows.util';
+import {
   LiveAssignment,
   LiveBeneficiary,
   LivePaymentGroup,
@@ -298,13 +305,32 @@ export function FinancialEnginePanel({
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
   const [payDate, setPayDate] = useState('2026-11-10');
 
-  // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos (RN-PAG-01/03).
-  // El campo arranca vacío: ninguna anulación ni rechazo puede ejecutarse con un
-  // texto precargado por la interfaz, debe escribirlo quien decide.
-  const [annulReason, setAnnulReason] = useState('');
-  const [reqRejectionReason, setReqRejectionReason] = useState('');
-  const hasAnnulReason = annulReason.trim().length >= 10;
-  const hasRejectionReason = reqRejectionReason.trim().length >= 10;
+  // 4. Motivos y acciones inline por fila / confirmación en dos pasos (UX #1 y UX #5, RN-PAG-01/03).
+  type InlineFinancialActionType =
+    | 'ANNUL_ACCRUAL'
+    | 'ANNUL_BATCH'
+    | 'REJECT_REQUEST'
+    | 'ANNUL_REQUEST'
+    | 'ANNUL_PAYMENT';
+
+  const [inlineRowAction, setInlineRowAction] = useState<{
+    type: InlineFinancialActionType;
+    targetId: string;
+    reason: string;
+  } | null>(null);
+  const [armedConfirmKey, setArmedConfirmKey] = useState<string | null>(null);
+
+  const openInlineRowAction = (
+    type: InlineFinancialActionType,
+    targetId: string,
+  ) => {
+    setArmedConfirmKey(null);
+    setInlineRowAction({
+      type,
+      targetId,
+      reason: '',
+    });
+  };
 
   const activeRequestAccrualIds = new Set(
     paymentRequests
@@ -355,9 +381,11 @@ export function FinancialEnginePanel({
     (a) =>
       a.projectId === effectiveReqProjectId && isAccrualEligibleForRequest(a),
   );
-  const selectedRequestedTotal = eligibleRequestAccruals
-    .filter((a) => reqAccrualIds.includes(a.id))
-    .reduce((total, a) => total + Number(a.balanceDue), 0);
+  const accrualSelectionSummary = summarizeAccrualSelection(
+    eligibleRequestAccruals,
+    reqAccrualIds,
+  );
+  const selectedRequestedTotal = accrualSelectionSummary.totalSelectedUsd;
 
   // Solicitudes con saldo pendiente real para pagos FIFO y beneficiarios incluidos en la solicitud
   const payableRequests = paymentRequests.filter(
@@ -385,6 +413,13 @@ export function FinancialEnginePanel({
             Number(selectedPayableRequest.paidAmount),
         )
       : 9999999999.99;
+
+  const fifoPreview = simulateFifoPaymentPreview({
+    paymentAmount: payAmount,
+    requestItems: selectedPayableRequest?.items,
+    allAccruals: accruals,
+    beneficiaryId: selectedPayableBeneficiaryEntry?.beneficiary.id ?? '',
+  });
 
   useEffect(() => {
     if (!selectedPayableBeneficiaryEntry) {
@@ -525,11 +560,10 @@ export function FinancialEnginePanel({
   const handleReviewRequest = async (
     id: string,
     decision: 'APROBADA' | 'RECHAZADA',
+    overrideReason = '',
   ) => {
-    if (
-      decision === 'RECHAZADA' &&
-      (!reqRejectionReason || reqRejectionReason.trim().length < 5)
-    ) {
+    const effectiveReason = overrideReason.trim();
+    if (decision === 'RECHAZADA' && effectiveReason.length < 5) {
       onNotify(
         'error',
         'Ingrese un motivo de rechazo de al menos 5 caracteres (RN-PAG-01).',
@@ -545,7 +579,7 @@ export function FinancialEnginePanel({
             ? { decision: 'APROBADA' }
             : {
               decision: 'RECHAZADA',
-              rejectionReason: reqRejectionReason.trim(),
+              rejectionReason: effectiveReason,
             },
       });
       onNotify(
@@ -554,7 +588,7 @@ export function FinancialEnginePanel({
           ? 'Solicitud APROBADA por Gerencia.'
           : 'Solicitud RECHAZADA con motivo registrado.',
       );
-      setReqRejectionReason('');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -567,6 +601,7 @@ export function FinancialEnginePanel({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify('success', 'Solicitud CERRADA formalmente.');
       await onRefresh();
     } catch (err) {
@@ -615,8 +650,12 @@ export function FinancialEnginePanel({
     }
   };
 
-  const handleAnnulPayment = async (paymentId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulPayment = async (
+    paymentId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-PAG-03).',
@@ -627,21 +666,25 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/payments/${paymentId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify(
         'success',
         'Pago anulado transaccionalmente. La deuda retornó a las causaciones originales (RN-PAG-03).',
       );
-      setAnnulReason('');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulAccrual = async (accrualId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulAccrual = async (
+    accrualId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-PAG-03).',
@@ -652,18 +695,22 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/accruals/${accrualId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Causación anulada con justificación en bitácora.');
-      setAnnulReason('');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulBatch = async (batchId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulBatch = async (
+    batchId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
@@ -674,18 +721,22 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/accrual-batches/${batchId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Lote de causación anulado con justificación.');
-      setAnnulReason('');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulRequest = async (requestId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulRequest = async (
+    requestId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
@@ -696,14 +747,70 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/payment-requests/${requestId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Solicitud de pago anulada con justificación.');
-      setAnnulReason('');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
+  };
+
+  const renderInlineJustificationBox = (params: {
+    type: InlineFinancialActionType;
+    targetId: string;
+    minLength: number;
+    confirmLabel: string;
+    placeholder: string;
+    onConfirm: (reason: string) => void;
+  }) => {
+    if (
+      !inlineRowAction ||
+      inlineRowAction.type !== params.type ||
+      inlineRowAction.targetId !== params.targetId
+    ) {
+      return null;
+    }
+    const validation = validateInlineJustification(
+      inlineRowAction.reason,
+      params.minLength,
+    );
+    return (
+      <div className="inline-action-box">
+        <input
+          className="input"
+          value={inlineRowAction.reason}
+          onChange={(e) =>
+            setInlineRowAction({ ...inlineRowAction, reason: e.target.value })
+          }
+          placeholder={params.placeholder}
+          aria-label={params.confirmLabel}
+        />
+        <span className="inline-action-box__hint">
+          {validation.valid
+            ? 'Motivo válido. Confirme esta operación irreversible.'
+            : `Faltan ${validation.remainingChars} caracteres (mín. ${params.minLength}).`}
+        </span>
+        <div className="btn-group">
+          <button
+            type="button"
+            className="btn btn--danger btn--sm"
+            disabled={!validation.valid}
+            onClick={() => params.onConfirm(validation.trimmed)}
+          >
+            {params.confirmLabel}
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setInlineRowAction(null)}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const handleDownloadPdf = async (path: string, filename: string) => {
@@ -1014,15 +1121,28 @@ export function FinancialEnginePanel({
                           {isGenerador &&
                             row.status === AccrualStatus.PENDIENTE &&
                             Number(row.paidAmount) === 0 && (
-                              <button
-                                type="button"
-                                className="btn btn--danger btn--sm"
-                                onClick={() => handleAnnulAccrual(row.id)}
-                                disabled={!hasAnnulReason}
-                                title={JUSTIFICATION_HINT}
-                              >
-                                Anular causación
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() =>
+                                    openInlineRowAction('ANNUL_ACCRUAL', row.id)
+                                  }
+                                  title={JUSTIFICATION_HINT}
+                                >
+                                  Anular causación
+                                </button>
+                                {renderInlineJustificationBox({
+                                  type: 'ANNUL_ACCRUAL',
+                                  targetId: row.id,
+                                  minLength: 10,
+                                  confirmLabel: 'Confirmar anulación',
+                                  placeholder:
+                                    'Motivo de anulación de esta causación...',
+                                  onConfirm: (reason) =>
+                                    void handleAnnulAccrual(row.id, reason),
+                                })}
+                              </>
                             )}
                         </td>
                       )}
@@ -1094,15 +1214,28 @@ export function FinancialEnginePanel({
                           !(batch.accruals ?? []).some(
                             (accrual) => Number(accrual.paidAmount) > 0,
                           ) && (
-                            <button
-                              type="button"
-                              className="btn btn--danger btn--sm"
-                              onClick={() => handleAnnulBatch(batch.id)}
-                              disabled={!hasAnnulReason}
-                              title={JUSTIFICATION_HINT}
-                            >
-                              Anular lote
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn--danger btn--sm"
+                                onClick={() =>
+                                  openInlineRowAction('ANNUL_BATCH', batch.id)
+                                }
+                                title={JUSTIFICATION_HINT}
+                              >
+                                Anular lote
+                              </button>
+                              {renderInlineJustificationBox({
+                                type: 'ANNUL_BATCH',
+                                targetId: batch.id,
+                                minLength: 10,
+                                confirmLabel: 'Confirmar anulación de lote',
+                                placeholder:
+                                  'Motivo de anulación de este lote...',
+                                onConfirm: (reason) =>
+                                  void handleAnnulBatch(batch.id, reason),
+                              })}
+                            </>
                           )}
                       </td>
                     )}
@@ -1193,10 +1326,47 @@ export function FinancialEnginePanel({
                     Causaciones con saldo pendiente del proyecto
                   </span>
                   <div className="subsheet">
-                    <p className="sheet__hint">
-                      Seleccionadas:{' '}
-                      {formatUsdCurrency(selectedRequestedTotal)} USD.
-                    </p>
+                    <div className="selection-toolbar">
+                      <div className="selection-toolbar__chips">
+                        <span className="chip">
+                          Seleccionadas:{' '}
+                          <strong>
+                            {accrualSelectionSummary.selectedCount} de{' '}
+                            {accrualSelectionSummary.totalEligibleCount}
+                          </strong>
+                        </span>
+                        <span className="chip">
+                          Beneficiarios:{' '}
+                          <strong>
+                            {accrualSelectionSummary.uniqueBeneficiariesCount}
+                          </strong>
+                        </span>
+                        <span className="chip">
+                          Total a solicitar:{' '}
+                          <strong>
+                            {formatUsdCurrency(selectedRequestedTotal)} USD
+                          </strong>
+                        </span>
+                      </div>
+                      {eligibleRequestAccruals.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() =>
+                            setReqAccrualIds((current) =>
+                              toggleAllEligibleAccruals(
+                                eligibleRequestAccruals,
+                                current,
+                              ),
+                            )
+                          }
+                        >
+                          {accrualSelectionSummary.allSelected
+                            ? 'Limpiar selección'
+                            : `Seleccionar todas (${accrualSelectionSummary.totalEligibleCount})`}
+                        </button>
+                      )}
+                    </div>
                     {eligibleRequestAccruals.length === 0 ? (
                       <p className="muted">
                         Este proyecto no tiene causaciones con saldo pendiente.
@@ -1232,21 +1402,6 @@ export function FinancialEnginePanel({
                   </button>
                 </div>
               </form>
-            )}
-
-            {isReceptor && (
-              <div className="field">
-                <label className="field__label" htmlFor="req-reject-reason">
-                  Motivo de rechazo de solicitud (RN-PAG-01)
-                </label>
-                <input
-                  id="req-reject-reason"
-                  className="input"
-                  value={reqRejectionReason}
-                  onChange={(e) => setReqRejectionReason(e.target.value)}
-                  placeholder="Especifique el motivo en caso de rechazar una solicitud enviada"
-                />
-              </div>
             )}
 
             <div className="table-scroll">
@@ -1324,9 +1479,11 @@ export function FinancialEnginePanel({
                                   type="button"
                                   className="btn btn--danger btn--sm"
                                   onClick={() =>
-                                    handleReviewRequest(req.id, 'RECHAZADA')
+                                    openInlineRowAction(
+                                      'REJECT_REQUEST',
+                                      req.id,
+                                    )
                                   }
-                                  disabled={!hasRejectionReason}
                                   title={JUSTIFICATION_HINT}
                                 >
                                   Rechazar
@@ -1335,15 +1492,38 @@ export function FinancialEnginePanel({
                             )}
                           {isReceptor &&
                             req.status === PaymentRequestStatus.ENTREGADA &&
-                            Number(req.paidAmount) >= Number(req.totalAmount) && (
+                            Number(req.paidAmount) >= Number(req.totalAmount) &&
+                            (isConfirmationArmed(
+                              armedConfirmKey,
+                              `CLOSE_REQ:${req.id}`,
+                            ) ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn--sm"
+                                  onClick={() => handleCloseRequest(req.id)}
+                                >
+                                  ¿Confirmar cierre?
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--sm"
+                                  onClick={() => setArmedConfirmKey(null)}
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
                               <button
                                 type="button"
                                 className="btn btn--ghost btn--sm"
-                                onClick={() => handleCloseRequest(req.id)}
+                                onClick={() =>
+                                  setArmedConfirmKey(`CLOSE_REQ:${req.id}`)
+                                }
                               >
                                 Cerrar solicitud
                               </button>
-                            )}
+                            ))}
                           {isGenerador &&
                             Number(req.paidAmount) === 0 &&
                             req.status !== PaymentRequestStatus.CERRADA &&
@@ -1352,8 +1532,9 @@ export function FinancialEnginePanel({
                               <button
                                 type="button"
                                 className="btn btn--danger btn--sm"
-                                onClick={() => handleAnnulRequest(req.id)}
-                                disabled={!hasAnnulReason}
+                                onClick={() =>
+                                  openInlineRowAction('ANNUL_REQUEST', req.id)
+                                }
                                 title={JUSTIFICATION_HINT}
                               >
                                 Anular solicitud
@@ -1372,6 +1553,30 @@ export function FinancialEnginePanel({
                             PDF consolidado
                           </button>
                         </div>
+                        {renderInlineJustificationBox({
+                          type: 'REJECT_REQUEST',
+                          targetId: req.id,
+                          minLength: 5,
+                          confirmLabel: 'Confirmar rechazo',
+                          placeholder:
+                            'Motivo de rechazo de esta solicitud...',
+                          onConfirm: (reason) =>
+                            void handleReviewRequest(
+                              req.id,
+                              'RECHAZADA',
+                              reason,
+                            ),
+                        })}
+                        {renderInlineJustificationBox({
+                          type: 'ANNUL_REQUEST',
+                          targetId: req.id,
+                          minLength: 10,
+                          confirmLabel: 'Confirmar anulación de solicitud',
+                          placeholder:
+                            'Motivo de anulación de esta solicitud...',
+                          onConfirm: (reason) =>
+                            void handleAnnulRequest(req.id, reason),
+                        })}
                       </td>
                     </tr>
                   ))}
@@ -1521,25 +1726,85 @@ export function FinancialEnginePanel({
                     />
                   </div>
                 </div>
+                {selectedPayableRequest && fifoPreview.steps.length > 0 && (
+                  <div className="subsheet">
+                    <div className="row row--between">
+                      <h3 className="subsheet__title">
+                        Previsualización de imputación FIFO en tiempo real
+                        (RN-PAG-02)
+                      </h3>
+                      <span
+                        className={`badge ${fifoPreview.isValidAmount ? 'badge--ok' : 'badge--alert'}`}
+                      >
+                        {fifoPreview.isValidAmount
+                          ? `Deuda restante tras abono: ${formatUsdCurrency(fifoPreview.remainingDebtAfterPaymentUsd)}`
+                          : 'Monto inválido o superior al saldo pendiente'}
+                      </span>
+                    </div>
+                    <div className="table-scroll">
+                      <table className="table">
+                        <thead>
+                          <tr>
+                            <th scope="col">Período (FIFO)</th>
+                            <th scope="col" className="num">
+                              Deuda actual
+                            </th>
+                            <th scope="col" className="num">
+                              Abono proyectado
+                            </th>
+                            <th scope="col" className="num">
+                              Saldo final
+                            </th>
+                            <th scope="col">Estado resultante</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fifoPreview.steps.map((step) => (
+                            <tr key={step.accrualId}>
+                              <td className="nowrap">
+                                {step.periodStart || '—'} al{' '}
+                                {step.periodEnd || '—'}
+                              </td>
+                              <td className="num">
+                                {formatUsdCurrency(step.previousBalanceUsd)}
+                              </td>
+                              <td className="num table__strong">
+                                {formatUsdCurrency(step.allocatedUsd)}
+                              </td>
+                              <td className="num">
+                                {formatUsdCurrency(step.newBalanceUsd)}
+                              </td>
+                              <td>
+                                <span
+                                  className={accrualBadgeClass(
+                                    step.resultingStatus,
+                                  )}
+                                >
+                                  {step.resultingStatus}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
                 <div className="btn-group">
-                  <button type="submit" className="btn">
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={
+                      Boolean(selectedPayableRequest) &&
+                      fifoPreview.steps.length > 0 &&
+                      !fifoPreview.isValidAmount
+                    }
+                  >
                     Registrar pago
                   </button>
                 </div>
               </form>
             )}
-
-            <div className="field">
-              <label className="field__label" htmlFor="annul-reason">
-                Motivo para anulación justificada (RN-PAG-03)
-              </label>
-              <input
-                id="annul-reason"
-                className="input"
-                value={annulReason}
-                onChange={(e) => setAnnulReason(e.target.value)}
-              />
-            </div>
 
             <div className="table-scroll">
               <table className="table">
@@ -1606,14 +1871,25 @@ export function FinancialEnginePanel({
                             <button
                               type="button"
                               className="btn btn--danger btn--sm"
-                              onClick={() => handleAnnulPayment(p.id)}
-                              disabled={!hasAnnulReason}
+                              onClick={() =>
+                                openInlineRowAction('ANNUL_PAYMENT', p.id)
+                              }
                               title={JUSTIFICATION_HINT}
                             >
                               Anular con reversión FIFO
                             </button>
                           )}
                         </div>
+                        {renderInlineJustificationBox({
+                          type: 'ANNUL_PAYMENT',
+                          targetId: p.id,
+                          minLength: 10,
+                          confirmLabel: 'Confirmar reversión FIFO',
+                          placeholder:
+                            'Motivo de anulación de este pago...',
+                          onConfirm: (reason) =>
+                            void handleAnnulPayment(p.id, reason),
+                        })}
                       </td>
                     </tr>
                   ))}

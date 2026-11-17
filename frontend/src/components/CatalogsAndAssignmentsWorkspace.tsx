@@ -12,6 +12,10 @@ import {
   clampDateRangeToWindow,
   toIsoDateSlice,
 } from '../utils/range-validity.util';
+import {
+  analyzeBeneficiaryProjectAvailability,
+  isConfirmationArmed,
+} from '../utils/ux-workflows.util';
 import { TableFilterBar } from './TableFilterBar';
 import { TablePagination } from './TablePagination';
 import {
@@ -158,6 +162,9 @@ export function CatalogsAndAssignmentsWorkspace({
   const [newPeriodEnd, setNewPeriodEnd] = useState('2028-01-15');
   const [newPeriodLabel, setNewPeriodLabel] = useState('Corte personalizado');
 
+  // Estado confirmación en dos pasos para acciones irreversibles (UX #5)
+  const [armedConfirmKey, setArmedConfirmKey] = useState<string | null>(null);
+
   const effectivePeriodGroupId = periodGroupId || paymentGroups[0]?.id || '';
 
   // Catálogos activos para selectores sin fricción (RN-CAT-02, RN-CAT-03, RN-SEG-01)
@@ -167,6 +174,8 @@ export function CatalogsAndAssignmentsWorkspace({
   const activePaymentGroups = paymentGroups.filter((pg) => pg.isActive);
   const activeBeneficiaries = beneficiaries.filter((b) => b.isActive);
 
+  const effectiveAsigBeneficiaryId =
+    asigBeneficiaryId || activeBeneficiaries[0]?.id || '';
   const selectedAssignmentProject =
     activeProjects.find((p) => p.id === asigProjectId) ?? activeProjects[0];
   const asigMinDate = selectedAssignmentProject
@@ -175,6 +184,14 @@ export function CatalogsAndAssignmentsWorkspace({
   const asigMaxDate = selectedAssignmentProject
     ? toIsoDateSlice(selectedAssignmentProject.endDate)
     : undefined;
+
+  const assignmentAvailability = analyzeBeneficiaryProjectAvailability({
+    project: selectedAssignmentProject,
+    beneficiaryId: effectiveAsigBeneficiaryId,
+    assignments,
+    proposedStart: asigStart,
+    proposedEnd: asigEnd,
+  });
 
   useEffect(() => {
     if (!selectedAssignmentProject) {
@@ -562,6 +579,7 @@ export function CatalogsAndAssignmentsWorkspace({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify('success', 'Asignación desactivada.');
       await onRefresh();
     } catch (err) {
@@ -1383,9 +1401,70 @@ export function CatalogsAndAssignmentsWorkspace({
                       onChange={(e) => setAsigEnd(e.target.value)}
                     />
                   </div>
-                  <button type="submit" className="btn">
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={assignmentAvailability.hasOverlapConflict}
+                    title={
+                      assignmentAvailability.hasOverlapConflict
+                        ? 'El rango elegido se solapa con una asignación activa previa (RN-CAT-04)'
+                        : undefined
+                    }
+                  >
                     + Crear Asignación USD
                   </button>
+                  {(assignmentAvailability.occupiedRanges.length > 0 ||
+                    assignmentAvailability.hasOverlapConflict) && (
+                    <div
+                      className={`availability-panel ${assignmentAvailability.hasOverlapConflict ? 'availability-panel--conflict' : ''}`}
+                    >
+                      <div className="row row--between">
+                        <strong>
+                          Disponibilidad del beneficiario en este proyecto (RN-CAT-04)
+                        </strong>
+                        {assignmentAvailability.hasOverlapConflict ? (
+                          <span className="badge badge--alert">
+                            Traslape detectado en el rango propuesto
+                          </span>
+                        ) : (
+                          <span className="badge badge--ok">
+                            Rango disponible sin conflictos
+                          </span>
+                        )}
+                      </div>
+                      <div className="row">
+                        {assignmentAvailability.occupiedRanges.map((occ) => (
+                          <span key={occ.id} className="chip">
+                            Ocupado:{' '}
+                            <strong>
+                              {occ.startDate} → {occ.endDate}
+                            </strong>
+                          </span>
+                        ))}
+                      </div>
+                      {assignmentAvailability.freeSubRanges.length > 0 ? (
+                        <div className="btn-group">
+                          {assignmentAvailability.freeSubRanges.map((free) => (
+                            <button
+                              key={`${free.startDate}-${free.endDate}`}
+                              type="button"
+                              className="btn btn--ghost btn--sm"
+                              onClick={() => {
+                                setAsigStart(free.startDate);
+                                setAsigEnd(free.endDate);
+                              }}
+                            >
+                              Usar tramo libre ({free.startDate} → {free.endDate})
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="inline-action-box__hint">
+                          El beneficiario ya cubre el 100% de la vigencia activa de este proyecto.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </form>
               )}
 
@@ -1470,15 +1549,47 @@ export function CatalogsAndAssignmentsWorkspace({
                         </td>
                         {canEditAssignments && (
                           <td>
-                            {a.isActive && (
-                              <button
-                                type="button"
-                                className="btn btn--danger btn--sm"
-                                onClick={() => handleDeactivateAssignment(a.id)}
-                              >
-                                Desactivar
-                              </button>
-                            )}
+                            {a.isActive &&
+                              (isConfirmationArmed(
+                                armedConfirmKey,
+                                `DEACTIVATE_ASIG:${a.id}`,
+                              ) ? (
+                                <div className="inline-action-box">
+                                  <span className="inline-action-box__hint">
+                                    ¿Desactivar esta asignación?
+                                  </span>
+                                  <div className="btn-group">
+                                    <button
+                                      type="button"
+                                      className="btn btn--danger btn--sm"
+                                      onClick={() =>
+                                        handleDeactivateAssignment(a.id)
+                                      }
+                                    >
+                                      Confirmar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--sm"
+                                      onClick={() => setArmedConfirmKey(null)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() =>
+                                    setArmedConfirmKey(
+                                      `DEACTIVATE_ASIG:${a.id}`,
+                                    )
+                                  }
+                                >
+                                  Desactivar
+                                </button>
+                              ))}
                           </td>
                         )}
                       </tr>

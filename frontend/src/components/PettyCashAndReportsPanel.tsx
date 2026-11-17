@@ -8,6 +8,11 @@ import {
 import { formatUsdCurrency } from '../utils/currency.util';
 import { calculatePettyCashUtilizationPercent } from '../utils/petty-cash.util';
 import { getNextSequentialYearMonth } from '../utils/range-validity.util';
+import {
+  getDefaultVoucherSettlementDraft,
+  isConfirmationArmed,
+  validateInlineJustification,
+} from '../utils/ux-workflows.util';
 import { LiveProject } from './CatalogsAndAssignmentsWorkspace';
 
 export interface LivePettyCashVoucher {
@@ -87,17 +92,17 @@ export function PettyCashAndReportsPanel({
   );
   const [voucherAmount, setVoucherAmount] = useState('45.00');
 
-  // 4. Rendición de Vale con Factura y archivo de comprobante
-  const [settleAmount, setSettleAmount] = useState('40.00');
-  const [settleInvoice, setSettleInvoice] = useState('FACT-SENIAT-009841');
-  const [settleFile, setSettleFile] = useState<File | null>(null);
-
-  // 5. Motivos de rechazo/anulación: vacíos por diseño, los escribe quien decide
-  // (RN-CAJA-03 exige ≥5 caracteres para rechazar y RN-GLOB-04 ≥10 para anular).
-  const [voucherRejectionReason, setVoucherRejectionReason] = useState('');
-  const [voucherAnnulReason, setVoucherAnnulReason] = useState('');
-  const hasVoucherRejectionReason = voucherRejectionReason.trim().length >= 5;
-  const hasVoucherAnnulReason = voucherAnnulReason.trim().length >= 10;
+  // 4. Acciones inline por fila de vale y confirmación en dos pasos (UX #1 y UX #5)
+  const [inlineVoucherAction, setInlineVoucherAction] = useState<{
+    type: 'SETTLE' | 'REJECT' | 'ANNUL';
+    voucherId: string;
+    settledAmount: string;
+    invoiceReference: string;
+    reason: string;
+    maxAllowedAmount: number;
+  } | null>(null);
+  const [inlineSettleFile, setInlineSettleFile] = useState<File | null>(null);
+  const [armedConfirmKey, setArmedConfirmKey] = useState<string | null>(null);
 
   // Proyectos activos para crear caja chica (RN-CAJA-01)
   const activeProjects = projects.filter(
@@ -226,6 +231,7 @@ export function PettyCashAndReportsPanel({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify(
         'success',
         'Período mensual CERRADO. El saldo final quedó congelado para el arrastre del próximo mes (RN-CAJA-04).',
@@ -282,8 +288,9 @@ export function PettyCashAndReportsPanel({
     }
   };
 
-  const handleRejectVoucher = async (voucherId: string) => {
-    if (!voucherRejectionReason || voucherRejectionReason.trim().length < 5) {
+  const handleRejectVoucher = async (voucherId: string, reason: string) => {
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 5) {
       onNotify(
         'error',
         'Ingrese un motivo de rechazo de al menos 5 caracteres (RN-CAJA-03).',
@@ -294,10 +301,10 @@ export function PettyCashAndReportsPanel({
       await apiRequest(`/petty-cashes/vouchers/${voucherId}/reject`, {
         method: 'PATCH',
         token,
-        body: { reason: voucherRejectionReason },
+        body: { reason: cleanReason },
       });
       onNotify('success', 'Vale RECHAZADO con motivo registrado.');
-      setVoucherRejectionReason('');
+      setInlineVoucherAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -320,42 +327,52 @@ export function PettyCashAndReportsPanel({
     }
   };
 
-  const handleSettleVoucher = async (voucherId: string) => {
-    if (!settleFile) {
+  const handleSettleVoucher = async (
+    voucherId: string,
+    settledAmountValue: string,
+    invoiceRefValue: string,
+  ) => {
+    if (!inlineSettleFile) {
       onNotify(
         'error',
         'Adjunte el archivo del comprobante antes de rendir el vale (RN-CAJA-03).',
       );
       return;
     }
+    if (!invoiceRefValue.trim()) {
+      onNotify('error', 'Ingrese el número de factura o comprobante.');
+      return;
+    }
     try {
       const uploaded = await uploadAuthenticatedFile(
         '/uploads',
-        settleFile,
+        inlineSettleFile,
         token ?? '',
       );
       await apiRequest(`/petty-cashes/vouchers/${voucherId}/settle`, {
         method: 'PATCH',
         token,
         body: {
-          settledAmount: settleAmount,
-          invoiceReference: settleInvoice,
+          settledAmount: settledAmountValue,
+          invoiceReference: invoiceRefValue.trim(),
           attachmentUrl: uploaded.url,
         },
       });
       onNotify(
         'success',
-        `Vale rendido con comprobante '${settleInvoice}'. El vuelto sobrante retornó al disponible de la caja (RN-CAJA-03).`,
+        `Vale rendido con comprobante '${invoiceRefValue.trim()}'. El vuelto sobrante retornó al disponible de la caja (RN-CAJA-03).`,
       );
-      setSettleFile(null);
+      setInlineSettleFile(null);
+      setInlineVoucherAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulVoucher = async (voucherId: string) => {
-    if (!voucherAnnulReason || voucherAnnulReason.trim().length < 10) {
+  const handleAnnulVoucher = async (voucherId: string, reason: string) => {
+    const cleanReason = reason.trim();
+    if (cleanReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
@@ -366,10 +383,10 @@ export function PettyCashAndReportsPanel({
       await apiRequest(`/annulments/petty-cash-vouchers/${voucherId}`, {
         method: 'POST',
         token,
-        body: { reason: voucherAnnulReason },
+        body: { reason: cleanReason },
       });
       onNotify('success', 'Vale anulado y saldo revertido según su estado.');
-      setVoucherAnnulReason('');
+      setInlineVoucherAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -382,6 +399,7 @@ export function PettyCashAndReportsPanel({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify('success', 'Caja chica cerrada definitivamente.');
       await onRefresh();
     } catch (err) {
@@ -678,97 +696,6 @@ export function PettyCashAndReportsPanel({
         </>
       )}
 
-      {(isGenerador || isReceptor) && (
-        <section className="sheet">
-          <div className="sheet__head">
-            <div>
-              <h2 className="sheet__title">
-                {isGenerador
-                  ? 'Rendición de vale desembolsado y anulación'
-                  : 'Control de rechazo y anulación de vales'}
-              </h2>
-              <p className="sheet__hint">
-                {isGenerador
-                  ? 'Datos de factura/comprobante para rendir un vale desembolsado y motivo de anulación (RN-CAJA-03 / RN-GLOB-04).'
-                  : 'Motivos obligatorios para rechazar o anular justificadamente vales de caja chica (RN-CAJA-03 / RN-GLOB-04).'}
-              </p>
-            </div>
-          </div>
-          <div className="sheet__body">
-            <div className="form-grid">
-              {isGenerador && (
-                <>
-                  <div className="field">
-                    <label className="field__label" htmlFor="settle-amount">
-                      Monto gastado según factura (USD)
-                    </label>
-                    <input
-                      id="settle-amount"
-                      className="input"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max="9999999999.99"
-                      value={settleAmount}
-                      onChange={(e) => setSettleAmount(e.target.value)}
-                    />
-                  </div>
-                  <div className="field">
-                    <label className="field__label" htmlFor="settle-invoice">
-                      N° factura / comprobante
-                    </label>
-                    <input
-                      id="settle-invoice"
-                      className="input"
-                      value={settleInvoice}
-                      onChange={(e) => setSettleInvoice(e.target.value)}
-                    />
-                  </div>
-                  <div className="field">
-                    <label className="field__label" htmlFor="settle-file">
-                      Archivo del comprobante (PDF/PNG/JPEG)
-                    </label>
-                    <input
-                      id="settle-file"
-                      className="input"
-                      type="file"
-                      accept="application/pdf,image/png,image/jpeg"
-                      onChange={(e) =>
-                        setSettleFile(e.target.files?.[0] ?? null)
-                      }
-                    />
-                  </div>
-                </>
-              )}
-              {isReceptor && (
-                <div className="field">
-                  <label className="field__label" htmlFor="reject-reason">
-                    Motivo de rechazo de vale (RN-CAJA-03)
-                  </label>
-                  <input
-                    id="reject-reason"
-                    className="input"
-                    value={voucherRejectionReason}
-                    onChange={(e) => setVoucherRejectionReason(e.target.value)}
-                  />
-                </div>
-              )}
-              <div className="field">
-                <label className="field__label" htmlFor="annul-reason">
-                  Motivo de anulación de vale (RN-GLOB-04)
-                </label>
-                <input
-                  id="annul-reason"
-                  className="input"
-                  value={voucherAnnulReason}
-                  onChange={(e) => setVoucherAnnulReason(e.target.value)}
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-      )}
-
       {pettyCashes.length === 0 && (
         <div className="empty">
           <strong>Sin cajas chicas registradas</strong>
@@ -805,15 +732,37 @@ export function PettyCashAndReportsPanel({
                 <span className={`badge ${badgeClassForStatus(box.status)}`}>
                   {box.status}
                 </span>
-                {isReceptor && box.status === 'ACTIVA' && (
-                  <button
-                    type="button"
-                    className="btn btn--danger btn--sm"
-                    onClick={() => handleClosePettyCash(box.id)}
-                  >
-                    Cerrar caja chica
-                  </button>
-                )}
+                {isReceptor &&
+                  box.status === 'ACTIVA' &&
+                  (isConfirmationArmed(
+                    armedConfirmKey,
+                    `CLOSE_BOX:${box.id}`,
+                  ) ? (
+                    <>
+                      <button
+                        type="button"
+                        className="btn btn--danger btn--sm"
+                        onClick={() => handleClosePettyCash(box.id)}
+                      >
+                        ¿Confirmar cierre definitivo?
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--sm"
+                        onClick={() => setArmedConfirmKey(null)}
+                      >
+                        Cancelar
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn btn--danger btn--sm"
+                      onClick={() => setArmedConfirmKey(`CLOSE_BOX:${box.id}`)}
+                    >
+                      Cerrar caja chica
+                    </button>
+                  ))}
               </div>
             </div>
 
@@ -919,15 +868,43 @@ export function PettyCashAndReportsPanel({
                                       Aprobar apertura
                                     </button>
                                   )}
-                                {isReceptor && per.status === 'ABIERTO' && (
-                                  <button
-                                    type="button"
-                                    className="btn btn--ghost btn--sm"
-                                    onClick={() => handleClosePeriod(per.id)}
-                                  >
-                                    Cerrar mes y arrastre
-                                  </button>
-                                )}
+                                {isReceptor &&
+                                  per.status === 'ABIERTO' &&
+                                  (isConfirmationArmed(
+                                    armedConfirmKey,
+                                    `CLOSE_PERIOD:${per.id}`,
+                                  ) ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="btn btn--sm"
+                                        onClick={() =>
+                                          handleClosePeriod(per.id)
+                                        }
+                                      >
+                                        ¿Confirmar cierre mensual?
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn--ghost btn--sm"
+                                        onClick={() => setArmedConfirmKey(null)}
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--sm"
+                                      onClick={() =>
+                                        setArmedConfirmKey(
+                                          `CLOSE_PERIOD:${per.id}`,
+                                        )
+                                      }
+                                    >
+                                      Cerrar mes y arrastre
+                                    </button>
+                                  ))}
                               </div>
                             </td>
                           </tr>
@@ -1036,9 +1013,17 @@ export function PettyCashAndReportsPanel({
                                   <button
                                     type="button"
                                     className="btn btn--danger btn--sm"
-                                    onClick={() => handleRejectVoucher(v.id)}
-                                    disabled={!hasVoucherRejectionReason}
-                                    title="Escriba el motivo de rechazo (mínimo 5 caracteres) para habilitar esta acción (RN-CAJA-03)"
+                                    onClick={() => {
+                                      setArmedConfirmKey(null);
+                                      setInlineVoucherAction({
+                                        type: 'REJECT',
+                                        voucherId: v.id,
+                                        settledAmount: '',
+                                        invoiceReference: '',
+                                        reason: '',
+                                        maxAllowedAmount: 0,
+                                      });
+                                    }}
                                   >
                                     Rechazar
                                   </button>
@@ -1056,9 +1041,17 @@ export function PettyCashAndReportsPanel({
                                   <button
                                     type="button"
                                     className="btn btn--danger btn--sm"
-                                    onClick={() => handleRejectVoucher(v.id)}
-                                    disabled={!hasVoucherRejectionReason}
-                                    title="Escriba el motivo de rechazo (mínimo 5 caracteres) para habilitar esta acción (RN-CAJA-03)"
+                                    onClick={() => {
+                                      setArmedConfirmKey(null);
+                                      setInlineVoucherAction({
+                                        type: 'REJECT',
+                                        voucherId: v.id,
+                                        settledAmount: '',
+                                        invoiceReference: '',
+                                        reason: '',
+                                        maxAllowedAmount: 0,
+                                      });
+                                    }}
                                   >
                                     Rechazar
                                   </button>
@@ -1068,7 +1061,20 @@ export function PettyCashAndReportsPanel({
                                 <button
                                   type="button"
                                   className="btn btn--sm"
-                                  onClick={() => handleSettleVoucher(v.id)}
+                                  onClick={() => {
+                                    const draft =
+                                      getDefaultVoucherSettlementDraft(v);
+                                    setArmedConfirmKey(null);
+                                    setInlineSettleFile(null);
+                                    setInlineVoucherAction({
+                                      type: 'SETTLE',
+                                      voucherId: v.id,
+                                      settledAmount: draft.settledAmount,
+                                      invoiceReference: 'FACT-SENIAT-',
+                                      reason: '',
+                                      maxAllowedAmount: draft.maxAllowedAmount,
+                                    });
+                                  }}
                                 >
                                   Rendir con comprobante
                                 </button>
@@ -1079,17 +1085,208 @@ export function PettyCashAndReportsPanel({
                                 (isReceptor &&
                                   (v.status === 'DESEMBOLSADO' ||
                                     v.status === 'RENDIDO'))) && (
-                                  <button
-                                    type="button"
-                                    className="btn btn--danger btn--sm"
-                                    onClick={() => handleAnnulVoucher(v.id)}
-                                    disabled={!hasVoucherAnnulReason}
-                                    title="Escriba el motivo de anulación (mínimo 10 caracteres) para habilitar esta acción (RN-GLOB-04)"
-                                  >
-                                    Anular
-                                  </button>
-                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() => {
+                                    setArmedConfirmKey(null);
+                                    setInlineVoucherAction({
+                                      type: 'ANNUL',
+                                      voucherId: v.id,
+                                      settledAmount: '',
+                                      invoiceReference: '',
+                                      reason: '',
+                                      maxAllowedAmount: 0,
+                                    });
+                                  }}
+                                >
+                                  Anular
+                                </button>
+                              )}
                             </div>
+
+                            {inlineVoucherAction?.voucherId === v.id &&
+                              inlineVoucherAction.type === 'SETTLE' && (
+                                <div className="inline-action-box">
+                                  <div className="field">
+                                    <label
+                                      className="field__label"
+                                      htmlFor={`inline-settle-amount-${v.id}`}
+                                    >
+                                      Monto gastado según factura (Máx:{' '}
+                                      {formatUsdCurrency(
+                                        inlineVoucherAction.maxAllowedAmount,
+                                      )}
+                                      )
+                                    </label>
+                                    <input
+                                      id={`inline-settle-amount-${v.id}`}
+                                      className="input"
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      max={inlineVoucherAction.maxAllowedAmount.toFixed(
+                                        2,
+                                      )}
+                                      value={inlineVoucherAction.settledAmount}
+                                      onChange={(e) =>
+                                        setInlineVoucherAction({
+                                          ...inlineVoucherAction,
+                                          settledAmount: e.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <span className="inline-action-box__hint">
+                                    Vuelto a retornar a caja:{' '}
+                                    {formatUsdCurrency(
+                                      Math.max(
+                                        0,
+                                        inlineVoucherAction.maxAllowedAmount -
+                                          Number(
+                                            inlineVoucherAction.settledAmount ||
+                                              0,
+                                          ),
+                                      ),
+                                    )}
+                                  </span>
+                                  <div className="field">
+                                    <label
+                                      className="field__label"
+                                      htmlFor={`inline-settle-invoice-${v.id}`}
+                                    >
+                                      N° factura / comprobante
+                                    </label>
+                                    <input
+                                      id={`inline-settle-invoice-${v.id}`}
+                                      className="input"
+                                      value={
+                                        inlineVoucherAction.invoiceReference
+                                      }
+                                      onChange={(e) =>
+                                        setInlineVoucherAction({
+                                          ...inlineVoucherAction,
+                                          invoiceReference: e.target.value,
+                                        })
+                                      }
+                                      placeholder="FACT-SENIAT-009841"
+                                    />
+                                  </div>
+                                  <div className="field">
+                                    <label
+                                      className="field__label"
+                                      htmlFor={`inline-settle-file-${v.id}`}
+                                    >
+                                      Comprobante (PDF/PNG/JPEG)
+                                    </label>
+                                    <input
+                                      id={`inline-settle-file-${v.id}`}
+                                      className="input"
+                                      type="file"
+                                      accept="application/pdf,image/png,image/jpeg"
+                                      onChange={(e) =>
+                                        setInlineSettleFile(
+                                          e.target.files?.[0] ?? null,
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="btn-group">
+                                    <button
+                                      type="button"
+                                      className="btn btn--sm"
+                                      onClick={() =>
+                                        handleSettleVoucher(
+                                          v.id,
+                                          inlineVoucherAction.settledAmount,
+                                          inlineVoucherAction.invoiceReference,
+                                        )
+                                      }
+                                    >
+                                      Confirmar rendición
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--sm"
+                                      onClick={() => {
+                                        setInlineVoucherAction(null);
+                                        setInlineSettleFile(null);
+                                      }}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                            {inlineVoucherAction?.voucherId === v.id &&
+                              (inlineVoucherAction.type === 'REJECT' ||
+                                inlineVoucherAction.type === 'ANNUL') &&
+                              (() => {
+                                const minLen =
+                                  inlineVoucherAction.type === 'REJECT'
+                                    ? 5
+                                    : 10;
+                                const validation = validateInlineJustification(
+                                  inlineVoucherAction.reason,
+                                  minLen,
+                                );
+                                return (
+                                  <div className="inline-action-box">
+                                    <input
+                                      className="input"
+                                      value={inlineVoucherAction.reason}
+                                      onChange={(e) =>
+                                        setInlineVoucherAction({
+                                          ...inlineVoucherAction,
+                                          reason: e.target.value,
+                                        })
+                                      }
+                                      placeholder={
+                                        inlineVoucherAction.type === 'REJECT'
+                                          ? 'Motivo de rechazo de este vale...'
+                                          : 'Motivo de anulación de este vale...'
+                                      }
+                                    />
+                                    <span className="inline-action-box__hint">
+                                      {validation.valid
+                                        ? 'Motivo válido. Confirme esta acción.'
+                                        : `Faltan ${validation.remainingChars} caracteres (mín. ${minLen}).`}
+                                    </span>
+                                    <div className="btn-group">
+                                      <button
+                                        type="button"
+                                        className="btn btn--danger btn--sm"
+                                        disabled={!validation.valid}
+                                        onClick={() =>
+                                          inlineVoucherAction.type === 'REJECT'
+                                            ? handleRejectVoucher(
+                                                v.id,
+                                                validation.trimmed,
+                                              )
+                                            : handleAnnulVoucher(
+                                                v.id,
+                                                validation.trimmed,
+                                              )
+                                        }
+                                      >
+                                        {inlineVoucherAction.type === 'REJECT'
+                                          ? 'Confirmar rechazo'
+                                          : 'Confirmar anulación'}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn--ghost btn--sm"
+                                        onClick={() =>
+                                          setInlineVoucherAction(null)
+                                        }
+                                      >
+                                        Cancelar
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                           </td>
                         </tr>
                       ))}
