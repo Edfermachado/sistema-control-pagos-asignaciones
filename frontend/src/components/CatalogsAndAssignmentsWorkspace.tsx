@@ -8,6 +8,10 @@ import {
 } from '../types/domain.types';
 import { apiRequest } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
+import {
+  clampDateRangeToWindow,
+  toIsoDateSlice,
+} from '../utils/range-validity.util';
 import { TableFilterBar } from './TableFilterBar';
 import { TablePagination } from './TablePagination';
 import {
@@ -150,11 +154,45 @@ export function CatalogsAndAssignmentsWorkspace({
   // Estado períodos/cortes de pago
   const [periodGroupId, setPeriodGroupId] = useState('');
   const [periods, setPeriods] = useState<LivePaymentGroupPeriod[]>([]);
-  const [newPeriodStart, setNewPeriodStart] = useState('2026-12-01');
-  const [newPeriodEnd, setNewPeriodEnd] = useState('2026-12-15');
+  const [newPeriodStart, setNewPeriodStart] = useState('2028-01-01');
+  const [newPeriodEnd, setNewPeriodEnd] = useState('2028-01-15');
   const [newPeriodLabel, setNewPeriodLabel] = useState('Corte personalizado');
 
   const effectivePeriodGroupId = periodGroupId || paymentGroups[0]?.id || '';
+
+  // Catálogos activos para selectores sin fricción (RN-CAT-02, RN-CAT-03, RN-SEG-01)
+  const activeProjects = projects.filter(
+    (p) => p.status === ProjectStatus.ACTIVO,
+  );
+  const activePaymentGroups = paymentGroups.filter((pg) => pg.isActive);
+  const activeBeneficiaries = beneficiaries.filter((b) => b.isActive);
+
+  const selectedAssignmentProject =
+    activeProjects.find((p) => p.id === asigProjectId) ?? activeProjects[0];
+  const asigMinDate = selectedAssignmentProject
+    ? toIsoDateSlice(selectedAssignmentProject.startDate)
+    : undefined;
+  const asigMaxDate = selectedAssignmentProject
+    ? toIsoDateSlice(selectedAssignmentProject.endDate)
+    : undefined;
+
+  useEffect(() => {
+    if (!selectedAssignmentProject) {
+      return;
+    }
+    const clamped = clampDateRangeToWindow(
+      asigStart,
+      asigEnd,
+      selectedAssignmentProject.startDate,
+      selectedAssignmentProject.endDate,
+    );
+    if (clamped.startDate !== asigStart) {
+      setAsigStart(clamped.startDate);
+    }
+    if (clamped.endDate !== asigEnd) {
+      setAsigEnd(clamped.endDate);
+    }
+  }, [selectedAssignmentProject, asigStart, asigEnd]);
 
   // Estados de búsqueda, filtros y paginación
   const [projectSearch, setProjectSearch] = useState('');
@@ -483,9 +521,9 @@ export function CatalogsAndAssignmentsWorkspace({
 
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetBeneficiary = asigBeneficiaryId || beneficiaries[0]?.id;
-    const targetProject = asigProjectId || projects[0]?.id;
-    const targetGroup = asigGroupId || paymentGroups[0]?.id;
+    const targetBeneficiary = asigBeneficiaryId || activeBeneficiaries[0]?.id;
+    const targetProject = asigProjectId || activeProjects[0]?.id;
+    const targetGroup = asigGroupId || activePaymentGroups[0]?.id;
 
     if (!targetBeneficiary || !targetProject || !targetGroup) {
       onNotify(
@@ -626,6 +664,7 @@ export function CatalogsAndAssignmentsWorkspace({
                     id="proj-end"
                     className="input"
                     type="date"
+                    min={projStart}
                     value={projEnd}
                     onChange={(e) => setProjEnd(e.target.value)}
                     required
@@ -944,6 +983,7 @@ export function CatalogsAndAssignmentsWorkspace({
                         id="period-end"
                         className="input"
                         type="date"
+                        min={newPeriodStart}
                         value={newPeriodEnd}
                         onChange={(e) => setNewPeriodEnd(e.target.value)}
                         required
@@ -1227,16 +1267,20 @@ export function CatalogsAndAssignmentsWorkspace({
                 <form onSubmit={handleCreateAssignment} className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="asig-beneficiary">
-                      Beneficiario
+                      Beneficiario activo
                     </label>
                     <select
                       id="asig-beneficiary"
                       className="select"
-                      value={asigBeneficiaryId}
+                      value={
+                        asigBeneficiaryId || activeBeneficiaries[0]?.id || ''
+                      }
                       onChange={(e) => setAsigBeneficiaryId(e.target.value)}
                     >
-                      <option value="">-- Seleccionar Beneficiario --</option>
-                      {beneficiaries.map((b) => (
+                      {activeBeneficiaries.length === 0 && (
+                        <option value="">-- Sin beneficiarios activos --</option>
+                      )}
+                      {activeBeneficiaries.map((b) => (
                         <option key={b.id} value={b.id}>
                           {b.fullName} ({b.dni})
                         </option>
@@ -1245,34 +1289,49 @@ export function CatalogsAndAssignmentsWorkspace({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="asig-project">
-                      Proyecto
+                      Proyecto activo (vigencia)
                     </label>
                     <select
                       id="asig-project"
                       className="select"
-                      value={asigProjectId}
-                      onChange={(e) => setAsigProjectId(e.target.value)}
+                      value={asigProjectId || activeProjects[0]?.id || ''}
+                      onChange={(e) => {
+                        const nextProjId = e.target.value;
+                        setAsigProjectId(nextProjId);
+                        const nextProj = activeProjects.find(
+                          (p) => p.id === nextProjId,
+                        );
+                        if (nextProj) {
+                          setAsigStart(toIsoDateSlice(nextProj.startDate));
+                          setAsigEnd(toIsoDateSlice(nextProj.endDate));
+                        }
+                      }}
                     >
-                      <option value="">-- Seleccionar Proyecto --</option>
-                      {projects.map((p) => (
+                      {activeProjects.length === 0 && (
+                        <option value="">-- Sin proyectos activos --</option>
+                      )}
+                      {activeProjects.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.code} - {p.name}
+                          {p.code} - {p.name} ({toIsoDateSlice(p.startDate)} →{' '}
+                          {toIsoDateSlice(p.endDate)})
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="asig-group">
-                      Grupo de pago
+                      Grupo de pago activo
                     </label>
                     <select
                       id="asig-group"
                       className="select"
-                      value={asigGroupId}
+                      value={asigGroupId || activePaymentGroups[0]?.id || ''}
                       onChange={(e) => setAsigGroupId(e.target.value)}
                     >
-                      <option value="">-- Seleccionar Grupo de Pago --</option>
-                      {paymentGroups.map((pg) => (
+                      {activePaymentGroups.length === 0 && (
+                        <option value="">-- Sin grupos activos --</option>
+                      )}
+                      {activePaymentGroups.map((pg) => (
                         <option key={pg.id} value={pg.id}>
                           {pg.name} ({pg.periodicity})
                         </option>
@@ -1297,12 +1356,14 @@ export function CatalogsAndAssignmentsWorkspace({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="asig-start">
-                      Inicio
+                      Inicio (dentro de vigencia)
                     </label>
                     <input
                       id="asig-start"
                       className="input"
                       type="date"
+                      min={asigMinDate}
+                      max={asigMaxDate}
                       value={asigStart}
                       onChange={(e) => setAsigStart(e.target.value)}
                       required
@@ -1310,12 +1371,14 @@ export function CatalogsAndAssignmentsWorkspace({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="asig-end">
-                      Fin
+                      Fin (dentro de vigencia)
                     </label>
                     <input
                       id="asig-end"
                       className="input"
                       type="date"
+                      min={asigStart || asigMinDate}
+                      max={asigMaxDate}
                       value={asigEnd}
                       onChange={(e) => setAsigEnd(e.target.value)}
                     />

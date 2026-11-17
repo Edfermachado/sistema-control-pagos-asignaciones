@@ -9,6 +9,7 @@ export function MotorPage(): React.ReactElement {
     projects,
     paymentGroups,
     beneficiaries,
+    assignments,
     accruals,
     accrualBatches,
     paymentRequests,
@@ -24,6 +25,7 @@ export function MotorPage(): React.ReactElement {
       projects={projects}
       paymentGroups={paymentGroups}
       beneficiaries={beneficiaries}
+      assignments={assignments}
       accruals={accruals}
       accrualBatches={accrualBatches}
       paymentRequests={paymentRequests}

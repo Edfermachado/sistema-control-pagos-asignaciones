@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AccrualStatus,
   PaymentRequestStatus,
+  ProjectStatus,
   UserRole,
 } from '../types/domain.types';
 import {
@@ -10,6 +11,13 @@ import {
 } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 import {
+  doDateRangesIntersect,
+  filterValidCutoffPeriodsForProject,
+  getPayableBeneficiariesForRequest,
+  toIsoDateSlice,
+} from '../utils/range-validity.util';
+import {
+  LiveAssignment,
   LiveBeneficiary,
   LivePaymentGroup,
   LivePaymentGroupPeriod,
@@ -107,6 +115,7 @@ interface FinancialProps {
   projects: LiveProject[];
   paymentGroups: LivePaymentGroup[];
   beneficiaries: LiveBeneficiary[];
+  assignments?: LiveAssignment[];
   accruals: LiveAccrual[];
   accrualBatches: LiveAccrualBatch[];
   paymentRequests: LivePaymentRequest[];
@@ -166,6 +175,7 @@ export function FinancialEnginePanel({
   projects,
   paymentGroups,
   beneficiaries,
+  assignments = [],
   accruals,
   accrualBatches,
   paymentRequests,
@@ -179,14 +189,51 @@ export function FinancialEnginePanel({
   // 1. Estado Lote de Causación (código autogenerado por el sistema)
   const [batchProjectId, setBatchProjectId] = useState('');
   const [batchGroupId, setBatchGroupId] = useState('');
-  const [periodStart, setPeriodStart] = useState('2026-02-01');
-  const [periodEnd, setPeriodEnd] = useState('2026-02-15');
+  const [periodStart, setPeriodStart] = useState('2026-11-01');
+  const [periodEnd, setPeriodEnd] = useState('2026-11-15');
   const [batchPeriods, setBatchPeriods] = useState<LivePaymentGroupPeriod[]>([]);
   const [batchPeriodId, setBatchPeriodId] = useState('');
   const [previewResult, setPreviewResult] =
     useState<BatchPreviewResponse | null>(null);
 
-  const effectiveBatchGroupId = batchGroupId || paymentGroups[0]?.id || '';
+  // Solo proyectos activos (y con asignaciones activas cuando están disponibles)
+  const activeProjectsForBatch = projects.filter(
+    (p) =>
+      p.status === ProjectStatus.ACTIVO &&
+      (assignments.length === 0 ||
+        assignments.some(
+          (a) =>
+            a.projectId === p.id &&
+            a.isActive &&
+            a.beneficiary?.isActive !== false,
+        )),
+  );
+  const effectiveBatchProject =
+    activeProjectsForBatch.find((p) => p.id === batchProjectId) ??
+    activeProjectsForBatch[0] ??
+    projects.find((p) => p.status === ProjectStatus.ACTIVO) ??
+    projects[0];
+
+  // Solo grupos de pago activos que tengan asignaciones en el proyecto seleccionado
+  const activePaymentGroupsForProject = paymentGroups.filter(
+    (pg) =>
+      pg.isActive &&
+      (assignments.length === 0 ||
+        !effectiveBatchProject ||
+        assignments.some(
+          (a) =>
+            a.projectId === effectiveBatchProject.id &&
+            a.paymentGroupId === pg.id &&
+            a.isActive &&
+            a.beneficiary?.isActive !== false,
+        )),
+  );
+  const effectiveBatchGroupId =
+    activePaymentGroupsForProject.find((pg) => pg.id === batchGroupId)?.id ??
+    activePaymentGroupsForProject[0]?.id ??
+    paymentGroups.find((pg) => pg.isActive)?.id ??
+    paymentGroups[0]?.id ??
+    '';
 
   useEffect(() => {
     const loadBatchPeriods = async () => {
@@ -208,6 +255,38 @@ export function FinancialEnginePanel({
     void loadBatchPeriods();
   }, [effectiveBatchGroupId, token]);
 
+  // Filtra solo los períodos de corte válidos dentro de la vigencia activa del proyecto y aún no causados
+  const validBatchPeriods = filterValidCutoffPeriodsForProject({
+    periods: batchPeriods,
+    project: effectiveBatchProject,
+    paymentGroupId: effectiveBatchGroupId,
+    assignments,
+    existingBatches: accrualBatches,
+  });
+
+  useEffect(() => {
+    if (validBatchPeriods.length === 0) {
+      return;
+    }
+    const currentSelected = validBatchPeriods.find(
+      (per) => per.id === batchPeriodId,
+    );
+    const chosen = currentSelected ?? validBatchPeriods[0];
+    if (chosen) {
+      const startIso = toIsoDateSlice(chosen.periodStart);
+      const endIso = toIsoDateSlice(chosen.periodEnd);
+      if (batchPeriodId !== chosen.id) {
+        setBatchPeriodId(chosen.id);
+      }
+      if (periodStart !== startIso) {
+        setPeriodStart(startIso);
+      }
+      if (periodEnd !== endIso) {
+        setPeriodEnd(endIso);
+      }
+    }
+  }, [validBatchPeriods, batchPeriodId, periodStart, periodEnd]);
+
   // 2. Estado Nueva Solicitud de Pago (código autogenerado por el sistema)
   const [reqProjectId, setReqProjectId] = useState('');
   const [reqAccrualIds, setReqAccrualIds] = useState<string[]>([]);
@@ -217,7 +296,7 @@ export function FinancialEnginePanel({
   const [payBeneficiaryId, setPayBeneficiaryId] = useState('');
   const [payAmount, setPayAmount] = useState('300.00');
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
-  const [payDate, setPayDate] = useState('2026-02-20');
+  const [payDate, setPayDate] = useState('2026-11-10');
 
   // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos (RN-PAG-01/03).
   // El campo arranca vacío: ninguna anulación ni rechazo puede ejecutarse con un
@@ -240,23 +319,86 @@ export function FinancialEnginePanel({
       .flatMap((r) => (r.items ?? []).map((item) => item.accrualId)),
   );
 
-  const hasPendingBalance = (accrual: LiveAccrual): boolean =>
-    (accrual.status === AccrualStatus.PENDIENTE ||
-      accrual.status === AccrualStatus.PARCIAL) &&
-    Number(accrual.balanceDue) > 0 &&
-    !activeRequestAccrualIds.has(accrual.id);
+  const isAccrualEligibleForRequest = (accrual: LiveAccrual): boolean => {
+    if (
+      (accrual.status !== AccrualStatus.PENDIENTE &&
+        accrual.status !== AccrualStatus.PARCIAL) ||
+      Number(accrual.balanceDue) <= 0 ||
+      activeRequestAccrualIds.has(accrual.id)
+    ) {
+      return false;
+    }
+    const proj = projects.find((p) => p.id === accrual.projectId);
+    if (!proj) {
+      return true;
+    }
+    return doDateRangesIntersect(
+      accrual.periodStart,
+      accrual.periodEnd,
+      proj.startDate,
+      proj.endDate,
+    );
+  };
 
-  const firstProjectWithPendingAccruals = projects.find((p) =>
-    accruals.some((a) => a.projectId === p.id && hasPendingBalance(a)),
+  // Solo proyectos que poseen causaciones con saldo pendiente dentro de sus rangos válidos
+  const projectsWithEligibleAccruals = projects.filter((p) =>
+    accruals.some(
+      (a) => a.projectId === p.id && isAccrualEligibleForRequest(a),
+    ),
   );
   const effectiveReqProjectId =
-    reqProjectId || firstProjectWithPendingAccruals?.id || projects[0]?.id || '';
+    projectsWithEligibleAccruals.find((p) => p.id === reqProjectId)?.id ??
+    projectsWithEligibleAccruals[0]?.id ??
+    projects[0]?.id ??
+    '';
   const eligibleRequestAccruals = accruals.filter(
-    (a) => a.projectId === effectiveReqProjectId && hasPendingBalance(a),
+    (a) =>
+      a.projectId === effectiveReqProjectId && isAccrualEligibleForRequest(a),
   );
   const selectedRequestedTotal = eligibleRequestAccruals
     .filter((a) => reqAccrualIds.includes(a.id))
     .reduce((total, a) => total + Number(a.balanceDue), 0);
+
+  // Solicitudes con saldo pendiente real para pagos FIFO y beneficiarios incluidos en la solicitud
+  const payableRequests = paymentRequests.filter(
+    (r) =>
+      (r.status === PaymentRequestStatus.APROBADA ||
+        r.status === PaymentRequestStatus.ENTREGADA) &&
+      Number(r.totalAmount) - Number(r.paidAmount) > 0,
+  );
+  const selectedPayableRequest =
+    payableRequests.find((r) => r.id === payRequestId) ?? payableRequests[0];
+  const payableBeneficiaryEntries = getPayableBeneficiariesForRequest(
+    selectedPayableRequest,
+    beneficiaries,
+  );
+  const selectedPayableBeneficiaryEntry =
+    payableBeneficiaryEntries.find(
+      (entry) => entry.beneficiary.id === payBeneficiaryId,
+    ) ?? payableBeneficiaryEntries[0];
+  const maxPayableUsd = selectedPayableBeneficiaryEntry
+    ? selectedPayableBeneficiaryEntry.pendingInRequestUsd
+    : selectedPayableRequest
+      ? Math.max(
+          0,
+          Number(selectedPayableRequest.totalAmount) -
+            Number(selectedPayableRequest.paidAmount),
+        )
+      : 9999999999.99;
+
+  useEffect(() => {
+    if (!selectedPayableBeneficiaryEntry) {
+      return;
+    }
+    if (payBeneficiaryId !== selectedPayableBeneficiaryEntry.beneficiary.id) {
+      setPayBeneficiaryId(selectedPayableBeneficiaryEntry.beneficiary.id);
+    }
+    if (Number(payAmount) > selectedPayableBeneficiaryEntry.pendingInRequestUsd) {
+      setPayAmount(
+        selectedPayableBeneficiaryEntry.pendingInRequestUsd.toFixed(2),
+      );
+    }
+  }, [selectedPayableBeneficiaryEntry, payBeneficiaryId, payAmount]);
 
   const toggleRequestAccrual = (accrualId: string) => {
     setReqAccrualIds((current) =>
@@ -267,8 +409,8 @@ export function FinancialEnginePanel({
   };
 
   const handlePreviewBatch = async () => {
-    const targetProject = batchProjectId || projects[0]?.id;
-    const targetGroup = batchGroupId || paymentGroups[0]?.id;
+    const targetProject = effectiveBatchProject?.id;
+    const targetGroup = effectiveBatchGroupId;
     if (!targetProject || !targetGroup) {
       onNotify('error', 'Seleccione proyecto y grupo de pago.');
       return;
@@ -299,8 +441,8 @@ export function FinancialEnginePanel({
 
   const handleGenerateBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetProject = batchProjectId || projects[0]?.id;
-    const targetGroup = batchGroupId || paymentGroups[0]?.id;
+    const targetProject = effectiveBatchProject?.id;
+    const targetGroup = effectiveBatchGroupId;
     if (!targetProject || !targetGroup) {
       onNotify('error', 'Seleccione proyecto y grupo de pago.');
       return;
@@ -434,13 +576,11 @@ export function FinancialEnginePanel({
 
   const handleExecuteFifoPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const approvedRequests = paymentRequests.filter(
-      (r) =>
-        r.status === PaymentRequestStatus.APROBADA ||
-        r.status === PaymentRequestStatus.ENTREGADA,
-    );
-    const targetRequest = payRequestId || approvedRequests[0]?.id;
-    const targetBeneficiary = payBeneficiaryId || beneficiaries[0]?.id;
+    const targetRequest = selectedPayableRequest?.id;
+    const targetBeneficiary =
+      selectedPayableBeneficiaryEntry?.beneficiary.id ??
+      payBeneficiaryId ??
+      beneficiaries[0]?.id;
 
     if (!targetRequest || !targetBeneficiary) {
       onNotify(
@@ -614,37 +754,52 @@ export function FinancialEnginePanel({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-project">
-                      Proyecto
+                      Proyecto activo (vigencia)
                     </label>
                     <select
                       id="batch-project"
                       className="select"
-                      value={batchProjectId}
-                      onChange={(e) => setBatchProjectId(e.target.value)}
+                      value={effectiveBatchProject?.id ?? ''}
+                      onChange={(e) => {
+                        setBatchProjectId(e.target.value);
+                        setBatchGroupId('');
+                        setBatchPeriodId('');
+                        setPreviewResult(null);
+                      }}
                     >
-                      <option value="">Seleccione un proyecto</option>
-                      {projects.map((p) => (
+                      {activeProjectsForBatch.length === 0 && (
+                        <option value="">
+                          Sin proyectos activos con asignaciones
+                        </option>
+                      )}
+                      {activeProjectsForBatch.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.code} - {p.name}
+                          {p.code} - {p.name} ({toIsoDateSlice(p.startDate)} →{' '}
+                          {toIsoDateSlice(p.endDate)})
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-group">
-                      Grupo de pago
+                      Grupo de pago con asignaciones
                     </label>
                     <select
                       id="batch-group"
                       className="select"
-                      value={batchGroupId}
+                      value={effectiveBatchGroupId}
                       onChange={(e) => {
                         setBatchGroupId(e.target.value);
                         setBatchPeriodId('');
+                        setPreviewResult(null);
                       }}
                     >
-                      <option value="">Seleccione un grupo de pago</option>
-                      {paymentGroups.map((pg) => (
+                      {activePaymentGroupsForProject.length === 0 && (
+                        <option value="">
+                          Sin grupos asignados en este proyecto
+                        </option>
+                      )}
+                      {activePaymentGroupsForProject.map((pg) => (
                         <option key={pg.id} value={pg.id}>
                           {pg.name} ({pg.periodicity})
                         </option>
@@ -653,30 +808,34 @@ export function FinancialEnginePanel({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-period">
-                      Fecha de corte
+                      Período válido disponible ({validBatchPeriods.length})
                     </label>
                     <select
                       id="batch-period"
                       className="select"
                       value={batchPeriodId}
                       onChange={(e) => {
-                        const selected = batchPeriods.find(
+                        const selected = validBatchPeriods.find(
                           (period) => period.id === e.target.value,
                         );
                         setBatchPeriodId(e.target.value);
+                        setPreviewResult(null);
                         if (selected) {
-                          setPeriodStart(
-                            String(selected.periodStart).slice(0, 10),
-                          );
-                          setPeriodEnd(String(selected.periodEnd).slice(0, 10));
+                          setPeriodStart(toIsoDateSlice(selected.periodStart));
+                          setPeriodEnd(toIsoDateSlice(selected.periodEnd));
                         }
                       }}
                     >
-                      <option value="">Seleccione un corte configurado</option>
-                      {batchPeriods.map((period) => (
+                      {validBatchPeriods.length === 0 && (
+                        <option value="">
+                          Sin períodos disponibles por causar en este rango
+                        </option>
+                      )}
+                      {validBatchPeriods.map((period) => (
                         <option key={period.id} value={period.id}>
-                          {String(period.periodStart).slice(0, 10)} al{' '}
-                          {String(period.periodEnd).slice(0, 10)}
+                          {toIsoDateSlice(period.periodStart)} al{' '}
+                          {toIsoDateSlice(period.periodEnd)}
+                          {period.label ? ` — ${period.label}` : ''}
                         </option>
                       ))}
                     </select>
@@ -689,8 +848,19 @@ export function FinancialEnginePanel({
                       id="period-start"
                       className="input"
                       type="date"
+                      min={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.startDate)
+                          : undefined
+                      }
+                      max={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.endDate)
+                          : undefined
+                      }
                       value={periodStart}
                       onChange={(e) => setPeriodStart(e.target.value)}
+                      readOnly={batchPeriods.length > 0}
                       required
                     />
                   </div>
@@ -702,8 +872,20 @@ export function FinancialEnginePanel({
                       id="period-end"
                       className="input"
                       type="date"
+                      min={
+                        periodStart ||
+                        (effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.startDate)
+                          : undefined)
+                      }
+                      max={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.endDate)
+                          : undefined
+                      }
                       value={periodEnd}
                       onChange={(e) => setPeriodEnd(e.target.value)}
+                      readOnly={batchPeriods.length > 0}
                       required
                     />
                   </div>
@@ -970,7 +1152,7 @@ export function FinancialEnginePanel({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="req-project">
-                      Proyecto
+                      Proyecto con causaciones disponibles
                     </label>
                     <select
                       id="req-project"
@@ -981,11 +1163,28 @@ export function FinancialEnginePanel({
                         setReqAccrualIds([]);
                       }}
                     >
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.code} - {p.name}
+                      {projectsWithEligibleAccruals.length === 0 && (
+                        <option value="">
+                          Sin proyectos con causaciones libres para consolidar
                         </option>
-                      ))}
+                      )}
+                      {projectsWithEligibleAccruals.map((p) => {
+                        const projEligible = accruals.filter(
+                          (a) =>
+                            a.projectId === p.id &&
+                            isAccrualEligibleForRequest(a),
+                        );
+                        const projSum = projEligible.reduce(
+                          (sum, a) => sum + Number(a.balanceDue),
+                          0,
+                        );
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.code} - {p.name} ({projEligible.length} disp. ·{' '}
+                            {formatUsdCurrency(projSum)})
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -1215,53 +1414,75 @@ export function FinancialEnginePanel({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-request">
-                      Solicitud aprobada
+                      Solicitud aprobada con saldo pendiente
                     </label>
                     <select
                       id="pay-request"
                       className="select"
-                      value={payRequestId}
-                      onChange={(e) => setPayRequestId(e.target.value)}
+                      value={selectedPayableRequest?.id ?? ''}
+                      onChange={(e) => {
+                        setPayRequestId(e.target.value);
+                        setPayBeneficiaryId('');
+                      }}
                     >
-                      <option value="">
-                        Seleccione una solicitud aprobada
-                      </option>
-                      {paymentRequests
-                        .filter(
-                          (r) =>
-                            r.status === PaymentRequestStatus.APROBADA ||
-                            r.status === PaymentRequestStatus.ENTREGADA,
-                        )
-                        .map((r) => (
+                      {payableRequests.length === 0 && (
+                        <option value="">
+                          Sin solicitudes aprobadas con saldo por pagar
+                        </option>
+                      )}
+                      {payableRequests.map((r) => {
+                        const pending = Math.max(
+                          0,
+                          Number(r.totalAmount) - Number(r.paidAmount),
+                        );
+                        return (
                           <option key={r.id} value={r.id}>
-                            {r.code} (Total:{' '}
-                            {formatUsdCurrency(Number(r.totalAmount))}, Pagado:{' '}
-                            {formatUsdCurrency(Number(r.paidAmount))})
+                            {r.code} — Pendiente: {formatUsdCurrency(pending)}{' '}
+                            (Total: {formatUsdCurrency(Number(r.totalAmount))})
                           </option>
-                        ))}
+                        );
+                      })}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-beneficiary">
-                      Beneficiario
+                      Beneficiario incluido en la solicitud
                     </label>
                     <select
                       id="pay-beneficiary"
                       className="select"
-                      value={payBeneficiaryId}
-                      onChange={(e) => setPayBeneficiaryId(e.target.value)}
+                      value={
+                        selectedPayableBeneficiaryEntry?.beneficiary.id ?? ''
+                      }
+                      onChange={(e) => {
+                        const nextBenId = e.target.value;
+                        setPayBeneficiaryId(nextBenId);
+                        const match = payableBeneficiaryEntries.find(
+                          (entry) => entry.beneficiary.id === nextBenId,
+                        );
+                        if (match) {
+                          setPayAmount(match.pendingInRequestUsd.toFixed(2));
+                        }
+                      }}
                     >
-                      <option value="">Seleccione un beneficiario</option>
-                      {beneficiaries.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.fullName} ({b.dni})
+                      {payableBeneficiaryEntries.length === 0 && (
+                        <option value="">
+                          Sin beneficiarios con deuda en esta solicitud
                         </option>
-                      ))}
+                      )}
+                      {payableBeneficiaryEntries.map(
+                        ({ beneficiary: b, pendingInRequestUsd }) => (
+                          <option key={b.id} value={b.id}>
+                            {b.fullName} ({b.dni}) — Deuda en solicitud:{' '}
+                            {formatUsdCurrency(pendingInRequestUsd)}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-amount">
-                      Monto a entregar (USD)
+                      Monto a entregar (Máx: {formatUsdCurrency(maxPayableUsd)})
                     </label>
                     <input
                       id="pay-amount"
@@ -1269,7 +1490,7 @@ export function FinancialEnginePanel({
                       type="number"
                       step="0.01"
                       min="0.01"
-                      max="9999999999.99"
+                      max={maxPayableUsd.toFixed(2)}
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
                       required

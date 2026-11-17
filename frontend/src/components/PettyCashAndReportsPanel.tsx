@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { UserRole } from '../types/domain.types';
+import React, { useEffect, useState } from 'react';
+import { ProjectStatus, UserRole } from '../types/domain.types';
 import {
   apiRequest,
   DEFAULT_API_BASE_URL,
@@ -7,6 +7,7 @@ import {
 } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 import { calculatePettyCashUtilizationPercent } from '../utils/petty-cash.util';
+import { getNextSequentialYearMonth } from '../utils/range-validity.util';
 import { LiveProject } from './CatalogsAndAssignmentsWorkspace';
 
 export interface LivePettyCashVoucher {
@@ -98,11 +99,63 @@ export function PettyCashAndReportsPanel({
   const hasVoucherRejectionReason = voucherRejectionReason.trim().length >= 5;
   const hasVoucherAnnulReason = voucherAnnulReason.trim().length >= 10;
 
+  // Proyectos activos para crear caja chica (RN-CAJA-01)
+  const activeProjects = projects.filter(
+    (p) => p.status === ProjectStatus.ACTIVO,
+  );
+
+  // Solo cajas chicas ACTIVAS sin período ABIERTO ni SOLICITADO pueden abrir un nuevo mes (RN-CAJA-02)
+  const openableBoxes = pettyCashes.filter(
+    (pc) =>
+      pc.status === 'ACTIVA' &&
+      !pc.periods.some(
+        (per) => per.status === 'ABIERTO' || per.status === 'SOLICITADO',
+      ),
+  );
+  const selectedOpenableBox =
+    openableBoxes.find((pc) => pc.id === periodPettyCashId) ?? openableBoxes[0];
+
+  const lastClosedPeriodOfSelectedBox = selectedOpenableBox?.periods
+    .filter((per) => per.status === 'CERRADO')
+    .sort((a, b) => b.yearMonth.localeCompare(a.yearMonth))[0];
+  const expectedCarryoverUsd = lastClosedPeriodOfSelectedBox?.closingBalance
+    ? Number(lastClosedPeriodOfSelectedBox.closingBalance)
+    : 0;
+  const maxReplenishmentUsd = selectedOpenableBox
+    ? Math.max(
+        0,
+        Number(selectedOpenableBox.authorizedAmount) - expectedCarryoverUsd,
+      )
+    : 9999999999.99;
+
+  useEffect(() => {
+    if (!selectedOpenableBox) {
+      return;
+    }
+    const nextYm = getNextSequentialYearMonth(
+      lastClosedPeriodOfSelectedBox?.yearMonth,
+      '2026-11',
+    );
+    if (periodYearMonth !== nextYm) {
+      setPeriodYearMonth(nextYm);
+    }
+    const recommendedRep = maxReplenishmentUsd.toFixed(2);
+    if (Number(periodReplenishment) > maxReplenishmentUsd) {
+      setPeriodReplenishment(recommendedRep);
+    }
+  }, [
+    selectedOpenableBox,
+    lastClosedPeriodOfSelectedBox?.yearMonth,
+    maxReplenishmentUsd,
+    periodYearMonth,
+    periodReplenishment,
+  ]);
+
   const handleCreatePettyCash = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetProject = boxProjectId || projects[0]?.id;
+    const targetProject = boxProjectId || activeProjects[0]?.id;
     if (!targetProject) {
-      onNotify('error', 'Seleccione un proyecto.');
+      onNotify('error', 'Seleccione un proyecto activo.');
       return;
     }
     try {
@@ -127,9 +180,12 @@ export function PettyCashAndReportsPanel({
 
   const handleOpenPeriod = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetBox = periodPettyCashId || pettyCashes[0]?.id;
+    const targetBox = selectedOpenableBox?.id;
     if (!targetBox) {
-      onNotify('error', 'Seleccione una caja chica.');
+      onNotify(
+        'error',
+        'No hay cajas chicas disponibles para abrir período (deben estar ACTIVAS y sin período abierto).',
+      );
       return;
     }
     try {
@@ -335,9 +391,17 @@ export function PettyCashAndReportsPanel({
 
   const openPeriodsList = pettyCashes.flatMap((pc) =>
     pc.periods
-      .filter((per) => per.status === 'ABIERTO')
+      .filter(
+        (per) => per.status === 'ABIERTO' && Number(per.availableBalance) > 0,
+      )
       .map((per) => ({ ...per, boxCode: pc.code })),
   );
+  const selectedVoucherPeriod =
+    openPeriodsList.find((per) => per.id === voucherPeriodId) ??
+    openPeriodsList[0];
+  const maxVoucherAmountUsd = selectedVoucherPeriod
+    ? Number(selectedVoucherPeriod.availableBalance)
+    : 9999999999.99;
 
   const resolveAttachmentUrl = (attachmentUrl: string): string => {
     if (/^https?:\/\//i.test(attachmentUrl)) {
@@ -390,16 +454,18 @@ export function PettyCashAndReportsPanel({
                 </div>
                 <div className="field">
                   <label className="field__label" htmlFor="box-project">
-                    Proyecto
+                    Proyecto activo
                   </label>
                   <select
                     id="box-project"
                     className="select"
-                    value={boxProjectId}
+                    value={boxProjectId || activeProjects[0]?.id || ''}
                     onChange={(e) => setBoxProjectId(e.target.value)}
                   >
-                    <option value="">Seleccionar proyecto</option>
-                    {projects.map((p) => (
+                    {activeProjects.length === 0 && (
+                      <option value="">Sin proyectos activos</option>
+                    )}
+                    {activeProjects.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.code} - {p.name}
                       </option>
@@ -446,32 +512,37 @@ export function PettyCashAndReportsPanel({
               <form className="form-grid" onSubmit={handleOpenPeriod}>
                 <div className="field">
                   <label className="field__label" htmlFor="period-box">
-                    Caja chica
+                    Caja chica disponible para apertura
                   </label>
                   <select
                     id="period-box"
                     className="select"
-                    value={periodPettyCashId}
+                    value={selectedOpenableBox?.id ?? ''}
                     onChange={(e) => setPeriodPettyCashId(e.target.value)}
                   >
-                    <option value="">Seleccionar caja chica</option>
-                    {pettyCashes.map((pc) => (
+                    {openableBoxes.length === 0 && (
+                      <option value="">
+                        Sin cajas disponibles (cierre el mes activo primero)
+                      </option>
+                    )}
+                    {openableBoxes.map((pc) => (
                       <option key={pc.id} value={pc.id}>
-                        {pc.code} ({pc.name})
+                        {pc.code} ({pc.name} · Tope:{' '}
+                        {formatUsdCurrency(Number(pc.authorizedAmount))})
                       </option>
                     ))}
                   </select>
                 </div>
                 <div className="field">
                   <label className="field__label" htmlFor="period-year-month">
-                    Mes (YYYY-MM)
+                    Mes siguiente válido (YYYY-MM)
                   </label>
                   <input
                     id="period-year-month"
                     className="input"
                     value={periodYearMonth}
                     onChange={(e) => setPeriodYearMonth(e.target.value)}
-                    placeholder="2026-03"
+                    placeholder="2026-12"
                     required
                   />
                 </div>
@@ -480,7 +551,8 @@ export function PettyCashAndReportsPanel({
                     className="field__label"
                     htmlFor="period-replenishment"
                   >
-                    Reposición inicial (USD)
+                    Reposición inicial (Máx:{' '}
+                    {formatUsdCurrency(maxReplenishmentUsd)})
                   </label>
                   <input
                     id="period-replenishment"
@@ -488,14 +560,18 @@ export function PettyCashAndReportsPanel({
                     type="number"
                     step="0.01"
                     min="0"
-                    max="9999999999.99"
+                    max={maxReplenishmentUsd.toFixed(2)}
                     value={periodReplenishment}
                     onChange={(e) => setPeriodReplenishment(e.target.value)}
                     placeholder="0.00"
                     required
                   />
                 </div>
-                <button type="submit" className="btn">
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={openableBoxes.length === 0}
+                >
                   Solicitar apertura mensual
                 </button>
               </form>
@@ -516,19 +592,23 @@ export function PettyCashAndReportsPanel({
               <form className="form-grid" onSubmit={handleRequestVoucher}>
                 <div className="field">
                   <label className="field__label" htmlFor="voucher-period">
-                    Período mensual abierto
+                    Período mensual abierto con saldo
                   </label>
                   <select
                     id="voucher-period"
                     className="select"
-                    value={voucherPeriodId}
+                    value={selectedVoucherPeriod?.id ?? ''}
                     onChange={(e) => setVoucherPeriodId(e.target.value)}
                   >
-                    <option value="">Seleccionar período abierto</option>
+                    {openPeriodsList.length === 0 && (
+                      <option value="">
+                        Sin períodos abiertos con saldo disponible
+                      </option>
+                    )}
                     {openPeriodsList.map((per) => (
                       <option key={per.id} value={per.id}>
-                        {per.boxCode} - {per.yearMonth} (Disp: $
-                        {per.availableBalance})
+                        {per.boxCode} - {per.yearMonth} (Disp:{' '}
+                        {formatUsdCurrency(Number(per.availableBalance))})
                       </option>
                     ))}
                   </select>
@@ -573,7 +653,8 @@ export function PettyCashAndReportsPanel({
                 </div>
                 <div className="field">
                   <label className="field__label" htmlFor="voucher-amount">
-                    Monto solicitado (USD)
+                    Monto solicitado (Máx:{' '}
+                    {formatUsdCurrency(maxVoucherAmountUsd)})
                   </label>
                   <input
                     id="voucher-amount"
@@ -581,7 +662,7 @@ export function PettyCashAndReportsPanel({
                     type="number"
                     step="0.01"
                     min="0.01"
-                    max="9999999999.99"
+                    max={maxVoucherAmountUsd.toFixed(2)}
                     value={voucherAmount}
                     onChange={(e) => setVoucherAmount(e.target.value)}
                     placeholder="0.00"

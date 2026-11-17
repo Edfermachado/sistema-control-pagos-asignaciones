@@ -402,3 +402,22 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   4. **`CatalogsAndAssignmentsWorkspace.tsx`, `FinancialEnginePanel.tsx` y `PettyCashAndReportsPanel.tsx`**: Los campos de código de proyecto, lote, solicitud, recibo, caja chica y vale pasan a ser de solo lectura (`Autogenerado por el sistema`), y todos los inputs monetarios incluyen `min` y `max="9999999999.99"`.
 * **Explicación Técnica para la Defensa:**
   * Se blindó la frontera entre aplicación y base de datos garantizando que ningún importe supere $10^{10} - 0.01$ USD (`NUMERIC(12, 2)`), y se centralizó la numeración correlativa de documentos y vales en el servidor para impedir códigos arbitrarios o inconsistentes desde el cliente.
+
+
+---
+
+### Interacción #18 — Filtrado Estricto de Rangos Activos y Reducción de Fricción en UX
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity (Gemini)
+* **Indicación (Prompt) del Usuario:**
+  > *"Ahora haz que al consolidar pagos relacionados a los rangos activos de los proyectos, solo aparezcan los rangos validos, haz esto en cada opción que amerite validez de los rangos disponibles. Audita el sistema actual y encuentra fallos donde este sistema incumpla con esto, creando fricción para el usuario. Así como analiza las áreas de mejora para la UX"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`frontend/src/utils/range-validity.util.ts` y `range-validity.util.spec.ts`** (`RN-CAT-02`, `RN-CAT-04`, `RN-CAUS-02`, `RN-CAUS-04`, `RN-PAG-02`, `RN-CAJA-02`, `TEST-01`): Funciones puras `clampDateRangeToWindow`, `doDateRangesIntersect`, `filterValidCutoffPeriodsForProject`, `getNextSequentialYearMonth` y `getPayableBeneficiariesForRequest` con pruebas unitarias AAA.
+  2. **`frontend/src/components/FinancialEnginePanel.tsx` y `frontend/src/pages/MotorPage.tsx`**:
+     - **Causación por lote:** filtra solo proyectos `ACTIVO` con asignaciones activas, solo grupos de pago asignados a ese proyecto y solo períodos de corte dentro de la vigencia `[startDate, endDate]` del proyecto que tengan días activos y aún no hayan sido causados.
+     - **Consolidación de solicitudes:** filtra proyectos que posean causaciones elegibles libres dentro del rango del proyecto (mostrando cantidad y monto disponible).
+     - **Pagos FIFO:** filtra solicitudes aprobadas/entregadas con saldo pendiente $> 0$, restringe el selector de beneficiarios únicamente a quienes tienen deuda pendiente en esa solicitud y ajusta automáticamente el tope máximo del monto a pagar.
+  3. **`frontend/src/components/CatalogsAndAssignmentsWorkspace.tsx`**: Filtra proyectos, grupos y beneficiarios activos en el alta de asignaciones y sincroniza/restringe automáticamente `min` y `max` de las fechas `[startDate, endDate]` a la vigencia del proyecto seleccionado.
+  4. **`frontend/src/components/PettyCashAndReportsPanel.tsx`**: Filtra proyectos activos al crear caja chica, filtra cajas sin período abierto al solicitar apertura mensual, calcula automáticamente el siguiente mes secuencial (`YYYY-MM`) y el tope máximo de reposición (`authorizedAmount - carryoverBalance`), y acota el monto máximo del vale al saldo disponible del período.
+* **Explicación Técnica para la Defensa:**
+  * Se eliminó la fricción cognitiva y los rechazos `400/409` evitables en cliente haciendo que cada selector y control de fechas derive sus opciones válidas directamente de las invariantes del dominio (`RN-CAT`, `RN-CAUS`, `RN-PAG`, `RN-CAJA`), manteniendo la validación definitiva en el servidor.
