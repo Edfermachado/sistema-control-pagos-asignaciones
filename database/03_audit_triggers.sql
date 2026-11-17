@@ -103,3 +103,44 @@ CREATE TRIGGER trg_audit_logs_immutable
 BEFORE UPDATE OR DELETE ON "audit_logs"
 FOR EACH ROW
 EXECUTE FUNCTION fn_block_audit_mutation();
+
+-- 4. Inmutabilidad Contable en BD (RN-GLOB-03): prohibir DELETE físico en tablas financieras
+CREATE OR REPLACE FUNCTION fn_block_financial_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'RN-GLOB-03: Prohibido eliminar físicamente registros financieros en %. Utilice Anulación Justificada.', TG_TABLE_NAME;
+END;
+$$;
+
+DO $$
+DECLARE
+    tbl TEXT;
+    immutable_tables TEXT[] := ARRAY[
+        'accrual_batches',
+        'accruals',
+        'payment_requests',
+        'payment_request_items',
+        'payments',
+        'payment_allocations',
+        'annulments',
+        'petty_cashes',
+        'petty_cash_periods',
+        'petty_cash_vouchers'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY immutable_tables LOOP
+        EXECUTE format(
+            'DROP TRIGGER IF EXISTS %I ON %I',
+            'trg_immutable_delete_' || tbl,
+            tbl
+        );
+        EXECUTE format(
+            'CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION fn_block_financial_deletion()',
+            'trg_immutable_delete_' || tbl,
+            tbl
+        );
+    END LOOP;
+END;
+$$;

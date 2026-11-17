@@ -387,10 +387,7 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 
 ---
 
-
----
-
-### Interacción #17 — Protección contra desbordamiento `NUMERIC(12, 2)` y generación automática de códigos de documentos y vales
+### Interacción #20 — Protección contra desbordamiento `NUMERIC(12, 2)` y generación automática de códigos de documentos y vales
 * **Fecha:** Noviembre 2026
 * **Herramientas / Modelos:** Antigravity (Gemini)
 * **Indicación (Prompt) del Usuario:**
@@ -406,7 +403,7 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 
 ---
 
-### Interacción #18 — Filtrado Estricto de Rangos Activos y Reducción de Fricción en UX
+### Interacción #21 — Filtrado Estricto de Rangos Activos y Reducción de Fricción en UX
 * **Fecha:** Noviembre 2026
 * **Herramientas / Modelos:** Antigravity (Gemini)
 * **Indicación (Prompt) del Usuario:**
@@ -424,7 +421,7 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 
 ---
 
-### Interacción #20 — Implementación de las 5 Mejoras de UX y Suites de Pruebas de Flujos Completos del Sistema (E2E/Integración)
+### Interacción #22 — Implementación de las 5 Mejoras de UX y Suites de Pruebas de Flujos Completos del Sistema (E2E/Integración)
 * **Fecha:** Noviembre 2026
 * **Herramientas / Modelos:** Antigravity
 * **Indicación (Prompt) del Usuario:**
@@ -446,3 +443,30 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   - **Frontend (Vitest):** `11/11` suites / `78/78` pruebas pasando en verde.
   - **Compilación Frontend:** `tsc -b && vite build` exitoso (`60` módulos transformados, `0` errores).
   - **Backend (Jest):** `32/32` suites / `231/231` pruebas pasando en verde (`npm --prefix backend test -- --runInBand`).
+
+---
+
+### Interacción #23 — Auditoría Integral y Cierre Sistemático de Carencias Técnicas y Documentales
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity
+* **Indicación (Prompt) del Usuario:**
+  > *"Haz un analisis y auditoria completa del sistema basado en los requerimientos de los docs, dime las carencias del sistema actual y si cumple con los objetivos planteados"* → *"Aplica todas las correcciones sistematicamente ajustando en consecuencia todos los .md"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **Parámetros globales dinámicos y transacción atómica en pagos (`RN-CAJA-03`, `RN-PAG-02`):**
+     - `backend/src/modules/petty-cash/dto/petty-cash.dto.ts`, `petty-cash.service.ts` y `petty-cash.service.spec.ts`: Conexión dinámica al parámetro `PETTY_CASH_REQUIRE_ATTACHMENT` al rendir vales de caja chica.
+     - `backend/src/modules/payments/payments.service.ts` y `payments.service.spec.ts`: Lectura de solicitud y asignación FIFO íntegramente dentro de `prisma.$transaction`, y soporte dinámico del parámetro `PAYMENT_REQUEST_SCOPE` (`REQUEST_ITEMS` / `PROJECT_ACCRUALS`).
+  2. **Inmutabilidad SQL y filtrado de auditoría (`RN-GLOB-03`, `RN-AUD-03`):**
+     - `database/03_audit_triggers.sql`: Función `fn_block_financial_deletion()` y triggers `BEFORE DELETE` (`trg_immutable_delete_*`) sobre todas las tablas financieras para impedir eliminaciones físicas directas en PostgreSQL.
+     - `frontend/src/components/UsersAndAuditWorkspace.tsx`: Filtros dedicados `Acciones de negocio (con autor)` vs. `Triggers SQL (INSERT/UPDATE/DELETE)` en la bitácora.
+  3. **Modularización Frontend (`FE-01`, `FE-02`):**
+     - Nuevos subcomponentes `frontend/src/components/FifoSimulationPreviewTable.tsx` y `frontend/src/components/AssignmentAvailabilityBanner.tsx` extraídos de `FinancialEnginePanel.tsx` y `CatalogsAndAssignmentsWorkspace.tsx`.
+  4. **Consultas clave `RN-AUD-01` / `RN-AUD-02` en `/resumen` para todos los roles:**
+     - `backend/src/modules/reports/domain/pdf-document.builder.ts` (+ `spec.ts`), `reports.service.ts` (+ `spec.ts`) y `reports.controller.ts`: Inclusión de `paymentHistory` en `getExecutiveSummaryAndDebts` y nuevo endpoint `GET /api/reports/summary/pdf` (`formatExecutiveSummaryLines`, `generateExecutiveSummaryPdf`).
+     - `frontend/src/context/WorkspaceContext.tsx` y `frontend/src/pages/ResumenPage.tsx`: Sección **"Historial de pagos ejecutados (RN-AUD-01)"** visible incluso para `ADMIN` y botón para descargar el PDF del estado de cuenta.
+  5. **Edición de usuarios por `ADMIN` (`RN-SEG-02`):**
+     - `backend/src/modules/users/dto/create-user.dto.ts` (`UpdateUserDto`), `users.service.ts` (`updateUser`), `users.controller.ts` (`PATCH /api/users/:id`) y `users.service.spec.ts`, integrados en `UsersAndAuditWorkspace.tsx`.
+  6. **Sincronización documental:** Actualización coherente de `README.md`, `docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md`, `docs/INFORME_ESTADO_Y_PENDIENTES.md`, `docs/QA_VISTAS_Y_PRUEBAS.md` y `docs/BITACORA_IA.md`.
+* **Verificación técnica:**
+  - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde; `tsc -b && vite build` exitoso (`62` módulos, `0` estilos inline).
+  - **Backend (Jest + Build):** `32/32` suites / `238/238` tests en verde; `nest build` exitoso.
+  - **Triggers SQL, Docker y Smoke Test:** Triggers `BEFORE DELETE` aplicados en PostgreSQL, contenedores reconstruidos (`frontend`, `backend`) y `scripts/api-smoke-test.mjs` ejecutado en vivo.

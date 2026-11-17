@@ -30,6 +30,7 @@ import {
   LivePaymentGroupPeriod,
   LiveProject,
 } from './CatalogsAndAssignmentsWorkspace';
+import { FifoSimulationPreviewTable } from './FifoSimulationPreviewTable';
 
 const JUSTIFICATION_HINT =
   'Escriba el motivo (mínimo 10 caracteres) para habilitar esta acción justificada (RN-PAG-01/03)';
@@ -1726,69 +1727,8 @@ export function FinancialEnginePanel({
                     />
                   </div>
                 </div>
-                {selectedPayableRequest && fifoPreview.steps.length > 0 && (
-                  <div className="subsheet">
-                    <div className="row row--between">
-                      <h3 className="subsheet__title">
-                        Previsualización de imputación FIFO en tiempo real
-                        (RN-PAG-02)
-                      </h3>
-                      <span
-                        className={`badge ${fifoPreview.isValidAmount ? 'badge--ok' : 'badge--alert'}`}
-                      >
-                        {fifoPreview.isValidAmount
-                          ? `Deuda restante tras abono: ${formatUsdCurrency(fifoPreview.remainingDebtAfterPaymentUsd)}`
-                          : 'Monto inválido o superior al saldo pendiente'}
-                      </span>
-                    </div>
-                    <div className="table-scroll">
-                      <table className="table">
-                        <thead>
-                          <tr>
-                            <th scope="col">Período (FIFO)</th>
-                            <th scope="col" className="num">
-                              Deuda actual
-                            </th>
-                            <th scope="col" className="num">
-                              Abono proyectado
-                            </th>
-                            <th scope="col" className="num">
-                              Saldo final
-                            </th>
-                            <th scope="col">Estado resultante</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {fifoPreview.steps.map((step) => (
-                            <tr key={step.accrualId}>
-                              <td className="nowrap">
-                                {step.periodStart || '—'} al{' '}
-                                {step.periodEnd || '—'}
-                              </td>
-                              <td className="num">
-                                {formatUsdCurrency(step.previousBalanceUsd)}
-                              </td>
-                              <td className="num table__strong">
-                                {formatUsdCurrency(step.allocatedUsd)}
-                              </td>
-                              <td className="num">
-                                {formatUsdCurrency(step.newBalanceUsd)}
-                              </td>
-                              <td>
-                                <span
-                                  className={accrualBadgeClass(
-                                    step.resultingStatus,
-                                  )}
-                                >
-                                  {step.resultingStatus}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
+                {selectedPayableRequest && (
+                  <FifoSimulationPreviewTable preview={fifoPreview} />
                 )}
                 <div className="btn-group">
                   <button

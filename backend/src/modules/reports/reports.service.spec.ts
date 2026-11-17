@@ -7,15 +7,20 @@ describe('ReportsService (RN-AUD-01 Consultas Clave y RN-AUD-02 Reportes PDF)', 
   let service: ReportsService;
   let prismaMock: {
     accrual: { findMany: jest.Mock };
-    payment: { findUnique: jest.Mock };
+    payment: { findUnique: jest.Mock; findMany: jest.Mock };
     paymentRequest: { findUnique: jest.Mock };
+    project: { findUnique: jest.Mock };
   };
 
   beforeEach(() => {
     prismaMock = {
       accrual: { findMany: jest.fn() },
-      payment: { findUnique: jest.fn() },
+      payment: {
+        findUnique: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+      },
       paymentRequest: { findUnique: jest.fn() },
+      project: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     service = new ReportsService(prismaMock as unknown as PrismaService);
   });
@@ -161,6 +166,47 @@ describe('ReportsService (RN-AUD-01 Consultas Clave y RN-AUD-02 Reportes PDF)', 
       await expect(
         service.generateConsolidatedRequestPdf('inexistente'),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe generar el PDF de estado de cuenta general incluyendo historial de pagos ejecutados (RN-AUD-01)', async () => {
+      // Arrange
+      prismaMock.accrual.findMany.mockResolvedValueOnce([
+        {
+          beneficiaryId: 'ben-1',
+          proratedAmount: '600.00',
+          paidAmount: '400.00',
+          balanceDue: '200.00',
+          periodStart: new Date('2026-11-01T00:00:00Z'),
+          beneficiary: { fullName: 'Dr. Mendoza', dni: 'V-18456789' },
+          project: { code: 'FIS-2026-01' },
+        },
+      ]);
+      prismaMock.payment.findMany.mockResolvedValueOnce([
+        {
+          id: 'pay-1',
+          receiptCode: 'REC-2026-0001',
+          paymentDate: new Date('2026-11-10T00:00:00Z'),
+          amount: '400.00',
+          status: PaymentStatus.VALIDO,
+          reference: 'ZELLE-1',
+          beneficiaryId: 'ben-1',
+          beneficiary: { fullName: 'Dr. Mendoza', dni: 'V-18456789' },
+          paymentRequest: { code: 'SOL-01', project: { code: 'FIS-2026-01' } },
+        },
+      ]);
+      prismaMock.project.findUnique.mockResolvedValueOnce({
+        id: 'proj-1',
+        code: 'FIS-2026-01',
+        name: 'Óptica Cuántica',
+      });
+
+      // Act
+      const pdf = await service.generateExecutiveSummaryPdf('proj-1');
+
+      // Assert
+      expect(pdf.filename).toBe('estado_cuenta_FIS-2026-01.pdf');
+      expect(pdf.buffer.toString('utf8').startsWith('%PDF-1.4')).toBe(true);
+      expect(pdf.buffer.toString('utf8')).toContain('REC-2026-0001');
     });
   });
 });

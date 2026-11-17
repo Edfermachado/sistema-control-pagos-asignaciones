@@ -43,6 +43,19 @@ import {
 import { paginateTableItems, searchTableItems } from '../utils/table-filter.util';
 import type { PaginationResult } from '../utils/table-filter.util';
 
+export interface SummaryPaymentHistoryItem {
+  id: string;
+  receiptCode: string;
+  paymentDate: string;
+  amountUsd: string;
+  status: string;
+  reference: string | null;
+  beneficiaryName: string;
+  beneficiaryDni: string;
+  projectCode: string;
+  requestCode: string;
+}
+
 export interface ExecutiveSummaryData {
   totalAccruedUsd: string;
   totalPaidUsd: string;
@@ -57,6 +70,7 @@ export interface ExecutiveSummaryData {
     oldestUnpaidPeriodStart?: string | null;
     pendingAccrualsCount?: number;
   }>;
+  paymentHistory?: SummaryPaymentHistoryItem[];
 }
 
 export interface WorkspaceNotification {
@@ -208,6 +222,7 @@ export interface WorkspaceContextValue {
   paginatedBalanceData: PaginationResult<
     ExecutiveSummaryData['beneficiaryBalances'][number]
   >;
+  summaryPaymentHistory: SummaryPaymentHistoryItem[];
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
@@ -447,6 +462,7 @@ export function WorkspaceProvider({
     : accruals.reduce((acc, row) => acc + Number(row.balanceDue), 0);
 
   const rawBalanceRows = summary?.beneficiaryBalances ?? [];
+  const summaryPaymentHistory = summary?.paymentHistory ?? [];
   const filteredBalanceRows = searchTableItems(rawBalanceRows, summarySearchQuery, [
     'beneficiaryDni',
     'beneficiaryName',
@@ -491,6 +507,7 @@ export function WorkspaceProvider({
       rawBalanceRows,
       filteredBalanceRows,
       paginatedBalanceData,
+      summaryPaymentHistory,
     }),
     [
       token,
@@ -526,6 +543,7 @@ export function WorkspaceProvider({
       rawBalanceRows,
       filteredBalanceRows,
       paginatedBalanceData,
+      summaryPaymentHistory,
     ],
   );
 

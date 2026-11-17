@@ -34,6 +34,9 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       create: jest.Mock;
       update: jest.Mock;
     };
+    systemParameter: {
+      findUnique: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let auditMock: { recordLog: jest.Mock };
@@ -70,6 +73,9 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+      },
+      systemParameter: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       $transaction: jest.fn((cb) => cb(prismaMock)),
     };
@@ -371,6 +377,42 @@ describe('PettyCashService (RN-CAJA-01 a RN-CAJA-04 Flujo Segregado y Arrastre d
       await expect(
         service.closeMonthlyPeriod('per-1', receptorActor),
       ).rejects.toThrow('[RN-CAJA-04]');
+    });
+
+    it('debe permitir rendir sin attachmentUrl cuando el parámetro PETTY_CASH_REQUIRE_ATTACHMENT es false (Edge Case)', async () => {
+      // Arrange
+      prismaMock.systemParameter.findUnique.mockResolvedValueOnce({
+        key: 'PETTY_CASH_REQUIRE_ATTACHMENT',
+        value: 'false',
+      });
+      prismaMock.pettyCashVoucher.findUnique.mockResolvedValueOnce({
+        id: 'v-opt',
+        periodId: 'per-1',
+        disbursedAmount: '50.00',
+        requestedAmount: '50.00',
+        status: PettyCashVoucherStatus.DESEMBOLSADO,
+        period: { id: 'per-1', availableBalance: '150.00' },
+      });
+      prismaMock.pettyCashVoucher.update.mockResolvedValueOnce({
+        id: 'v-opt',
+        status: PettyCashVoucherStatus.RENDIDO,
+        attachmentUrl: null,
+      });
+      prismaMock.pettyCashPeriod.update.mockResolvedValueOnce({});
+
+      // Act
+      const result = await service.settleVoucher(
+        'v-opt',
+        {
+          settledAmount: '45.00',
+          invoiceReference: 'FACT-SIN-ADJUNTO',
+        },
+        generadorActor,
+      );
+
+      // Assert
+      expect(result.voucher.status).toBe(PettyCashVoucherStatus.RENDIDO);
+      expect(result.newAvailableBalance).toBe('155.00');
     });
   });
 

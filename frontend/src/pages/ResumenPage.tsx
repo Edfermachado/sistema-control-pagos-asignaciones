@@ -2,10 +2,13 @@ import React from 'react';
 import { TableFilterBar } from '../components/TableFilterBar';
 import { TablePagination } from '../components/TablePagination';
 import { useWorkspace } from '../context/WorkspaceContext';
+import { downloadAuthenticatedPdf } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 
 export function ResumenPage(): React.ReactElement {
   const {
+    token,
+    notify,
     projects,
     beneficiaries,
     accruals,
@@ -20,7 +23,27 @@ export function ResumenPage(): React.ReactElement {
     rawBalanceRows,
     filteredBalanceRows,
     paginatedBalanceData,
+    summaryPaymentHistory,
   } = useWorkspace();
+
+  const handleDownloadSummaryPdf = async () => {
+    if (!token) {
+      notify('error', 'Inicie sesión en el sistema para descargar el PDF.');
+      return;
+    }
+    try {
+      const path = summaryProjectFilter
+        ? `/reports/summary/pdf?projectId=${summaryProjectFilter}`
+        : '/reports/summary/pdf';
+      const filename = summaryProjectFilter
+        ? 'estado_cuenta_proyecto.pdf'
+        : 'estado_cuenta_general.pdf';
+      await downloadAuthenticatedPdf(path, filename, token);
+      notify('success', `Descargando ${filename}...`);
+    } catch (err) {
+      notify('error', (err as Error).message);
+    }
+  };
 
   return (
     <>
@@ -80,26 +103,35 @@ export function ResumenPage(): React.ReactElement {
               por persona, con antigüedad de la deuda y filtro por proyecto.
             </p>
           </div>
-          <div className="field">
-            <label className="field__label" htmlFor="project-filter">
-              Proyecto
-            </label>
-            <select
-              id="project-filter"
-              className="select"
-              value={summaryProjectFilter}
-              onChange={(e) => {
-                setSummaryProjectFilter(e.target.value);
-                setSummaryPage(1);
-              }}
+          <div className="ws-tools">
+            <div className="field">
+              <label className="field__label" htmlFor="project-filter">
+                Proyecto
+              </label>
+              <select
+                id="project-filter"
+                className="select"
+                value={summaryProjectFilter}
+                onChange={(e) => {
+                  setSummaryProjectFilter(e.target.value);
+                  setSummaryPage(1);
+                }}
+              >
+                <option value="">Todos los proyectos</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} — {project.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={handleDownloadSummaryPdf}
             >
-              <option value="">Todos los proyectos</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.code} — {project.name}
-                </option>
-              ))}
-            </select>
+              Descargar estado de cuenta (PDF)
+            </button>
           </div>
         </div>
         <div className="sheet__body sheet__body--flush">
@@ -178,6 +210,73 @@ export function ResumenPage(): React.ReactElement {
             endIndex={paginatedBalanceData.endIndex}
             onPageChange={setSummaryPage}
           />
+        </div>
+      </section>
+
+      <section className="sheet">
+        <div className="sheet__head">
+          <div>
+            <h2 className="sheet__title">
+              Historial de pagos ejecutados (RN-AUD-01)
+            </h2>
+            <p className="sheet__hint">
+              Consulta consolidada de pagos emitidos (cuándo, a quién, por qué
+              proyecto y monto en USD), disponible en solo lectura para todos los
+              roles autorizados.
+            </p>
+          </div>
+        </div>
+        <div className="sheet__body sheet__body--flush">
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Fecha</th>
+                  <th scope="col">Recibo</th>
+                  <th scope="col">Beneficiario</th>
+                  <th scope="col">Proyecto / Solicitud</th>
+                  <th scope="col" className="num">
+                    Monto (USD)
+                  </th>
+                  <th scope="col">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summaryPaymentHistory.length === 0 && (
+                  <tr className="table__empty">
+                    <td colSpan={6}>
+                      Sin pagos registrados para el filtro seleccionado.
+                    </td>
+                  </tr>
+                )}
+                {summaryPaymentHistory.map((pay) => (
+                  <tr key={pay.id}>
+                    <td className="nowrap">{pay.paymentDate}</td>
+                    <td className="nowrap table__strong">{pay.receiptCode}</td>
+                    <td>
+                      <span className="table__strong">
+                        {pay.beneficiaryName}
+                      </span>{' '}
+                      <span className="muted">({pay.beneficiaryDni})</span>
+                    </td>
+                    <td className="nowrap">
+                      {pay.projectCode} · {pay.requestCode}
+                    </td>
+                    <td className="num table__strong">
+                      {formatUsdCurrency(Number(pay.amountUsd))}
+                    </td>
+                    <td>
+                      <span
+                        className={`badge ${pay.status === 'VALIDO' ? 'badge--ok' : 'badge--alert'}`}
+                      >
+                        {pay.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </>

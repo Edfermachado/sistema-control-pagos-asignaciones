@@ -479,7 +479,14 @@ export class PettyCashService {
     }
 
     const cleanAttachment = (dto.attachmentUrl ?? '').trim();
-    if (!cleanAttachment) {
+    const attachParam = await this.prisma.systemParameter?.findUnique?.({
+      where: { key: 'PETTY_CASH_REQUIRE_ATTACHMENT' },
+    });
+    const requireAttachment = attachParam
+      ? attachParam.value.trim().toLowerCase() !== 'false'
+      : true;
+
+    if (requireAttachment && !cleanAttachment) {
       throw new BadRequestException(
         '[RN-CAJA-03] El archivo del comprobante es obligatorio para rendir el vale.',
       );
@@ -514,7 +521,7 @@ export class PettyCashService {
           settledAmount: String(dto.settledAmount),
           returnedAmount: settlement.returnedChange,
           invoiceReference: cleanInvoice,
-          attachmentUrl: cleanAttachment,
+          attachmentUrl: cleanAttachment || null,
         },
       });
 

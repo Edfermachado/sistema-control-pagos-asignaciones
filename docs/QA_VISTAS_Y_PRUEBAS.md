@@ -176,7 +176,7 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | Fallos de contraste AA (5 vistas × 2 tamaños) | 0 |
 | `impeccable detect` (archivos y URL) | 0 hallazgos |
 | Rutas: deep link, recarga, guard por rol, 404 e historial | 12/12 comprobaciones OK |
-| Frontend Vitest tras el enrutado | 8 suites / **58** pruebas en verde |
+| Frontend Vitest tras el enrutado y cierre UX/E2E | 11 suites / **78** pruebas en verde |
 
 ---
 
@@ -211,27 +211,19 @@ anulación lo reutilizaba, pudiendo justificar otra operación con un motivo aje
 *Corrección:* el campo se limpia tras ejecutar con éxito la acción. Verificado en solicitud, pago, lote
 y vale de caja chica.
 
-### Documentados, pendientes de decisión del equipo
+**F2 — Anulación de pago y cierres sin confirmación** (Medio, UX). **Corregido.**
+Las operaciones destructivas o irreversibles sin motivo escrito (`Desactivar` asignación, `Cerrar solicitud`, `Cerrar mes y arrastre`, `Cerrar caja chica`) exigen ahora confirmación explícita en dos pasos (`¿Confirmar...?`), y todas las anulaciones/rechazos exigen abrir y confirmar un bloque inline en la fila con validación de longitud mínima.
 
-**F2 — Anulación de pago sin confirmación** (Medio, UX; pre-existente). Atenuado.
-"Anular con reversión FIFO" sigue ejecutando en el primer clic, pero ya exige un motivo escrito por
-quien decide (F1), lo que elimina el clic accidental. *Recomendación pendiente:* paso de confirmación
-que muestre monto y recibo afectados.
+**F5 — Validación de formulario y filtrado preventivo de beneficiarios en el pago** (Bajo, UX). **Corregido.**
+El selector de beneficiario en pagos FIFO se filtra exclusivamente a quienes poseen causaciones pendientes dentro de la solicitud aprobada seleccionada, muestra la deuda exacta en solicitud, ajusta el máximo permitido y despliega la previsualización de imputación FIFO en vivo antes de enviar.
 
-**F5 — Validación de formulario ausente en el pago** (Bajo; pre-existente).
-Si se envía el pago sin beneficiario, el aviso que aparece es `[RN-PAG-02] El beneficiario no posee
-causaciones con saldo pendiente`, que describe el síntoma y no la causa.
-*Recomendación:* `required` en los selects y mensaje propio antes de llamar a la API.
+**F6 — Campos de anulación, rechazo y rendición separados de sus botones** (Bajo, UX). **Corregido.**
+Se eliminaron los campos compartidos superiores en `FinancialEnginePanel` y `PettyCashAndReportsPanel`: al pulsar `Anular`, `Rechazar` o `Rendir con comprobante` en cualquier fila se despliega un panel `.inline-action-box` en esa misma fila.
 
-**F6 — Campos de anulación y rendición separados de sus botones** (Bajo, UX).
-El motivo de anulación, el monto rendido y el archivo del comprobante viven en la sección
-"Rendición", mientras los botones que los usan están en la tabla de vales o de pagos.
-*Recomendación:* llevar esos campos junto a la acción o abrir una fila expandida por registro.
+### Documentados (informativos / mejoras menores opcionales)
 
 **F7 — `RN-CAT-03` impide cortes dentro de rangos ya generados** (Informativo).
-Un corte personalizado solo se puede agregar fuera de 2026–2027 porque ya existen períodos
-generados; el rechazo es correcto pero no se explica en la interfaz.
-*Recomendación:* nota en el folio o acción explícita de "reemplazar corte".
+Un corte personalizado solo se puede agregar fuera de 2026–2027 porque ya existen períodos generados; por defecto el formulario propone el rango `2028-01-01` al `2028-01-15` para evitar colisiones accidentales.
 
 **F8 — Tras crear un grupo, la tabla de cortes sigue mostrando otro grupo** (Bajo, UX).
 Los períodos se generan bien (118 en el caso probado), pero el grupo nuevo no queda seleccionado.
@@ -248,8 +240,8 @@ docker compose up -d --build          # web :5173 · API :3000 · PostgreSQL :55
 
 # 2. Pruebas automáticas
 node scripts/api-smoke-test.mjs                       # 68 comprobaciones de API
-npm --prefix backend test -- --runInBand              # 225 unitarias
-npm --prefix frontend test                            # 27 unitarias
+npm --prefix backend test -- --runInBand              # 238 pruebas (32 suites, incl. E2E)
+npm --prefix frontend test                            # 78 pruebas (11 suites, incl. E2E)
 
 # 3. Detector de anti-patrones de interfaz
 export IMPECCABLE_HOME="E:/Vigilia/SisInf/proyecto/repo/.opencode/.cache/impeccable"

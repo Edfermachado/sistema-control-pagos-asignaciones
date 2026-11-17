@@ -16,7 +16,11 @@ import {
 import { Roles } from '../../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
-import { CreateUserDto, UpdateUserStatusDto } from './dto/create-user.dto';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  UpdateUserStatusDto,
+} from './dto/create-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -36,6 +40,15 @@ export class UsersController {
   @Get()
   async findAll(@Query('role') role?: UserRole) {
     return this.usersService.findAllUsers(role);
+  }
+
+  @Patch(':id')
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateUserDto,
+    @CurrentUser() actor: AuthenticatedUser,
+  ) {
+    return this.usersService.updateUser(id, dto, actor);
   }
 
   @Patch(':id/status')

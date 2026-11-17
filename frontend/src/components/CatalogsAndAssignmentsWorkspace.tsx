@@ -16,6 +16,7 @@ import {
   analyzeBeneficiaryProjectAvailability,
   isConfirmationArmed,
 } from '../utils/ux-workflows.util';
+import { AssignmentAvailabilityBanner } from './AssignmentAvailabilityBanner';
 import { TableFilterBar } from './TableFilterBar';
 import { TablePagination } from './TablePagination';
 import {
@@ -1413,58 +1414,17 @@ export function CatalogsAndAssignmentsWorkspace({
                   >
                     + Crear Asignación USD
                   </button>
-                  {(assignmentAvailability.occupiedRanges.length > 0 ||
-                    assignmentAvailability.hasOverlapConflict) && (
-                    <div
-                      className={`availability-panel ${assignmentAvailability.hasOverlapConflict ? 'availability-panel--conflict' : ''}`}
-                    >
-                      <div className="row row--between">
-                        <strong>
-                          Disponibilidad del beneficiario en este proyecto (RN-CAT-04)
-                        </strong>
-                        {assignmentAvailability.hasOverlapConflict ? (
-                          <span className="badge badge--alert">
-                            Traslape detectado en el rango propuesto
-                          </span>
-                        ) : (
-                          <span className="badge badge--ok">
-                            Rango disponible sin conflictos
-                          </span>
-                        )}
-                      </div>
-                      <div className="row">
-                        {assignmentAvailability.occupiedRanges.map((occ) => (
-                          <span key={occ.id} className="chip">
-                            Ocupado:{' '}
-                            <strong>
-                              {occ.startDate} → {occ.endDate}
-                            </strong>
-                          </span>
-                        ))}
-                      </div>
-                      {assignmentAvailability.freeSubRanges.length > 0 ? (
-                        <div className="btn-group">
-                          {assignmentAvailability.freeSubRanges.map((free) => (
-                            <button
-                              key={`${free.startDate}-${free.endDate}`}
-                              type="button"
-                              className="btn btn--ghost btn--sm"
-                              onClick={() => {
-                                setAsigStart(free.startDate);
-                                setAsigEnd(free.endDate);
-                              }}
-                            >
-                              Usar tramo libre ({free.startDate} → {free.endDate})
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="inline-action-box__hint">
-                          El beneficiario ya cubre el 100% de la vigencia activa de este proyecto.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  <AssignmentAvailabilityBanner
+                    occupiedRanges={assignmentAvailability.occupiedRanges}
+                    freeSubRanges={assignmentAvailability.freeSubRanges}
+                    hasOverlapConflict={
+                      assignmentAvailability.hasOverlapConflict
+                    }
+                    onSelectFreeRange={(startDate, endDate) => {
+                      setAsigStart(startDate);
+                      setAsigEnd(endDate);
+                    }}
+                  />
                 </form>
               )}
 

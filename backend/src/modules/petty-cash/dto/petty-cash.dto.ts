@@ -57,12 +57,9 @@ export class SettleVoucherDto {
   @IsNotEmpty({ message: 'La referencia de factura o comprobante es obligatoria.' })
   invoiceReference!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({
-    message:
-      '[RN-CAJA-03] El archivo del comprobante es obligatorio para rendir el vale.',
-  })
-  attachmentUrl!: string;
+  attachmentUrl?: string;
 }
 
 export class RejectVoucherDto {

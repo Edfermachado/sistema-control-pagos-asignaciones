@@ -17,6 +17,22 @@ export class ReportsController {
     return this.reportsService.getExecutiveSummaryAndDebts(projectId);
   }
 
+  @Get('summary/pdf')
+  @Roles(UserRole.ADMIN, UserRole.GENERADOR, UserRole.RECEPTOR)
+  async downloadExecutiveSummary(
+    @Res() res: Response,
+    @Query('projectId') projectId?: string,
+  ) {
+    const { filename, buffer } =
+      await this.reportsService.generateExecutiveSummaryPdf(projectId);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': buffer.length,
+    });
+    res.end(buffer);
+  }
+
   @Get('payments/:paymentId/pdf')
   @Roles(UserRole.GENERADOR, UserRole.RECEPTOR)
   async downloadIndividualReceipt(

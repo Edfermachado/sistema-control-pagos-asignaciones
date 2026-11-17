@@ -42,6 +42,29 @@ export interface ConsolidatedRequestData {
   }>;
 }
 
+export interface ExecutiveSummaryPdfData {
+  projectScopeLabel: string;
+  totalAccruedUsd: string;
+  totalPaidUsd: string;
+  totalPendingDebtUsd: string;
+  beneficiaryBalances: Array<{
+    beneficiaryName: string;
+    beneficiaryDni: string;
+    totalAccruedUsd: string;
+    totalPaidUsd: string;
+    totalDebtDueUsd: string;
+    oldestUnpaidPeriodStart?: string | null;
+  }>;
+  paymentHistory: Array<{
+    receiptCode: string;
+    paymentDate: string;
+    beneficiaryName: string;
+    projectCode: string;
+    amountUsd: string;
+    status: string;
+  }>;
+}
+
 /**
  * Normaliza caracteres acentuados y escapa delimitadores de cadenas PDF Type1.
  */
@@ -218,6 +241,50 @@ export function formatConsolidatedRequestLines(
     'FIRMA DEL APROBADOR: _____________________________',
     `Nombre: ${data.reviewedByName ?? 'Pendiente de Revision'}`,
   );
+
+  return lines;
+}
+
+/**
+ * Formatea las líneas del reporte PDF de Estado de Cuenta General y Pagos (RN-AUD-01 / RN-AUD-02).
+ */
+export function formatExecutiveSummaryLines(
+  data: ExecutiveSummaryPdfData,
+): string[] {
+  const accrued = toUsdDecimal(data.totalAccruedUsd).toFixed(2);
+  const paid = toUsdDecimal(data.totalPaidUsd).toFixed(2);
+  const debt = toUsdDecimal(data.totalPendingDebtUsd).toFixed(2);
+
+  const lines: string[] = [
+    `Alcance: ${data.projectScopeLabel}`,
+    `Total Causado: $${accrued} USD | Total Pagado FIFO: $${paid} USD | Deuda Pendiente: $${debt} USD`,
+    '--------------------------------------------------------------------------------',
+    'ESTADO DE CUENTA POR BENEFICIARIO:',
+  ];
+
+  for (const row of data.beneficiaryBalances) {
+    const oldest = row.oldestUnpaidPeriodStart
+      ? `Desde ${row.oldestUnpaidPeriodStart}`
+      : 'Al dia';
+    lines.push(
+      ` * ${row.beneficiaryName} (${row.beneficiaryDni}) | Causado: $${toUsdDecimal(row.totalAccruedUsd).toFixed(2)} | Pagado: $${toUsdDecimal(row.totalPaidUsd).toFixed(2)} | Adeuda: $${toUsdDecimal(row.totalDebtDueUsd).toFixed(2)} (${oldest})`,
+    );
+  }
+
+  lines.push(
+    '--------------------------------------------------------------------------------',
+    'HISTORIAL RECIENTE DE PAGOS EJECUTADOS:',
+  );
+
+  if (data.paymentHistory.length === 0) {
+    lines.push(' * Sin pagos registrados en el alcance actual.');
+  } else {
+    for (const pay of data.paymentHistory.slice(0, 12)) {
+      lines.push(
+        ` * ${pay.paymentDate} | ${pay.receiptCode} (${pay.status}) | ${pay.beneficiaryName} | ${pay.projectCode} | $${toUsdDecimal(pay.amountUsd).toFixed(2)} USD`,
+      );
+    }
+  }
 
   return lines;
 }

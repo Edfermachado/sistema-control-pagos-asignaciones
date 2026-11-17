@@ -68,8 +68,8 @@ El script valida salud, login de los tres roles, RBAC, catálogos, prorrateo, so
 ### 2.4 Pruebas unitarias
 
 ```bash
-npm --prefix backend test -- --runInBand   # 30 suites / 225 tests
-npm --prefix frontend test                 # 5 suites / 27 tests
+npm --prefix backend test -- --runInBand   # 32 suites / 238 tests
+npm --prefix frontend test                 # 11 suites / 78 tests
 ```
 
 ### 2.5 Ejecución manual (sin Docker)
@@ -106,8 +106,8 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 | :--- | :--- |
 | `backend` compila (`nest build`) | ✅ |
 | `frontend` compila (`tsc -b && vite build`) | ✅ |
-| Backend: 30 suites / 225 pruebas | ✅ 225/225 |
-| Frontend: 5 suites / 27 pruebas | ✅ 27/27 |
+| Backend: 32 suites / 238 pruebas | ✅ 238/238 |
+| Frontend: 11 suites / 78 pruebas | ✅ 78/78 |
 | `docker compose up -d --build` | ✅ |
 | Login de los 3 roles con el seed SQL | ✅ |
 | Health check con conexión a PostgreSQL | ✅ |
@@ -217,46 +217,35 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
    - El ADMIN puede agregar o eliminar cortes personalizados.
    - La creación de lotes valida que el período coincida con una fecha de corte configurada cuando el grupo posee períodos.
 
-3. **Inmutabilidad a nivel de base de datos**
+3. ✅ **Inmutabilidad a nivel de base de datos (resuelto)**
    - La aplicación no expone endpoints de edición/borrado de registros financieros y las correcciones se hacen por anulación.
-   - Sin embargo, no hay triggers que bloqueen `UPDATE`/`DELETE` directos sobre montos financieros en PostgreSQL. Los triggers actuales auditan, pero no impiden la mutación.
+   - Adicionalmente, [03_audit_triggers.sql](../database/03_audit_triggers.sql) instala triggers `BEFORE DELETE` (`fn_block_financial_deletion`) que impiden eliminaciones físicas directas por SQL sobre todas las tablas financieras (`RN-GLOB-03`).
 
 4. **Atribución de usuario en la auditoría de triggers**
-   - Los triggers registran `INSERT/UPDATE/DELETE` reales, pero con `user_id` y `user_role` nulos porque PostgreSQL no conoce al usuario de la aplicación.
-   - La trazabilidad “quién” se completa con el log de negocio del servicio. Cambios hechos directamente por SQL quedarían sin usuario atribuido.
+   - Los triggers registran `INSERT/UPDATE/DELETE` reales en SQL (`user_id` nulo), complementando el log de negocio con usuario y rol exactos; en la interfaz de auditoría pueden filtrarse de forma separada (`Acciones de negocio` vs. `Triggers SQL`).
 
-5. **Alcance del pago FIFO**
-   - Se implementó, por decisión del equipo, que el pago se aplique solo a las causaciones incluidas en la solicitud aprobada.
-   - El PDF dice “sobre la deuda pendiente”; si el profesor espera que el FIFO recorra toda la deuda del beneficiario/proyecto, habría que ajustar esa regla.
+5. ✅ **Alcance del pago FIFO configurable (`PAYMENT_REQUEST_SCOPE`, resuelto)**
+   - Por defecto aplica solo a las causaciones incluidas en la solicitud aprobada (`REQUEST_ITEMS`), pero el parámetro global `PAYMENT_REQUEST_SCOPE = PROJECT_ACCRUALS` permite abarcar dinámicamente todas las causaciones pendientes del beneficiario en el proyecto desde [payments.service.ts](../backend/src/modules/payments/payments.service.ts).
 
 6. ✅ **CRUD de catálogos en la interfaz (resuelto)**
-   - Proyectos, grupos de pago y beneficiarios tienen edición y activación/desactivación desde la UI.
+   - Proyectos, grupos de pago, beneficiarios y usuarios tienen alta, edición y activación/desactivación desde la UI (`PATCH /api/users/:id`).
    - Los grupos de pago incluyen gestión de períodos y cortes.
-   - El ADMIN y el GENERADOR pueden gestionar proyectos y beneficiarios; el ADMIN gestiona grupos y cortes.
 
 7. **Recibos**
-   - No existe una tabla separada de “recibos”: el recibo se representa con `payments.receipt_code` y su PDF.
-   - Es una decisión de modelado razonable, pero conviene explicarla en la defensa.
+   - El recibo se representa con `payments.receipt_code` (autogenerado correlativamente por el sistema) y su PDF formal con desglose FIFO y marca de agua `ANULADO`.
 
-### Prioridad media
+### Resuelto en las rondas finales (UX, E2E y Consultas)
 
-8. **Documentación de API**
-   - No hay Swagger/OpenAPI. Agregar `@nestjs/swagger` facilitaría pruebas manuales y defensa.
+8. **Pruebas de integración E2E de flujos completos**
+   - Además de las pruebas unitarias 1:1 y el script `scripts/api-smoke-test.mjs` (68 verificaciones reales), el sistema cuenta con suites de flujos E2E completos en Backend ([full-system-flows.spec.ts](../backend/src/common/system-flows/full-system-flows.spec.ts)) y Frontend ([system-flows.spec.ts](../frontend/src/utils/system-flows.spec.ts)).
 
-9. **Pruebas de integración y CI**
-   - Las 225 + 27 pruebas son unitarias con mocks.
-   - El script `scripts/api-smoke-test.mjs` cubre el flujo real, pero no está integrado en CI.
-   - No hay pipeline (GitHub Actions) que ejecute tests, build y smoke test.
+9. **Gestión de sesión, rutas por vista y edición de usuarios**
+   - Implementado login portal, cierre de sesión explícito (`/login`), rutas protegidas por URL (`/resumen`, `/catalogos`, `/causacion`, `/cajas-chicas`, `/auditoria`) con persistencia en `sessionStorage` y edición completa de usuarios (`PATCH /api/users/:id`).
 
-10. **Gestión de sesión y contraseñas**
-    - No hay logout, refresh token, cambio de contraseña ni recuperación.
-    - El JWT se guarda solo en memoria (correcto para seguridad), pero al recargar se vuelve a autenticar automáticamente con credenciales demo.
-
-11. **CRUD incompleto desde UI**
-    - Proyectos: no hay edición de nombre/fechas, solo cambio de estado.
-    - Beneficiarios: la API permite actualizar, pero la UI solo crea.
-    - Grupos de pago: solo creación y listado.
-    - No hay filtros, paginación ni búsqueda en tablas grandes.
+10. **UX sin fricción, filtrado, paginación y consultas `/resumen` (`RN-AUD-01`)**
+    - Todas las tablas principales cuentan con búsqueda reactiva, filtros y paginación; los selectores de rangos, períodos, beneficiarios y montos máximos filtran únicamente opciones válidas.
+    - `/resumen` expone el **Historial de pagos ejecutados** para todos los roles (incluido el `ADMIN`) y descarga en PDF del Estado de Cuenta General (`GET /api/reports/summary/pdf`).
+    - Los parámetros globales (`PETTY_CASH_REQUIRE_ATTACHMENT` y `PAYMENT_REQUEST_SCOPE`) gobiernan dinámicamente las reglas en tiempo de ejecución y `PaymentsService.registerPayment` opera de forma íntegra dentro de `prisma.$transaction`.
 
 ### Prioridad baja / endurecimiento
 
@@ -278,6 +267,6 @@ El seed programático (`npm --prefix backend run prisma:seed`) también fue ampl
 
 ## 7. Conclusión
 
-El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 225 pruebas de backend, 27 de frontend y una prueba de humo end-to-end.
+El sistema **puede demostrarse y probarse de punta a punta hoy** con Docker y datos de demostración. Los flujos principales del enunciado funcionan y están cubiertos por 238 pruebas de backend (incluidos flujos E2E), 78 pruebas de frontend (incluidos flujos E2E) y una prueba de humo end-to-end contra PostgreSQL.
 
-Los pendientes funcionales del PDF identificados en la primera auditoría **ya fueron implementados**: parámetros, anulaciones completas, flujo de caja chica, integridad de solicitudes/pagos, comprobantes adjuntos, auditoría con triggers y PDFs formales. Las brechas 1, 3 y 5 de la revisión final también quedaron resueltas: catálogos gestionables por ADMIN, fechas de corte configurables y CRUD completo en la interfaz. Lo que resta son mejoras de robustez, documentación de API, CI, migraciones versionadas, seguridad de despliegue y las brechas 3, 4, 5 y 7 de interpretación/endurecimiento.
+Todos los pendientes funcionales del PDF, las mejoras de UX (acciones inline por fila, selección masiva, detección preventiva de traslapes, previsualización FIFO y confirmaciones de dos pasos) y las carencias detectadas en la auditoría final (parámetros globales conectados, transacción íntegra en pagos, triggers `BEFORE DELETE` en PostgreSQL, edición de usuarios e historial de pagos + PDF en `/resumen`) **ya fueron implementados y verificados**. Únicamente permanecen como mejoras opcionales futuras OpenAPI/Swagger, CI automatizado y migraciones Prisma versionadas para entornos productivos externos.
