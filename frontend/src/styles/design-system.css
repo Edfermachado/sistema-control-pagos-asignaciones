@@ -42,8 +42,8 @@
   --area-biologia: #4a6b2a;
 
   /* Tipografía */
-  --font-display: 'Spectral', 'Iowan Old Style', Georgia, serif;
-  --font-ui: 'Public Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui: 'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --fs-xs: 0.75rem;
   --fs-sm: 0.8125rem;
   --fs-base: 0.9375rem;

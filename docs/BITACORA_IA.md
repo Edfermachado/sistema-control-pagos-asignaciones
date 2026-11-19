@@ -356,3 +356,19 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 * **Verificación técnica:**
   - **Pruebas Frontend:** 7 suites / `41/41` pruebas pasando en verde con Vitest (+5 pruebas nuevas).
   - **Compilación Frontend:** `tsc -b && vite build` exitoso con cero advertencias de tipo y cero estilos inline.
+
+---
+
+### Interacción #19 — Estandarización de toda la tipografía a la familia Montserrat
+* **Fecha:** Noviembre 2026 · **Rama:** `dervis`
+* **Herramientas / Modelos:** Antigravity (Gemini 3.8 Flash)
+* **Indicación (Prompt) del Usuario:**
+  > *"ok puedes poner toda la tipografia en monserrat"*
+* **Motivación y Arquitectura:**
+  Uniformar la identidad visual del sistema bajo una sola familia tipográfica geométrica, limpia y altamente legible (`Montserrat`), aplicando la tipografía tanto a los títulos de área documental (`--font-display`) como a los textos de trabajo diario, tablas, formularios y controles (`--font-ui`), preservando las propiedades contables tabulares (`tabular-nums` / `tnum`) para las cifras monetarias en USD.
+* **Implementación:**
+  1. **`frontend/index.html`**: Enlace a Google Fonts para `Montserrat` con pesos 300, 400, 500, 600, 700 y 800 (normales e itálicas).
+  2. **`frontend/src/styles/design-system.css`**: Configuración unificada de los tokens `--font-display` y `--font-ui` a `'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif`.
+* **Verificación técnica:**
+  - **Pruebas Frontend:** 7 suites / `41/41` pruebas pasando en verde con Vitest.
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso sin errores en 1.6s. Hot-reload automático en Vite dev server.
