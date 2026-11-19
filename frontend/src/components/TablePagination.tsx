@@ -42,12 +42,25 @@ export function TablePagination({
             disabled={currentPage <= 1}
             aria-label="Página anterior"
           >
-            ← Anterior
+            Anterior
           </button>
-          <span className="table-pagination__page-indicator">
-            Página <strong className="num">{currentPage}</strong> de{' '}
-            <strong className="num">{totalPages}</strong>
-          </span>
+          {Array.from({ length: totalPages }, (_, idx) => idx + 1)
+            .filter(
+              (p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1,
+            )
+            .map((pageNumber) => (
+              <button
+                key={pageNumber}
+                type="button"
+                className={`table-pagination__btn table-pagination__btn--num ${
+                  pageNumber === currentPage ? 'table-pagination__btn--active' : ''
+                }`}
+                onClick={() => onPageChange(pageNumber)}
+                aria-current={pageNumber === currentPage ? 'page' : undefined}
+              >
+                {pageNumber}
+              </button>
+            ))}
           <button
             type="button"
             className="table-pagination__btn"
@@ -55,7 +68,7 @@ export function TablePagination({
             disabled={currentPage >= totalPages}
             aria-label="Página siguiente"
           >
-            Siguiente →
+            Siguiente
           </button>
         </div>
       )}

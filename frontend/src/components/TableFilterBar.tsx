@@ -38,14 +38,19 @@ export function TableFilterBar({
   return (
     <div className="table-toolbar" role="search" aria-label="Filtros de tabla">
       <div className="table-toolbar__group">
-        <input
-          type="search"
-          className="input table-toolbar__search"
-          placeholder={searchPlaceholder}
-          value={searchQuery}
-          onChange={(e) => onSearchChange(e.target.value)}
-          aria-label={searchPlaceholder}
-        />
+        <div className="table-toolbar__search-box">
+          <span className="material-symbols-outlined table-toolbar__search-icon" aria-hidden="true">
+            search
+          </span>
+          <input
+            type="search"
+            className="input table-toolbar__search"
+            placeholder={searchPlaceholder}
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+            aria-label={searchPlaceholder}
+          />
+        </div>
 
         {filterOptions && onFilterChange && (
           <label className="field field--inline table-toolbar__filter">

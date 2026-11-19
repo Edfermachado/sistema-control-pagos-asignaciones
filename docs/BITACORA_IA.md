@@ -528,3 +528,33 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
   - **Pruebas Frontend:** 11 archivos / `104/104` pruebas pasando en verde con Vitest.
   - **Compilación Frontend:** `tsc -b && vite build` exitoso sin errores ni advertencias (`62` módulos transformados). Hot-reload automático en Vite dev server (`http://localhost:5173/`).
 
+---
+
+### Interacción #28 — Reorganización del Sistema de Diseño según Plantilla de Dashboard de Control de Pagos Moderno
+* **Fecha:** Noviembre 2026 · **Rama:** `dervis`
+* **Herramientas / Modelos:** Antigravity (Gemini 3.8 Flash)
+* **Indicación (Prompt) del Usuario:**
+  > *"embase a lo que ya tenemos y sin adulterar los componentes que ya tenemos reorganiza el dise;o basandote en esta plantilla , OJO prohibido salirte de lo que esta ya es simplemente adaptara al diseño"*
+* **Motivación y Arquitectura:**
+  Adaptar la estética visual general y la distribución de controles de la aplicación a una plantilla moderna de panel financiero de pagos ("Nexus Pay"), preservando al 100% las funciones, estados, validaciones, reglas de negocio (`RN-*`), enrutamiento y componentes ya construidos, sin añadir dependencias externas pesadas ni violar la prohibición de estilos inline (`style={{...}}`).
+* **Implementación:**
+  1. **`frontend/index.html`**: Carga de las familias tipográficas `Montserrat` (texto general y títulos), `Source Code Pro` (cifras y códigos contables en USD) y `Material Symbols Outlined` (iconografía semántica moderna).
+  2. **`frontend/src/routes/workspaces.ts`**: Adición de la propiedad `icon` a `WorkspaceDefinition` asociando los iconos oficiales (`dashboard`, `folder_shared`, `payments`, `account_balance_wallet`, `policy`).
+  3. **`frontend/src/components/AppShell.tsx`**:
+     - *Barra Lateral (Sidebar):* Header de marca institucional con badge cuadrado ("UC"), enlaces de navegación estilizados con iconos y estado activo tipo cápsula (`bg-surface-container`), pie de barra con tarjeta de estado de base de datos ("En Línea" con punto verde / "Sin conexión"), tarjeta de perfil con avatar de iniciales de usuario, rol y botón de logout directo.
+     - *Barra Superior de Herramientas:* Título de espacio de trabajo con badge de entorno ("Producción USD · FACYT"), chip con fecha actual e icono de calendario, selector de rol dinámico, botón secundario de refresco de datos y botón de cierre de sesión.
+  4. **`frontend/src/pages/ResumenPage.tsx`**:
+     - Reorganización de las cifras globales en una cuadrícula de 4 tarjetas de métricas (`card-metric`): Total Causado, Total Pagado FIFO, Deuda Pendiente Neta y Cobertura de Proyectos con cifras en tipografía monoespaciada tabular, iconos dedicados y chips de estado/tendencia.
+     - Botón de descarga de PDF con icono `file_download`.
+  5. **`frontend/src/components/TableFilterBar.tsx` y `TablePagination.tsx`**:
+     - Barra de búsqueda con icono lupa integrado y conteo de resultados.
+     - Paginación moderna con botones numéricos activos y controles Anterior/Siguiente.
+  6. **`frontend/src/styles/design-system.css`**:
+     - Paleta de colores refinada en tonos pizarra (`#0F172A`, `#F8FAFC`, `#F1F5F9`, `#E2E8F0`), verde esmeralda (`#047857`), ámbar (`#B45309`) y rojo (`#B91C1C`).
+     - Nuevos estilos para `.card-metric`, `.metrics-grid`, `.badge` con punto circular (`::before`), `.ws-date-chip`, `.ws-scope-badge`, `.rail__status-card` y `.rail__user-card`.
+* **Verificación técnica:**
+  - **Pruebas Frontend:** 11 archivos / `104/104` pruebas unitarias pasando en verde con Vitest (`1.47s`).
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso (`63` módulos empaquetados en `dist/`).
+  - **Hot Module Replacement (HMR):** Actualización instantánea en el servidor de desarrollo activo en `http://localhost:5173/`.
+
+

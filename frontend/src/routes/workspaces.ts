@@ -16,6 +16,7 @@ export interface WorkspaceDefinition {
   key: WorkspaceKey;
   path: string;
   index: string;
+  icon: string;
   navLabel: string;
   title: string;
   lead: string;
@@ -30,6 +31,7 @@ export const WORKSPACES: WorkspaceDefinition[] = [
     key: 'RESUMEN',
     path: HOME_PATH,
     index: '1',
+    icon: 'dashboard',
     navLabel: 'Resumen y deudas',
     title: 'Resumen ejecutivo y deudas por beneficiario',
     lead: 'Cuánto se ha causado, cuánto se ha pagado por prelación FIFO y cuánto se le adeuda a cada persona, por proyecto científico.',
@@ -39,6 +41,7 @@ export const WORKSPACES: WorkspaceDefinition[] = [
     key: 'CATALOGOS',
     path: '/catalogos',
     index: '2',
+    icon: 'folder_shared',
     navLabel: 'Catálogos y asignaciones',
     title: 'Catálogos, beneficiarios y asignaciones',
     lead: 'Proyectos con área, ámbito y vigencia; grupos de pago con fechas de corte; personas que cobran, sin usuario en el sistema (RN-SEG-01).',
@@ -48,6 +51,7 @@ export const WORKSPACES: WorkspaceDefinition[] = [
     key: 'MOTOR_FINANCIERO',
     path: '/causacion',
     index: '3',
+    icon: 'payments',
     navLabel: 'Causación y pagos',
     title: 'Causación prorrateada, solicitudes y pagos FIFO',
     lead: 'Generación por lote, ciclo de la solicitud, entrega de fondos con prelación por antigüedad y corrección por anulación justificada.',
@@ -57,6 +61,7 @@ export const WORKSPACES: WorkspaceDefinition[] = [
     key: 'CAJA_CHICA',
     path: '/cajas-chicas',
     index: '4',
+    icon: 'account_balance_wallet',
     navLabel: 'Cajas chicas',
     title: 'Cajas chicas por proyecto y arrastre mensual',
     lead: 'Apertura mensual, vales con aprobación separada del desembolso, rendición con comprobante y arrastre del saldo al mes siguiente.',
@@ -66,6 +71,7 @@ export const WORKSPACES: WorkspaceDefinition[] = [
     key: 'AUDITORIA',
     path: '/auditoria',
     index: '5',
+    icon: 'policy',
     navLabel: 'Usuarios y auditoría',
     title: 'Usuarios, parámetros y bitácora forense',
     lead: 'Cuentas de los tres roles, parámetros globales del sistema y visor de audit_log con los cambios reales de la base de datos.',

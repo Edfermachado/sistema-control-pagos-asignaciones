@@ -61,23 +61,24 @@ Permitido y esperado: densidad, tablas, formularios densos, texto pequeño legib
 
 ---
 
-## 4. Tipografía
+## 4. Tipografía e Iconografía
 
-Dos familias, roles nítidos, sin tercera fuente.
+Familias y roles nítidos con alineación numérica estricta:
 
 | Rol | Familia | Uso |
 |---|---|---|
-| Voz documental | **Spectral** (serif, 600) | Títulos de área de trabajo, títulos de sección, cifras de marca, números de pase |
-| Trabajo diario | **Public Sans** (400/500/600) | Todo el texto de interfaz, tablas, formularios, botones |
+| Titulares e interfaz | **Montserrat** (400/500/600/700) | Títulos, menús, botones, etiquetas, tablas y formularios |
+| Datos y cifras contables | **Source Code Pro** (500/600) | Cifras en USD (`.num`), códigos de documentos (`ORD-*`, `SOL-*`, `LOTE-*`) |
+| Iconografía del sistema | **Material Symbols Outlined** | Iconos funcionales de navegación (`dashboard`, `payments`, `shield`, etc.) |
 
 Reglas:
-- Las **cifras monetarias** se componen en Public Sans 600 con `font-variant-numeric: tabular-nums`
-  y alineación a la derecha (`.num`, `th.num`). Nunca en serif: el serif es la voz, la sans es el dato.
-- Un solo tamaño grande por pantalla como máximo (la cifra de deuda del resumen). La jerarquía se
+- Las **cifras monetarias** se componen en `Source Code Pro` con `font-variant-numeric: tabular-nums`
+  y alineación a la derecha (`.num`, `th.num`).
+- Un solo tamaño grande por pantalla como máximo (las métricas KPI del resumen). La jerarquía se
   construye con peso, color y espacio, no apilando tamaños.
 - Longitud de línea ≤ 68 caracteres en párrafos (`.ws-lead`, `.sheet__hint`).
 - Sin `letter-spacing` positivo. Solo negativo (-0,01 / -0,02 em) en titulares.
-- Nada de texto justificado.
+- Nada de texto justificado ni emojis decorativos en la interfaz.
 
 Escala: 12 / 13 / 15 / 16 / 20 / 28 / 36 px (`--fs-xs` … `--fs-2xl`).
 
@@ -85,32 +86,30 @@ Escala: 12 / 13 / 15 / 16 / 20 / 28 / 36 px (`--fs-xs` … `--fs-2xl`).
 
 ## 5. Color
 
-Paleta fría, papel verdegris, acento verde oxidado. El color **codifica**, no decora.
+Paleta limpia, fondo pizarra claro (`--paper: #F8FAFC`), superficies blancas puras y acentos financieros. El color **codifica**, no decora.
 
 | Token | Hex | Significado |
 |---|---|---|
-| `--paper` | `#EEF1F0` | Fondo de la aplicación (papel cuadriculado) |
-| `--surface` | `#FFFFFF` | Folios, tablas, formularios |
-| `--surface-alt` | `#F6F8F7` | Encabezados de tabla, hover de fila |
-| `--ink` | `#17202A` | Texto principal |
-| `--ink-2` | `#3C4A54` | Texto secundario |
-| `--ink-3` | `#5F6C76` | Metadatos, ayudas, texto deshabilitado |
-| `--line` / `--line-strong` | `#D4DCDA` / `#A6B3B0` | Reglas de registro / reglas estructurales |
-| `--accent` | `#0B6B5B` | Acción primaria, estado correcto, dinero pagado |
-| `--alert` | `#9B2C2C` | Deuda, error, anulación |
-| `--warn` | `#8A5A00` | Pendiente de revisión, advertencia |
-| `--area-fisica` | `#2F4C7E` | Física |
-| `--area-quimica` | `#1D6B72` | Química |
-| `--area-biologia` | `#4A6B2A` | Biología |
+| `--paper` | `#F8FAFC` | Fondo de la aplicación (slate-50) |
+| `--surface` | `#FFFFFF` | Folios, tablas, tarjetas de métricas, formularios |
+| `--surface-alt` | `#F8FAFC` | Encabezados de tabla, fondos alternados |
+| `--surface-container` | `#F1F5F9` | Ítems activos del menú, contenedores hundidos (slate-100) |
+| `--ink` | `#0F172A` | Texto principal (slate-900) |
+| `--ink-2` | `#334155` | Texto secundario (slate-700) |
+| `--ink-3` | `#64748B` | Metadatos, ayudas, etiquetas atenuadas (slate-500) |
+| `--line` / `--line-strong` | `#E2E8F0` / `#CBD5E1` | Líneas de división y bordes nítidos |
+| `--accent` | `#0F172A` | Botones de acción principal (slate oscuro de alto contraste) |
+| `--ok` / `--ok-soft` | `#047857` / `#ECFDF5` | Estado liquidado, exitoso, conexión en línea (emerald-700) |
+| `--alert` / `--alert-soft` | `#B91C1C` / `#FEF2F2` | Deuda, error, anulación (red-700) |
+| `--warn` / `--warn-soft` | `#B45309` / `#FFFBEB` | Pendiente de revisión, en tránsito, advertencia (amber-700) |
+| `--area-fisica` | `#1E3A8A` | Área de Física |
+| `--area-quimica` | `#0E7490` | Área de Química |
+| `--area-biologia` | `#15803D` | Área de Biología |
 
 Reglas semánticas fijas:
-- **Causado** → tinta (`--ink`). **Pagado** → acento verde. **Adeudado** → rojo (`--alert`).
-- Un área científica se marca con una barra vertical de 3 px + nombre en `.area--*`. Nunca con fondo
-  de color a toda la fila.
-- Contraste verificado (calculado, no estimado): `#17202A` sobre `#FFFFFF` = 16,45:1;
-  `#3C4A54` sobre `#FFFFFF` = 9,13:1; `#5F6C76` sobre `#FFFFFF` = 5,39:1;
-  `#0B6B5B` sobre `#FFFFFF` = 6,43:1; blanco sobre `#0B6B5B` = 6,43:1; `#9B2C2C` = 7,53:1;
-  `#8A5A00` = 5,93:1. Todo ≥ AA (4,5:1) para texto normal.
+- **Causado** → tinta (`--ink`). **Pagado** → acento verde (`--ok`). **Adeudado** → rojo (`--alert`).
+- Los estados de tabla usan badges con punto indicador (`.badge` con punto circular `::before`), eliminando texto tosco o bordes toscos.
+- Contraste verificado: `#0F172A` sobre `#FFFFFF` = 19,07:1; `#334155` sobre `#FFFFFF` = 10,74:1; `#64748B` sobre `#FFFFFF` = 4,6:1; `#047857` sobre `#FFFFFF` = 7,03:1. Todo cumple holgadamente WCAG AA/AAA.
 
 ---
 

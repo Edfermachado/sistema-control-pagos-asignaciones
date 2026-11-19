@@ -47,51 +47,86 @@ export function ResumenPage(): React.ReactElement {
 
   return (
     <>
-      <section className="ledger" aria-label="Totales acumulados">
-        <div className="ledger__figures">
-          <div className="figure">
-            <p className="figure__label">Total causado</p>
-            <p className="figure__value num">
-              {formatUsdCurrency(totalAccruedDisplay)}
-            </p>
-            <p className="figure__note">
-              Suma prorrateada por días activos (RN-CAUS-01 a 03).
-            </p>
+      <section className="metrics-grid" aria-label="Métricas de control financiero">
+        <article className="card-metric">
+          <header className="card-metric__header">
+            <span className="card-metric__label">Total Causado (Acumulado)</span>
+            <span className="material-symbols-outlined card-metric__icon" aria-hidden="true">
+              payments
+            </span>
+          </header>
+          <div className="card-metric__body">
+            <p className="card-metric__value num">{formatUsdCurrency(totalAccruedDisplay)}</p>
           </div>
-          <div className="figure">
-            <p className="figure__label">Total pagado por FIFO</p>
-            <p className="figure__value num">
-              {formatUsdCurrency(totalPaidDisplay)}
-            </p>
-            <p className="figure__note">
-              Abonos aplicados por antigüedad de la deuda (RN-PAG-02).
-            </p>
+          <div className="card-metric__footer">
+            <span className="card-metric__trend card-metric__trend--success">
+              <span className="material-symbols-outlined" aria-hidden="true">arrow_upward</span>
+              Prorrateado
+            </span>
+            <span className="card-metric__meta">Días activos (RN-CAUS)</span>
           </div>
-          <div className="figure">
-            <p className="figure__label">Deuda pendiente</p>
-            <p className="figure__value figure__value--debt num">
+        </article>
+
+        <article className="card-metric">
+          <header className="card-metric__header">
+            <span className="card-metric__label">Total Pagado por FIFO</span>
+            <span className="material-symbols-outlined card-metric__icon" aria-hidden="true">
+              check_circle
+            </span>
+          </header>
+          <div className="card-metric__body">
+            <p className="card-metric__value num">{formatUsdCurrency(totalPaidDisplay)}</p>
+          </div>
+          <div className="card-metric__footer">
+            <span className="card-metric__trend card-metric__trend--success">
+              <span className="material-symbols-outlined" aria-hidden="true">check</span>
+              Liquidado
+            </span>
+            <span className="card-metric__meta">Prelación FIFO (RN-PAG-02)</span>
+          </div>
+        </article>
+
+        <article className="card-metric">
+          <header className="card-metric__header">
+            <span className="card-metric__label">Deuda Pendiente Neta</span>
+            <span className="material-symbols-outlined card-metric__icon" aria-hidden="true">
+              pending_actions
+            </span>
+          </header>
+          <div className="card-metric__body">
+            <p className="card-metric__value card-metric__value--debt num">
               {formatUsdCurrency(totalPendingDisplay)}
             </p>
-            <p className="figure__note">
-              Obligación neta con el personal de los proyectos.
-            </p>
           </div>
-        </div>
-        <div className="ledger__side">
-          <p className="ledger__side-title">Cobertura actual</p>
-          <p className="ledger__count">
-            <strong className="num">{projects.length}</strong>
-            <span>proyectos en catálogo</span>
-          </p>
-          <p className="ledger__count">
-            <strong className="num">{beneficiaries.length}</strong>
-            <span>beneficiarios sin usuario</span>
-          </p>
-          <p className="ledger__count">
-            <strong className="num">{accruals.length}</strong>
-            <span>causaciones registradas</span>
-          </p>
-        </div>
+          <div className="card-metric__footer">
+            <span className="card-metric__trend card-metric__trend--pending">
+              <span className="material-symbols-outlined" aria-hidden="true">lock_clock</span>
+              Saldo exigible
+            </span>
+            <span className="card-metric__meta">Personal de proyectos</span>
+          </div>
+        </article>
+
+        <article className="card-metric">
+          <header className="card-metric__header">
+            <span className="card-metric__label">Cobertura de Proyectos</span>
+            <span className="material-symbols-outlined card-metric__icon" aria-hidden="true">
+              shield
+            </span>
+          </header>
+          <div className="card-metric__body">
+            <p className="card-metric__value num">{projects.length} Proyectos</p>
+          </div>
+          <div className="card-metric__footer">
+            <span className="card-metric__trend card-metric__trend--success">
+              <span className="material-symbols-outlined" aria-hidden="true">verified</span>
+              Catálogo activo
+            </span>
+            <span className="card-metric__meta">
+              {beneficiaries.length} pers. · {accruals.length} caus.
+            </span>
+          </div>
+        </article>
       </section>
 
       <section className="sheet">
@@ -127,10 +162,11 @@ export function ResumenPage(): React.ReactElement {
             </div>
             <button
               type="button"
-              className="btn btn--ghost btn--sm"
+              className="btn btn--secondary btn--sm"
               onClick={handleDownloadSummaryPdf}
             >
-              Descargar estado de cuenta (PDF)
+              <span className="material-symbols-outlined">file_download</span>
+              <span>Descargar estado de cuenta (PDF)</span>
             </button>
           </div>
         </div>
