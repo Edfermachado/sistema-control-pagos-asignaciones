@@ -12,9 +12,9 @@ import {
 } from '../../../common/constants/domain.enums';
 
 export class CreateProjectDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código único del proyecto es obligatorio.' })
-  code!: string;
+  code?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El nombre del proyecto es obligatorio.' })

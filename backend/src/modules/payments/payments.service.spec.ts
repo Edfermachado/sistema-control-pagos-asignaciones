@@ -32,6 +32,9 @@ describe('PaymentsService (RN-PAG-02 Registro de Pagos con Cola FIFO)', () => {
     paymentAllocation: {
       create: jest.Mock;
     };
+    systemParameter: {
+      findUnique: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
   let auditMock: { recordLog: jest.Mock };
@@ -60,6 +63,9 @@ describe('PaymentsService (RN-PAG-02 Registro de Pagos con Cola FIFO)', () => {
       },
       paymentAllocation: {
         create: jest.fn(),
+      },
+      systemParameter: {
+        findUnique: jest.fn().mockResolvedValue(null),
       },
       $transaction: jest.fn((cb) => cb(prismaMock)),
     };
@@ -249,6 +255,64 @@ describe('PaymentsService (RN-PAG-02 Registro de Pagos con Cola FIFO)', () => {
           receptorActor,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe consultar todas las causaciones del proyecto si PAYMENT_REQUEST_SCOPE está configurado como PROJECT_ACCRUALS (Edge Case)', async () => {
+      // Arrange
+      prismaMock.payment.findUnique.mockResolvedValueOnce(null);
+      prismaMock.paymentRequest.findUnique.mockResolvedValueOnce({
+        id: 'req-1',
+        projectId: 'proj-1',
+        status: PaymentRequestStatus.APROBADA,
+        totalAmount: '600.00',
+        paidAmount: '0.00',
+        items: [],
+      });
+      prismaMock.systemParameter.findUnique.mockResolvedValueOnce({
+        key: 'PAYMENT_REQUEST_SCOPE',
+        value: 'PROJECT_ACCRUALS',
+      });
+      prismaMock.accrual.findMany.mockResolvedValueOnce([
+        {
+          id: 'acc-proj-1',
+          beneficiaryId: 'ben-1',
+          periodStart: new Date('2026-01-01T00:00:00Z'),
+          createdAt: new Date('2026-01-16T00:00:00Z'),
+          paidAmount: '0.00',
+          balanceDue: '250.00',
+          status: AccrualStatus.PENDIENTE,
+        },
+      ]);
+      prismaMock.payment.create.mockImplementationOnce(({ data }) =>
+        Promise.resolve({ id: 'pay-scope', ...data }),
+      );
+      prismaMock.paymentAllocation.create.mockResolvedValueOnce({
+        id: 'alloc-scope',
+      });
+      prismaMock.accrual.update.mockResolvedValueOnce({});
+      prismaMock.paymentRequest.update.mockResolvedValueOnce({});
+
+      // Act
+      const res = await service.registerPayment(
+        {
+          receiptCode: 'REC-SCOPE-01',
+          paymentRequestId: 'req-1',
+          beneficiaryId: 'ben-1',
+          amount: '250.00',
+          paymentDate: '2026-11-10',
+        },
+        receptorActor,
+      );
+
+      // Assert
+      expect(prismaMock.accrual.findMany).toHaveBeenCalledWith({
+        where: {
+          projectId: 'proj-1',
+          beneficiaryId: 'ben-1',
+          status: { in: [AccrualStatus.PENDIENTE, AccrualStatus.PARCIAL] },
+        },
+      });
+      expect(res.fifoSummary.paymentAmount).toBe('250.00');
     });
   });
 

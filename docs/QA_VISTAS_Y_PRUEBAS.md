@@ -67,6 +67,19 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 5. **Contraste:** todo el texto ≥ AA (4,5:1 normal, 3:1 grande).
 6. **Persistencia:** recargar la página tras cada operación y comprobar que el dato sigue ahí.
 
+### Rutas (una vista por URL)
+
+| Comprobación | Cómo |
+|---|---|
+| Entrada directa | Abrir `/causacion` con sesión: debe cargar la vista, no el resumen. |
+| Recarga | `F5` sobre cualquier ruta: la sesión y la vista se mantienen. |
+| Ruta prohibida | Con rol GENERADOR abrir `/auditoria`: redirige a `/resumen` con aviso `RN-SEG-02`. |
+| Ruta inexistente | Abrir `/ruta-inventada`: pantalla propia con salidas a resumen y acceso. |
+| Historial | Atrás y adelante del navegador devuelven a las vistas visitadas. |
+| Sin sesión | Abrir una ruta protegida sin sesión lleva al portal; tras el login vuelve a esa ruta. |
+| Cierre de sesión | El botón "Cerrar sesión" limpia el almacenamiento y deja el portal; recargar no reabre la sesión. |
+| Enlaces del riel | Cada ítem es un enlace real: se puede abrir en otra pestaña y marca `aria-current` en la vista activa. |
+
 ---
 
 ## Parte B — Resultados de la ejecución (datos reales)
@@ -98,6 +111,60 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | 21 | Bitácora con detalle JSONB de `old_values` | OK |
 | 22 | RBAC al cambiar de rol (visibilidad de pestañas y contenido) | OK tras corrección (F3, F4) |
 
+### Rutas, sesión y RBAC por URL (implementado en noviembre de 2026)
+
+| # | Comprobación | Resultado |
+|---|---|---|
+| 1 | `/` sin sesión → portal de acceso | OK — `/login` |
+| 2 | Login demo (3 roles) y login manual | OK — redirige al resumen con la sesión del rol |
+| 3 | Login con credenciales inválidas | OK — se queda en el portal con el aviso |
+| 4 | Entrada directa a `/causacion` con sesión | OK — carga la vista, 4 folios |
+| 5 | Recarga sobre `/causacion` | OK — sesión y vista se conservan (`sessionStorage`) |
+| 6 | GENERADOR abre `/auditoria` | OK — redirige a `/resumen` y explica `RN-SEG-02` |
+| 7 | Cambio de rol en el riel | OK — sesión, riel y permisos se recalculan |
+| 8 | ADMIN abre `/causacion` por URL | OK — redirige con aviso |
+| 9 | Ruta inexistente | OK — pantalla propia con dos salidas |
+| 10 | Atrás / adelante del navegador | OK |
+| 11 | Logout | OK — `/login`, almacenamiento limpio, recarga no reabre sesión |
+| 12 | Deep link sin sesión → login → destino | OK — vuelve a `/cajas-chicas` tras autenticarse |
+
+### Segundo recorrido: acciones destructivas y justificaciones (RN-PAG-01/03, RN-GLOB-04, RN-CAJA-03)
+
+| # | Acción probada en la interfaz | Resultado |
+|---|---|---|
+| 1 | Rechazar una solicitud con el campo de motivo vacío | OK — el botón está inhabilitado y muestra el motivo en el tooltip |
+| 2 | Rechazar la solicitud escribiendo el motivo | OK — queda `RECHAZADA` con el texto escrito por el usuario |
+| 3 | Aprobar, pagar 50,00 y anular el pago con motivo | OK — `ANULADO`; la causación vuelve a 200,00 `PENDIENTE` y la solicitud a `APROBADA` |
+| 4 | Anular la solicitud aprobada con motivo | OK — `ANULADA` |
+| 5 | Anular un lote de causación con motivo | OK — lote `ANULADO` y causaciones liberadas |
+| 6 | Rechazar un vale de caja chica sin motivo / con motivo | OK — inhabilitado / `RECHAZADO` con el texto escrito; el saldo del período no se mueve |
+| 7 | Anular un vale antes del desembolso | OK — `ANULADO`, saldo intacto (200,00 disponibles) |
+| 8 | Editar un proyecto (nombre) y guardar | OK — `projects.name` actualizado en PostgreSQL |
+| 9 | Desactivar y reactivar un beneficiario | OK — `is_active` pasa a `false` y vuelve a `true` |
+| 10 | El motivo escrito se limpia tras ejecutar la acción | OK — no queda una justificación reutilizable de la operación anterior |
+| 11 | Anular una causación individual (no el lote) | OK — guard activo; causación `ANULADO` con saldo 0,00 |
+| 12 | Enlace "Ver comprobante" de un vale rendido | OK — `200 application/pdf` con el archivo servido |
+| 13 | Integridad del archivo subido | OK — PDF de 1.927 bytes guardado y servido con el mismo `sha256` que el original |
+| 14 | Búsqueda dentro de las tablas de catálogos | OK — el buscador por código aísla el proyecto y habilita sus acciones |
+
+### Reflejo en la base de datos (verificado con `psql` dentro del contenedor)
+
+| Operación en la interfaz | Fila comprobada en PostgreSQL |
+|---|---|
+| Crear proyecto `QA2-PROY-01` | `projects` con estado `ACTIVO` |
+| Crear beneficiario `V-QA2-111` | `beneficiaries` activo, sin credenciales |
+| Crear asignación $200 | `assignments.amount_per_period = 200.00` activa |
+| Generar lote `QA2-LOTE-01` | `accrual_batches` 2026-03-01/15, `total_amount 200.00`, `GENERADO` |
+| Causación prorrateada | `accruals` 200.00 causado, 15/15 días, `PENDIENTE` |
+| Solicitud `QA2-SOL-01` | `payment_requests` total 200.00, 1 ítem de 200.00 |
+| Pago parcial $80 | `payments` `QA2-REC-01` 80.00 `VALIDO`; `payment_allocations` 80.00; causación `PARCIAL`, saldo 120.00 |
+| Pago del saldo $120 | `QA2-REC-02` 120.00; causación `PAGADO`, saldo 0.00 |
+| Cierre | `payment_requests.status = CERRADA`, pagado 200.00 |
+| Caja `QA2-CAJA-01` | `petty_cashes.CERRADA`; período 2027-01 disponible 210.00, cierre 210.00, `CERRADO` |
+| Vale `QA2-VAL-01` | 100 solicitado, 100 desembolsado, 90 rendido, 10 devuelto, `RENDIDO`, comprobante adjunto |
+| Usuario y parámetro | `users` con rol RECEPTOR activo; `system_parameters` `QA2_PARAM=activo` |
+| Auditoría | `audit_logs` con eventos de negocio (`USER_LOGIN`, `UPDATE`…) y de trigger (`INSERT` en `payment_group_periods`) |
+
 ### Mediciones
 
 | Comprobación | Resultado |
@@ -108,6 +175,8 @@ espacio se compone de secciones (folios) que se listan abajo con lo que hay que 
 | Texto recortado | 0 |
 | Fallos de contraste AA (5 vistas × 2 tamaños) | 0 |
 | `impeccable detect` (archivos y URL) | 0 hallazgos |
+| Rutas: deep link, recarga, guard por rol, 404 e historial | 12/12 comprobaciones OK |
+| Frontend Vitest tras el enrutado y cierre UX/E2E | 11 suites / **104** pruebas en verde |
 
 ---
 
@@ -126,31 +195,35 @@ Mostraba solo un estado vacío e invitaba a "vincular un beneficiario" aunque `R
 *Corrección:* la sección se renderiza solo si el rol no es ADMIN. Verificado: catálogos del ADMIN
 quedan en 3 folios (proyectos, grupos, beneficiarios).
 
-### Documentados, sin corregir (decisión del equipo)
+**F1 — Motivo de anulación y de rechazo precargado** (Medio, integridad; pre-existente). Corregido.
+El campo nacía con un texto genérico ("Corrección contable autorizada por Gerencia…"), así que un solo
+clic anulaba o rechazaba sin que nadie escribiera la justificación y la auditoría registraba una
+plantilla, debilitando `RN-GLOB-04` y `RN-PAG-01`.
+*Corrección:* los motivos arrancan vacíos y los botones destructivos (anular pago, causación, lote,
+solicitud y vale; rechazar solicitud y vale) quedan inhabilitados hasta que el texto alcanza el mínimo
+que exige la regla (10 caracteres para anular, 5 para rechazar), con el motivo en el tooltip.
+Verificado: inhabilitado con el campo vacío, habilitado al escribir, y el texto que llega a la auditoría
+es el escrito por el usuario.
 
-**F1 — Motivo de anulación precargado** (Medio, integridad; pre-existente).
-El campo de motivo nace con un texto genérico ("Corrección contable autorizada por Gerencia…"), así
-que se puede anular sin escribir nada y la auditoría registra un motivo de plantilla, debilitando
-`RN-GLOB-04`. *Recomendación:* inicializar vacío, `required`, mínimo 10 caracteres y placeholder.
+**F9 — El motivo sobrevivía a la operación anterior** (Bajo, integridad; detectado en esta ronda).
+Al compartirse un único campo de motivo, tras anular un pago quedaba su texto cargado y una segunda
+anulación lo reutilizaba, pudiendo justificar otra operación con un motivo ajeno.
+*Corrección:* el campo se limpia tras ejecutar con éxito la acción. Verificado en solicitud, pago, lote
+y vale de caja chica.
 
-**F2 — Anulación de pago sin confirmación** (Medio, UX; pre-existente).
-"Anular con reversión FIFO" ejecuta en el primer clic sobre una acción irreversible.
-*Recomendación:* paso de confirmación con el monto y el recibo afectados a la vista.
+**F2 — Anulación de pago y cierres sin confirmación** (Medio, UX). **Corregido.**
+Las operaciones destructivas o irreversibles sin motivo escrito (`Desactivar` asignación, `Cerrar solicitud`, `Cerrar mes y arrastre`, `Cerrar caja chica`) exigen ahora confirmación explícita en dos pasos (`¿Confirmar...?`), y todas las anulaciones/rechazos exigen abrir y confirmar un bloque inline en la fila con validación de longitud mínima.
 
-**F5 — Validación de formulario ausente en el pago** (Bajo; pre-existente).
-Si se envía el pago sin beneficiario, el aviso que aparece es `[RN-PAG-02] El beneficiario no posee
-causaciones con saldo pendiente`, que describe el síntoma y no la causa.
-*Recomendación:* `required` en los selects y mensaje propio antes de llamar a la API.
+**F5 — Validación de formulario y filtrado preventivo de beneficiarios en el pago** (Bajo, UX). **Corregido.**
+El selector de beneficiario en pagos FIFO se filtra exclusivamente a quienes poseen causaciones pendientes dentro de la solicitud aprobada seleccionada, muestra la deuda exacta en solicitud, ajusta el máximo permitido y despliega la previsualización de imputación FIFO en vivo antes de enviar.
 
-**F6 — Campos de anulación y rendición separados de sus botones** (Bajo, UX).
-El motivo de anulación, el monto rendido y el archivo del comprobante viven en la sección
-"Rendición", mientras los botones que los usan están en la tabla de vales o de pagos.
-*Recomendación:* llevar esos campos junto a la acción o abrir una fila expandida por registro.
+**F6 — Campos de anulación, rechazo y rendición separados de sus botones** (Bajo, UX). **Corregido.**
+Se eliminaron los campos compartidos superiores en `FinancialEnginePanel` y `PettyCashAndReportsPanel`: al pulsar `Anular`, `Rechazar` o `Rendir con comprobante` en cualquier fila se despliega un panel `.inline-action-box` en esa misma fila.
+
+### Documentados (informativos / mejoras menores opcionales)
 
 **F7 — `RN-CAT-03` impide cortes dentro de rangos ya generados** (Informativo).
-Un corte personalizado solo se puede agregar fuera de 2026–2027 porque ya existen períodos
-generados; el rechazo es correcto pero no se explica en la interfaz.
-*Recomendación:* nota en el folio o acción explícita de "reemplazar corte".
+Un corte personalizado solo se puede agregar fuera de 2026–2027 porque ya existen períodos generados; por defecto el formulario propone el rango `2028-01-01` al `2028-01-15` para evitar colisiones accidentales.
 
 **F8 — Tras crear un grupo, la tabla de cortes sigue mostrando otro grupo** (Bajo, UX).
 Los períodos se generan bien (118 en el caso probado), pero el grupo nuevo no queda seleccionado.
@@ -166,9 +239,9 @@ cp .env.example .env
 docker compose up -d --build          # web :5173 · API :3000 · PostgreSQL :55432
 
 # 2. Pruebas automáticas
-node scripts/api-smoke-test.mjs                       # 68 comprobaciones de API
-npm --prefix backend test -- --runInBand              # 225 unitarias
-npm --prefix frontend test                            # 27 unitarias
+node scripts/api-smoke-test.mjs                       # 72 comprobaciones de API
+npm --prefix backend test -- --runInBand              # 256 pruebas (32 suites, incl. E2E)
+npm --prefix frontend test                            # 104 pruebas (11 suites, incl. E2E)
 
 # 3. Detector de anti-patrones de interfaz
 export IMPECCABLE_HOME="E:/Vigilia/SisInf/proyecto/repo/.opencode/.cache/impeccable"
@@ -185,8 +258,14 @@ Las capturas de esta ejecución están en `.opencode/.cache/qa/` (móvil) y `.op
 
 ## Parte E — Qué no cubre esta ronda
 
-- **Accesibilidad profunda:** navegación completa por teclado, lectores de pantalla y ARIA avanzado.
+- **Accesibilidad profunda:** navegación completa por teclado y lectores de pantalla (solo se midió
+  contraste AA y se revisaron `label`/`aria-current`).
 - **Carga y concurrencia:** dos usuarios operando la misma solicitud al mismo tiempo.
 - **Navegadores distintos de Chromium** (Firefox, Safari/iOS).
 - **Impresión** de los PDFs y su legibilidad en papel.
-- **Datos voluminosos:** tablas con miles de filas (hoy no hay paginación).
+- **Móvil:** se comprobó la maquetación a 390×844 en las cinco rutas (sin desbordes), pero los flujos
+  se recorrieron con ratón a 1440×900, no con toques reales.
+- **Cambio de contraseña y alta de usuario con credenciales propias:** se creó el usuario, no se probó
+  su primer inicio de sesión.
+- **Datos voluminosos:** las tablas se probaron con decenas de filas (paginación de 8–10 por página),
+  no con miles.

@@ -218,12 +218,13 @@ describe('calculateProratedAccrual (RN-CAUS-01 a RN-CAUS-03)', () => {
 ## 3. Reglas de Clean Code en el Frontend (React + Vite)
 
 1. **Separación Vista vs. Lógica (`FE-01`):**
-   * Los componentes `.tsx` en `/pages` o `/components` solo se encargan de mostrar datos y capturar eventos de usuario.
-   * Las llamadas HTTP y manejo de estado de servidor deben vivir en Custom Hooks (`/hooks/useProjects.ts`, `/hooks/useAccruals.ts`) o servicios API tipados (`/services/api.ts`).
-2. **Componentes Pequeños y Reutilizables (`FE-02`):**
-   * Ningún archivo `.tsx` debe superar las **200 líneas**. Si una página tiene una tabla, un modal de creación y un filtro, divídelos en subcomponentes (`ProjectTable.tsx`, `CreateProjectModal.tsx`).
+   * Los componentes de ruta en `frontend/src/pages/` y los espacios de trabajo en `frontend/src/components/` se encargan de la presentación y captura de eventos de usuario.
+   * La gestión centralizada de sesión, llamadas HTTP tipadas (`apiRequest`) y recarga de datos vive en `frontend/src/context/WorkspaceContext.tsx` y `frontend/src/utils/api-client.util.ts`.
+   * Las reglas de filtrado, validez de rangos, flujos UX y formateo viven en funciones puras deterministas dentro de `frontend/src/utils/*.util.ts` con sus pruebas unitarias 1:1 (`*.util.spec.ts`).
+2. **Componentes Reutilizables y Modularidad (`FE-02`):**
+   * Los controles transversales y vistas de simulación o disponibilidad repetitivos/complejos deben extraerse en subcomponentes presentacionales tipados y reutilizables (como `TableFilterBar.tsx`, `TablePagination.tsx`, `FifoSimulationPreviewTable.tsx` y `AssignmentAvailabilityBanner.tsx`) utilizando exclusivamente clases de `frontend/src/styles/design-system.css` (cero estilos inline).
 3. **Cero Cálculos Financieros Definitivos en el Cliente (`FE-03`):**
-   * El Frontend nunca decide cuánto dinero corresponde pagar en FIFO ni si un vale cabe en la caja chica; muestra lo que el Backend calcula y valida.
+   * El Frontend nunca decide de forma definitiva el monto causado, el saldo de caja chica ni la distribución contable FIFO en base de datos; puede calcular previsualizaciones orientativas en vivo (`simulateFifoPaymentPreview`), pero la fuente de verdad y persistencia pertenece siempre al Backend.
 
 ---
 

@@ -32,13 +32,15 @@ describe('money.helper (RN-GLOB-01, RN-GLOB-02, RN-GLOB-04)', () => {
       expect(sum.toFixed(2)).toBe('0.30');
     });
 
-    it('debe lanzar BadRequestException si el valor no es un número válido (Violación RN-GLOB-02)', () => {
+    it('debe lanzar BadRequestException si el valor no es un número válido o supera el límite NUMERIC(12,2) (Violación RN-GLOB-02)', () => {
       // Arrange
       const invalidInput = 'abc-usd';
+      const overflowInput = '10000000000.00';
 
       // Act & Assert
       expect(() => toUsdDecimal(invalidInput)).toThrow(BadRequestException);
       expect(() => toUsdDecimal('')).toThrow('[RN-GLOB-02]');
+      expect(() => toUsdDecimal(overflowInput)).toThrow('[RN-GLOB-02]');
     });
   });
 

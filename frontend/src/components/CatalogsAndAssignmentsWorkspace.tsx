@@ -8,6 +8,15 @@ import {
 } from '../types/domain.types';
 import { apiRequest } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
+import {
+  clampDateRangeToWindow,
+  toIsoDateSlice,
+} from '../utils/range-validity.util';
+import {
+  analyzeBeneficiaryProjectAvailability,
+  isConfirmationArmed,
+} from '../utils/ux-workflows.util';
+import { AssignmentAvailabilityBanner } from './AssignmentAvailabilityBanner';
 import { TableFilterBar } from './TableFilterBar';
 import { TablePagination } from './TablePagination';
 import {
@@ -150,11 +159,58 @@ export function CatalogsAndAssignmentsWorkspace({
   // Estado períodos/cortes de pago
   const [periodGroupId, setPeriodGroupId] = useState('');
   const [periods, setPeriods] = useState<LivePaymentGroupPeriod[]>([]);
-  const [newPeriodStart, setNewPeriodStart] = useState('2026-12-01');
-  const [newPeriodEnd, setNewPeriodEnd] = useState('2026-12-15');
+  const [newPeriodStart, setNewPeriodStart] = useState('2028-01-01');
+  const [newPeriodEnd, setNewPeriodEnd] = useState('2028-01-15');
   const [newPeriodLabel, setNewPeriodLabel] = useState('Corte personalizado');
 
+  // Estado confirmación en dos pasos para acciones irreversibles (UX #5)
+  const [armedConfirmKey, setArmedConfirmKey] = useState<string | null>(null);
+
   const effectivePeriodGroupId = periodGroupId || paymentGroups[0]?.id || '';
+
+  // Catálogos activos para selectores sin fricción (RN-CAT-02, RN-CAT-03, RN-SEG-01)
+  const activeProjects = projects.filter(
+    (p) => p.status === ProjectStatus.ACTIVO,
+  );
+  const activePaymentGroups = paymentGroups.filter((pg) => pg.isActive);
+  const activeBeneficiaries = beneficiaries.filter((b) => b.isActive);
+
+  const effectiveAsigBeneficiaryId =
+    asigBeneficiaryId || activeBeneficiaries[0]?.id || '';
+  const selectedAssignmentProject =
+    activeProjects.find((p) => p.id === asigProjectId) ?? activeProjects[0];
+  const asigMinDate = selectedAssignmentProject
+    ? toIsoDateSlice(selectedAssignmentProject.startDate)
+    : undefined;
+  const asigMaxDate = selectedAssignmentProject
+    ? toIsoDateSlice(selectedAssignmentProject.endDate)
+    : undefined;
+
+  const assignmentAvailability = analyzeBeneficiaryProjectAvailability({
+    project: selectedAssignmentProject,
+    beneficiaryId: effectiveAsigBeneficiaryId,
+    assignments,
+    proposedStart: asigStart,
+    proposedEnd: asigEnd,
+  });
+
+  useEffect(() => {
+    if (!selectedAssignmentProject) {
+      return;
+    }
+    const clamped = clampDateRangeToWindow(
+      asigStart,
+      asigEnd,
+      selectedAssignmentProject.startDate,
+      selectedAssignmentProject.endDate,
+    );
+    if (clamped.startDate !== asigStart) {
+      setAsigStart(clamped.startDate);
+    }
+    if (clamped.endDate !== asigEnd) {
+      setAsigEnd(clamped.endDate);
+    }
+  }, [selectedAssignmentProject, asigStart, asigEnd]);
 
   // Estados de búsqueda, filtros y paginación
   const [projectSearch, setProjectSearch] = useState('');
@@ -249,13 +305,12 @@ export function CatalogsAndAssignmentsWorkspace({
   const handleSaveProject = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiRequest(
+      const saved = await apiRequest<LiveProject>(
         editingProjectId ? `/projects/${editingProjectId}` : '/projects',
         {
           method: editingProjectId ? 'PATCH' : 'POST',
           token,
           body: {
-            ...(editingProjectId ? {} : { code: projCode }),
             name: projName,
             area: projArea,
             scope: projScope,
@@ -268,7 +323,7 @@ export function CatalogsAndAssignmentsWorkspace({
         'success',
         editingProjectId
           ? `Proyecto '${projName}' actualizado.`
-          : `Proyecto '${projCode}' creado correctamente.`,
+          : `Proyecto '${saved?.code ?? projName}' creado con código asignado por el sistema.`,
       );
       setEditingProjectId(null);
       await onRefresh();
@@ -484,9 +539,9 @@ export function CatalogsAndAssignmentsWorkspace({
 
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetBeneficiary = asigBeneficiaryId || beneficiaries[0]?.id;
-    const targetProject = asigProjectId || projects[0]?.id;
-    const targetGroup = asigGroupId || paymentGroups[0]?.id;
+    const targetBeneficiary = asigBeneficiaryId || activeBeneficiaries[0]?.id;
+    const targetProject = asigProjectId || activeProjects[0]?.id;
+    const targetGroup = asigGroupId || activePaymentGroups[0]?.id;
 
     if (!targetBeneficiary || !targetProject || !targetGroup) {
       onNotify(
@@ -525,6 +580,7 @@ export function CatalogsAndAssignmentsWorkspace({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify('success', 'Asignación desactivada.');
       await onRefresh();
     } catch (err) {
@@ -551,15 +607,18 @@ export function CatalogsAndAssignmentsWorkspace({
               <form onSubmit={handleSaveProject} className="form-grid">
                 <div className="field">
                   <label className="field__label" htmlFor="proj-code">
-                    Código
+                    Código (sistema)
                   </label>
                   <input
                     id="proj-code"
                     className="input"
-                    value={projCode}
-                    onChange={(e) => setProjCode(e.target.value)}
-                    required
-                    disabled={Boolean(editingProjectId)}
+                    value={
+                      editingProjectId
+                        ? projCode
+                        : 'Autogenerado por el sistema'
+                    }
+                    readOnly
+                    disabled
                   />
                 </div>
                 <div className="field">
@@ -624,6 +683,7 @@ export function CatalogsAndAssignmentsWorkspace({
                     id="proj-end"
                     className="input"
                     type="date"
+                    min={projStart}
                     value={projEnd}
                     onChange={(e) => setProjEnd(e.target.value)}
                     required
@@ -942,6 +1002,7 @@ export function CatalogsAndAssignmentsWorkspace({
                         id="period-end"
                         className="input"
                         type="date"
+                        min={newPeriodStart}
                         value={newPeriodEnd}
                         onChange={(e) => setNewPeriodEnd(e.target.value)}
                         required
@@ -1210,227 +1271,304 @@ export function CatalogsAndAssignmentsWorkspace({
       {activeRole !== UserRole.ADMIN && (
         <section className="sheet">
           <div className="sheet__head">
-          <div>
-            <h2 className="sheet__title">Asignaciones en USD</h2>
-            <p className="sheet__hint">
-              Un beneficiario puede participar en múltiples proyectos distintos
-              a la vez, pero el sistema bloquea asignaciones solapadas dentro
-              del mismo proyecto. RN-CAT-04.
-            </p>
-          </div>
-        </div>
-        <div className="sheet__body">
-          <div className="stack">
-            {canEditAssignments && (
-              <form onSubmit={handleCreateAssignment} className="form-grid">
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-beneficiary">
-                    Beneficiario
-                  </label>
-                  <select
-                    id="asig-beneficiary"
-                    className="select"
-                    value={asigBeneficiaryId}
-                    onChange={(e) => setAsigBeneficiaryId(e.target.value)}
-                  >
-                    <option value="">-- Seleccionar Beneficiario --</option>
-                    {beneficiaries.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.fullName} ({b.dni})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-project">
-                    Proyecto
-                  </label>
-                  <select
-                    id="asig-project"
-                    className="select"
-                    value={asigProjectId}
-                    onChange={(e) => setAsigProjectId(e.target.value)}
-                  >
-                    <option value="">-- Seleccionar Proyecto --</option>
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.code} - {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-group">
-                    Grupo de pago
-                  </label>
-                  <select
-                    id="asig-group"
-                    className="select"
-                    value={asigGroupId}
-                    onChange={(e) => setAsigGroupId(e.target.value)}
-                  >
-                    <option value="">-- Seleccionar Grupo de Pago --</option>
-                    {paymentGroups.map((pg) => (
-                      <option key={pg.id} value={pg.id}>
-                        {pg.name} ({pg.periodicity})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-amount">
-                    Monto por período (USD)
-                  </label>
-                  <input
-                    id="asig-amount"
-                    className="input"
-                    type="number"
-                    step="0.01"
-                    value={asigAmount}
-                    onChange={(e) => setAsigAmount(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-start">
-                    Inicio
-                  </label>
-                  <input
-                    id="asig-start"
-                    className="input"
-                    type="date"
-                    value={asigStart}
-                    onChange={(e) => setAsigStart(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label className="field__label" htmlFor="asig-end">
-                    Fin
-                  </label>
-                  <input
-                    id="asig-end"
-                    className="input"
-                    type="date"
-                    value={asigEnd}
-                    onChange={(e) => setAsigEnd(e.target.value)}
-                  />
-                </div>
-                <button type="submit" className="btn">
-                  + Crear Asignación USD
-                </button>
-              </form>
-            )}
-
-            <TableFilterBar
-              searchPlaceholder="Buscar por beneficiario, cédula o proyecto..."
-              searchQuery={assignmentSearch}
-              onSearchChange={(q) => {
-                setAssignmentSearch(q);
-                setAssignmentPage(1);
-              }}
-              filterLabel="Proyecto"
-              filterValue={assignmentProjectFilter}
-              filterOptions={[
-                { label: 'Todos los proyectos', value: 'ALL' },
-                ...projects.map((p) => ({
-                  label: `${p.code} — ${p.name}`,
-                  value: p.id,
-                })),
-              ]}
-              onFilterChange={(v) => {
-                setAssignmentProjectFilter(v);
-                setAssignmentPage(1);
-              }}
-              resultCount={filteredAssignments.length}
-              totalCount={assignments.length}
-              onReset={() => {
-                setAssignmentSearch('');
-                setAssignmentProjectFilter('');
-                setAssignmentPage(1);
-              }}
-            />
-
-            <div className="table-scroll">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th scope="col">Beneficiario</th>
-                    <th scope="col">Proyecto</th>
-                    <th scope="col">Grupo de Pago</th>
-                    <th scope="col" className="num">
-                      Monto Base (USD)
-                    </th>
-                    <th scope="col">Vigencia Asignación</th>
-                    <th scope="col">Estado</th>
-                    {canEditAssignments && <th scope="col">Acción</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedAssignments.items.length === 0 && (
-                    <tr className="table__empty">
-                      <td colSpan={canEditAssignments ? 7 : 6}>
-                        {assignments.length === 0
-                          ? 'No hay asignaciones registradas. Vincule un beneficiario a un proyecto y a un grupo de pago.'
-                          : 'No se encontraron asignaciones que coincidan con la búsqueda o filtro.'}
-                      </td>
-                    </tr>
-                  )}
-                  {paginatedAssignments.items.map((a) => (
-                    <tr key={a.id}>
-                      <td className="table__strong">
-                        {a.beneficiary?.fullName ?? a.beneficiaryId}
-                      </td>
-                      <td className="nowrap">
-                        {a.project?.code ?? a.projectId}
-                      </td>
-                      <td>{a.paymentGroup?.name ?? a.paymentGroupId}</td>
-                      <td className="num">
-                        {formatUsdCurrency(Number(a.amountPerPeriod))}
-                      </td>
-                      <td className="nowrap">
-                        {String(a.startDate).slice(0, 10)} →{' '}
-                        {a.endDate
-                          ? String(a.endDate).slice(0, 10)
-                          : 'Indefinido'}
-                      </td>
-                      <td>
-                        <span
-                          className={`badge ${a.isActive ? 'badge--ok' : 'badge--warn'}`}
-                        >
-                          {a.isActive ? 'ACTIVA' : 'INACTIVA'}
-                        </span>
-                      </td>
-                      {canEditAssignments && (
-                        <td>
-                          {a.isActive && (
-                            <button
-                              type="button"
-                              className="btn btn--danger btn--sm"
-                              onClick={() => handleDeactivateAssignment(a.id)}
-                            >
-                              Desactivar
-                            </button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              <h2 className="sheet__title">Asignaciones en USD</h2>
+              <p className="sheet__hint">
+                Un beneficiario puede participar en múltiples proyectos distintos
+                a la vez, pero el sistema bloquea asignaciones solapadas dentro
+                del mismo proyecto. RN-CAT-04.
+              </p>
             </div>
-
-            <TablePagination
-              currentPage={paginatedAssignments.currentPage}
-              totalPages={paginatedAssignments.totalPages}
-              totalItems={paginatedAssignments.totalItems}
-              startIndex={paginatedAssignments.startIndex}
-              endIndex={paginatedAssignments.endIndex}
-              onPageChange={setAssignmentPage}
-            />
           </div>
-        </div>
-      </section>
+          <div className="sheet__body">
+            <div className="stack">
+              {canEditAssignments && (
+                <form onSubmit={handleCreateAssignment} className="form-grid">
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-beneficiary">
+                      Beneficiario activo
+                    </label>
+                    <select
+                      id="asig-beneficiary"
+                      className="select"
+                      value={
+                        asigBeneficiaryId || activeBeneficiaries[0]?.id || ''
+                      }
+                      onChange={(e) => setAsigBeneficiaryId(e.target.value)}
+                    >
+                      {activeBeneficiaries.length === 0 && (
+                        <option value="">-- Sin beneficiarios activos --</option>
+                      )}
+                      {activeBeneficiaries.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.fullName} ({b.dni})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-project">
+                      Proyecto activo (vigencia)
+                    </label>
+                    <select
+                      id="asig-project"
+                      className="select"
+                      value={asigProjectId || activeProjects[0]?.id || ''}
+                      onChange={(e) => {
+                        const nextProjId = e.target.value;
+                        setAsigProjectId(nextProjId);
+                        const nextProj = activeProjects.find(
+                          (p) => p.id === nextProjId,
+                        );
+                        if (nextProj) {
+                          setAsigStart(toIsoDateSlice(nextProj.startDate));
+                          setAsigEnd(toIsoDateSlice(nextProj.endDate));
+                        }
+                      }}
+                    >
+                      {activeProjects.length === 0 && (
+                        <option value="">-- Sin proyectos activos --</option>
+                      )}
+                      {activeProjects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.code} - {p.name} ({toIsoDateSlice(p.startDate)} →{' '}
+                          {toIsoDateSlice(p.endDate)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-group">
+                      Grupo de pago activo
+                    </label>
+                    <select
+                      id="asig-group"
+                      className="select"
+                      value={asigGroupId || activePaymentGroups[0]?.id || ''}
+                      onChange={(e) => setAsigGroupId(e.target.value)}
+                    >
+                      {activePaymentGroups.length === 0 && (
+                        <option value="">-- Sin grupos activos --</option>
+                      )}
+                      {activePaymentGroups.map((pg) => (
+                        <option key={pg.id} value={pg.id}>
+                          {pg.name} ({pg.periodicity})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-amount">
+                      Monto por período (USD)
+                    </label>
+                    <input
+                      id="asig-amount"
+                      className="input"
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="9999999999.99"
+                      value={asigAmount}
+                      onChange={(e) => setAsigAmount(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-start">
+                      Inicio (dentro de vigencia)
+                    </label>
+                    <input
+                      id="asig-start"
+                      className="input"
+                      type="date"
+                      min={asigMinDate}
+                      max={asigMaxDate}
+                      value={asigStart}
+                      onChange={(e) => setAsigStart(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="field">
+                    <label className="field__label" htmlFor="asig-end">
+                      Fin (dentro de vigencia)
+                    </label>
+                    <input
+                      id="asig-end"
+                      className="input"
+                      type="date"
+                      min={asigStart || asigMinDate}
+                      max={asigMaxDate}
+                      value={asigEnd}
+                      onChange={(e) => setAsigEnd(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={assignmentAvailability.hasOverlapConflict}
+                    title={
+                      assignmentAvailability.hasOverlapConflict
+                        ? 'El rango elegido se solapa con una asignación activa previa (RN-CAT-04)'
+                        : undefined
+                    }
+                  >
+                    + Crear Asignación USD
+                  </button>
+                  <AssignmentAvailabilityBanner
+                    occupiedRanges={assignmentAvailability.occupiedRanges}
+                    freeSubRanges={assignmentAvailability.freeSubRanges}
+                    hasOverlapConflict={
+                      assignmentAvailability.hasOverlapConflict
+                    }
+                    onSelectFreeRange={(startDate, endDate) => {
+                      setAsigStart(startDate);
+                      setAsigEnd(endDate);
+                    }}
+                  />
+                </form>
+              )}
+
+              <TableFilterBar
+                searchPlaceholder="Buscar por beneficiario, cédula o proyecto..."
+                searchQuery={assignmentSearch}
+                onSearchChange={(q) => {
+                  setAssignmentSearch(q);
+                  setAssignmentPage(1);
+                }}
+                filterLabel="Proyecto"
+                filterValue={assignmentProjectFilter}
+                filterOptions={[
+                  { label: 'Todos los proyectos', value: 'ALL' },
+                  ...projects.map((p) => ({
+                    label: `${p.code} — ${p.name}`,
+                    value: p.id,
+                  })),
+                ]}
+                onFilterChange={(v) => {
+                  setAssignmentProjectFilter(v);
+                  setAssignmentPage(1);
+                }}
+                resultCount={filteredAssignments.length}
+                totalCount={assignments.length}
+                onReset={() => {
+                  setAssignmentSearch('');
+                  setAssignmentProjectFilter('');
+                  setAssignmentPage(1);
+                }}
+              />
+
+              <div className="table-scroll">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Beneficiario</th>
+                      <th scope="col">Proyecto</th>
+                      <th scope="col">Grupo de Pago</th>
+                      <th scope="col" className="num">
+                        Monto Base (USD)
+                      </th>
+                      <th scope="col">Vigencia Asignación</th>
+                      <th scope="col">Estado</th>
+                      {canEditAssignments && <th scope="col">Acción</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedAssignments.items.length === 0 && (
+                      <tr className="table__empty">
+                        <td colSpan={canEditAssignments ? 7 : 6}>
+                          {assignments.length === 0
+                            ? 'No hay asignaciones registradas. Vincule un beneficiario a un proyecto y a un grupo de pago.'
+                            : 'No se encontraron asignaciones que coincidan con la búsqueda o filtro.'}
+                        </td>
+                      </tr>
+                    )}
+                    {paginatedAssignments.items.map((a) => (
+                      <tr key={a.id}>
+                        <td className="table__strong">
+                          {a.beneficiary?.fullName ?? a.beneficiaryId}
+                        </td>
+                        <td className="nowrap">
+                          {a.project?.code ?? a.projectId}
+                        </td>
+                        <td>{a.paymentGroup?.name ?? a.paymentGroupId}</td>
+                        <td className="num">
+                          {formatUsdCurrency(Number(a.amountPerPeriod))}
+                        </td>
+                        <td className="nowrap">
+                          {String(a.startDate).slice(0, 10)} →{' '}
+                          {a.endDate
+                            ? String(a.endDate).slice(0, 10)
+                            : 'Indefinido'}
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${a.isActive ? 'badge--ok' : 'badge--warn'}`}
+                          >
+                            {a.isActive ? 'ACTIVA' : 'INACTIVA'}
+                          </span>
+                        </td>
+                        {canEditAssignments && (
+                          <td>
+                            {a.isActive &&
+                              (isConfirmationArmed(
+                                armedConfirmKey,
+                                `DEACTIVATE_ASIG:${a.id}`,
+                              ) ? (
+                                <div className="inline-action-box">
+                                  <span className="inline-action-box__hint">
+                                    ¿Desactivar esta asignación?
+                                  </span>
+                                  <div className="btn-group">
+                                    <button
+                                      type="button"
+                                      className="btn btn--danger btn--sm"
+                                      onClick={() =>
+                                        handleDeactivateAssignment(a.id)
+                                      }
+                                    >
+                                      Confirmar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--sm"
+                                      onClick={() => setArmedConfirmKey(null)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() =>
+                                    setArmedConfirmKey(
+                                      `DEACTIVATE_ASIG:${a.id}`,
+                                    )
+                                  }
+                                >
+                                  Desactivar
+                                </button>
+                              ))}
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <TablePagination
+                currentPage={paginatedAssignments.currentPage}
+                totalPages={paginatedAssignments.totalPages}
+                totalItems={paginatedAssignments.totalItems}
+                startIndex={paginatedAssignments.startIndex}
+                endIndex={paginatedAssignments.endIndex}
+                onPageChange={setAssignmentPage}
+              />
+            </div>
+          </div>
+        </section>
       )}
     </div>
   );

@@ -10,6 +10,7 @@ import {
   ProjectStatus,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { buildSystemDocumentCode } from '../../common/domain/document-code.generator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { assertProjectAllowsNewAccruals } from '../projects/domain/project-validity.helper';
@@ -158,7 +159,10 @@ export class AccrualsService {
     dto: GenerateAccrualBatchDto,
     actor: AuthenticatedUser,
   ) {
-    const cleanCode = dto.code.trim().toUpperCase();
+    const cleanCode = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.generateNextBatchCode(dto.periodStart);
+
     const existingBatch = await this.prisma.accrualBatch.findUnique({
       where: { code: cleanCode },
     });
@@ -284,5 +288,29 @@ export class AccrualsService {
       },
       orderBy: [{ periodStart: 'asc' }, { createdAt: 'asc' }],
     });
+  }
+
+  private async generateNextBatchCode(periodStartIso: string): Promise<string> {
+    const yearMonth = String(periodStartIso).slice(0, 7) || '2026';
+    let seq =
+      (typeof this.prisma.accrualBatch.count === 'function'
+        ? await this.prisma.accrualBatch.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: 'LOTE',
+        contextCode: yearMonth,
+        sequence: seq,
+        padLength: 3,
+      });
+      const existing = await this.prisma.accrualBatch.findUnique({
+        where: { code: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
   }
 }

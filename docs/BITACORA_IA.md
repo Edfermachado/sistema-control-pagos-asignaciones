@@ -359,16 +359,172 @@ De acuerdo con la sección **4. Entregables del Proyecto (Punto 5 - Uso de IA)**
 
 ---
 
-### Interacción #19 — Estandarización de toda la tipografía a la familia Montserrat
+### Interacción #19 — Enrutado por vista: una URL por espacio de trabajo, sesión persistente y verificación funcional completa
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Hermes Agent como orquestador, navegador Chromium vía CDP para las pruebas, `psql` dentro del contenedor para comprobar la base de datos, `impeccable detect`.
+* **Indicación (Prompt) del Usuario:**
+  > *"Así que no termines hasta que hayas validado todo siempre asegurando que se cumpla todo lo que solicita el documento… quiero que testees todo, que funcione el login, los botones, valides que todo se refleje correctamente en la base de datos."*
+* **Problema que resuelve:** la aplicación tenía cinco espacios y un portal de acceso, pero todos bajo la misma URL `/`. No se podía enlazar, recargar ni volver con el botón Atrás, y el RBAC solo se demostraba ocultando botones (`react-router-dom` estaba declarado y sin usar).
+* **Implementación:**
+  1. **`frontend/src/routes/workspaces.ts`:** definición única de las cinco rutas (`/resumen`, `/catalogos`, `/causacion`, `/cajas-chicas`, `/auditoria`) con título, descripción, índice y **roles autorizados**; funciones puras `findWorkspaceByPath`, `canAccessWorkspace`, `visibleWorkspaces`, `firstAllowedPath` y `pathForWorkspace`, con su suite de pruebas.
+  2. **`context/WorkspaceContext.tsx`:** todo el estado y la carga de datos que vivían en `App.tsx` (sesión, RBAC, catálogos, motor financiero, cajas, auditoría, filtros y paginación del resumen) pasan a un contexto tipado; un efecto único recarga los datos cuando cambia la sesión o el filtro de proyecto.
+  3. **`components/AppShell.tsx` y `components/RouteGuards.tsx`:** riel con `NavLink` reales (`aria-current` en la vista activa), cabecera con el título de la ruta, guard de sesión y guard de rol que redirige con aviso citando `RN-SEG-02`, y estado de carga mientras se restaura la sesión.
+  4. **`pages/`:** el portal de acceso y las cinco vistas como componentes de ruta; `NotFoundPage` para rutas inexistentes. `App.tsx` queda como configuración del router, generada desde `WORKSPACES` para que no haya rutas duplicadas a mano.
+  5. **`utils/session.util.ts`:** persistencia en `sessionStorage` (ámbito de pestaña, no `localStorage`) con `serializeSession`, `parseStoredSession`, `saveSession`, `loadSession` y `clearSession`, más 6 pruebas nuevas (11 en total en esa suite).
+  6. **`design-system.css`:** bloque nuevo (`.app-boot`, enlaces del riel y de la marca) sin introducir tokens nuevos.
+* **Pruebas ejecutadas en la interfaz:** 12 comprobaciones de rutas y sesión (entrada directa, recarga, ruta prohibida por rol, cambio de rol, ruta inexistente, historial, logout y retorno al destino tras el login) y los flujos completos de catálogos, causación, solicitud, dos pagos parciales consecutivos con FIFO, PDF, caja chica con comprobante real subido, cierre de mes y de caja, usuarios, parámetros y bitácora.
+* **Comprobación en PostgreSQL:** cada operación de la interfaz se verificó contra su fila real (`projects`, `beneficiaries`, `assignments`, `accrual_batches`, `accruals`, `payment_requests`, `payments`, `payment_allocations`, `petty_cashes`, `petty_cash_periods`, `petty_cash_vouchers`, `users`, `system_parameters`, `audit_logs`). Detalle en [`docs/QA_VISTAS_Y_PRUEBAS.md`](./QA_VISTAS_Y_PRUEBAS.md).
+* **Segunda vuelta (acciones destructivas):** se probaron con clics reales rechazar y anular solicitudes, pagos con reversión FIFO, lotes de causación y vales de caja chica, además de editar un proyecto y desactivar/reactivar un beneficiario. Dos defectos aparecieron y se corrigieron en la misma pasada:
+  1. **Motivos precargados** (`FinancialEnginePanel`, `PettyCashAndReportsPanel`): los campos de anulación y rechazo nacían con un texto de plantilla, así que un solo clic ejecutaba la acción irreversible sin justificación real y la auditoría registraba ese texto genérico. Ahora arrancan vacíos y los botones destructivos quedan inhabilitados hasta alcanzar el mínimo de la regla (10 caracteres para anular, 5 para rechazar), con la explicación en el `title`.
+  2. **Motivo reutilizado** (F9): el mismo campo servía a varias acciones y conservaba el texto de la operación anterior; ahora se limpia al completar cada acción con éxito.
+  Verificado en la interfaz: botón inhabilitado con el campo vacío, habilitado al escribir, estado final correcto (`RECHAZADA`, `ANULADA`, `ANULADO`) y saldo revertido o intacto según corresponda, con la fila comprobada en PostgreSQL.
+* **Verificación final:**
+  * **Frontend (Vitest):** 8 suites / `58/58` en verde (antes 41).
+  * **Backend (Jest):** 30 suites / `225/225` en verde.
+  * **Smoke test API:** `68/68`.
+  * **10 capturas** (5 rutas × 1440×900 y 390×844): 0 errores de consola, 0 desbordes, 0 recortes y 0 fallos de contraste.
+  * **`impeccable detect`:** 0 hallazgos sobre los archivos y sobre la aplicación en ejecución.
+
+---
+
+### Interacción #20 — Protección contra desbordamiento `NUMERIC(12, 2)` y generación automática de códigos de documentos y vales
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity (Gemini)
+* **Indicación (Prompt) del Usuario:**
+  > *"Corrige lo siguiente: ... ERROR: numeric field overflow ... A field with precision 12, scale 2 must round to an absolute value less than 10^10 ... Y haz que la generación de codigos dependa del sistema, no tiene sentido que el usuario pueda editar el formato de los codigod de documento o vales"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`backend/src/common/constants/domain.enums.ts`, `backend/src/common/domain/money.helper.ts` y `money.helper.spec.ts`** (`RN-GLOB-02`): Definición de `MAX_USD_AMOUNT = '9999999999.99'` y validación en `toUsdDecimal` para rechazar con `BadRequestException` cualquier monto que exceda la precisión `NUMERIC(12, 2)` de PostgreSQL antes de llegar a la capa de datos.
+  2. **`backend/src/common/domain/document-code.generator.ts` y `document-code.generator.spec.ts`** (`CC-03`, `TEST-01`): Generador puro determinista `buildSystemDocumentCode` con pruebas unitarias AAA.
+  3. **`projects.service.ts`, `accruals.service.ts`, `payment-requests.service.ts`, `payments.service.ts`, `petty-cash.service.ts` y sus DTOs**: Generación automática y libre de colisiones de códigos institucionales (`FIS-2026-XX`, `LOTE-YYYY-MM-XXX`, `SOL-YYYY-XXX`, `REC-YYYY-XXXX`, `CC-YYYY-XX`, `VALE-YYYY-MM-XXX`) cuando el cliente no envía código.
+  4. **`CatalogsAndAssignmentsWorkspace.tsx`, `FinancialEnginePanel.tsx` y `PettyCashAndReportsPanel.tsx`**: Los campos de código de proyecto, lote, solicitud, recibo, caja chica y vale pasan a ser de solo lectura (`Autogenerado por el sistema`), y todos los inputs monetarios incluyen `min` y `max="9999999999.99"`.
+* **Explicación Técnica para la Defensa:**
+  * Se blindó la frontera entre aplicación y base de datos garantizando que ningún importe supere $10^{10} - 0.01$ USD (`NUMERIC(12, 2)`), y se centralizó la numeración correlativa de documentos y vales en el servidor para impedir códigos arbitrarios o inconsistentes desde el cliente.
+
+
+---
+
+### Interacción #21 — Filtrado Estricto de Rangos Activos y Reducción de Fricción en UX
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity (Gemini)
+* **Indicación (Prompt) del Usuario:**
+  > *"Ahora haz que al consolidar pagos relacionados a los rangos activos de los proyectos, solo aparezcan los rangos validos, haz esto en cada opción que amerite validez de los rangos disponibles. Audita el sistema actual y encuentra fallos donde este sistema incumpla con esto, creando fricción para el usuario. Así como analiza las áreas de mejora para la UX"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`frontend/src/utils/range-validity.util.ts` y `range-validity.util.spec.ts`** (`RN-CAT-02`, `RN-CAT-04`, `RN-CAUS-02`, `RN-CAUS-04`, `RN-PAG-02`, `RN-CAJA-02`, `TEST-01`): Funciones puras `clampDateRangeToWindow`, `doDateRangesIntersect`, `filterValidCutoffPeriodsForProject`, `getNextSequentialYearMonth` y `getPayableBeneficiariesForRequest` con pruebas unitarias AAA.
+  2. **`frontend/src/components/FinancialEnginePanel.tsx` y `frontend/src/pages/MotorPage.tsx`**:
+     - **Causación por lote:** filtra solo proyectos `ACTIVO` con asignaciones activas, solo grupos de pago asignados a ese proyecto y solo períodos de corte dentro de la vigencia `[startDate, endDate]` del proyecto que tengan días activos y aún no hayan sido causados.
+     - **Consolidación de solicitudes:** filtra proyectos que posean causaciones elegibles libres dentro del rango del proyecto (mostrando cantidad y monto disponible).
+     - **Pagos FIFO:** filtra solicitudes aprobadas/entregadas con saldo pendiente $> 0$, restringe el selector de beneficiarios únicamente a quienes tienen deuda pendiente en esa solicitud y ajusta automáticamente el tope máximo del monto a pagar.
+  3. **`frontend/src/components/CatalogsAndAssignmentsWorkspace.tsx`**: Filtra proyectos, grupos y beneficiarios activos en el alta de asignaciones y sincroniza/restringe automáticamente `min` y `max` de las fechas `[startDate, endDate]` a la vigencia del proyecto seleccionado.
+  4. **`frontend/src/components/PettyCashAndReportsPanel.tsx`**: Filtra proyectos activos al crear caja chica, filtra cajas sin período abierto al solicitar apertura mensual, calcula automáticamente el siguiente mes secuencial (`YYYY-MM`) y el tope máximo de reposición (`authorizedAmount - carryoverBalance`), y acota el monto máximo del vale al saldo disponible del período.
+* **Explicación Técnica para la Defensa:**
+  * Se eliminó la fricción cognitiva y los rechazos `400/409` evitables en cliente haciendo que cada selector y control de fechas derive sus opciones válidas directamente de las invariantes del dominio (`RN-CAT`, `RN-CAUS`, `RN-PAG`, `RN-CAJA`), manteniendo la validación definitiva en el servidor.
+
+---
+
+### Interacción #22 — Implementación de las 5 Mejoras de UX y Suites de Pruebas de Flujos Completos del Sistema (E2E/Integración)
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity
+* **Indicación (Prompt) del Usuario:**
+  > *"Implementa las 5 mejoras, creando sus respectivos test y luego crea flujos para comprobar todo el sistemas que sean test validando flujos completos del sistema"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **`frontend/src/utils/ux-workflows.util.ts` y `frontend/src/utils/ux-workflows.util.spec.ts`** (`CC-01`, `CC-02`, `TEST-01`): Utilidades puras con 11 pruebas unitarias AAA para validación de justificaciones inline (`validateInlineJustification`), borradores y topes de liquidación de vales (`getDefaultVoucherSettlementDraft`), selección masiva con subtotal en vivo (`summarizeAccrualSelection`, `toggleAllEligibleAccruals`), detección preventiva de traslapes y cálculo de sub-rangos libres (`analyzeBeneficiaryProjectAvailability`), simulación en tiempo real de imputación FIFO (`simulateFifoPaymentPreview`) y confirmación en dos pasos (`isConfirmationArmed`).
+  2. **`frontend/src/styles/design-system.css`**: Incorporación de clases `.inline-action-box`, `.selection-toolbar` y `.availability-panel` respetando los tokens del sistema de diseño sin estilos inline.
+  3. **`frontend/src/components/CatalogsAndAssignmentsWorkspace.tsx`** (Mejoras UX #3 y #5): Panel preventivo de disponibilidad y traslapes del beneficiario en el proyecto seleccionado con autocompletado de tramos libres en un clic, además de confirmación en dos pasos al desactivar asignaciones.
+  4. **`frontend/src/components/FinancialEnginePanel.tsx`** (Mejoras UX #1, #2, #4 y #5):
+     - Acciones inline autocontenidas por fila (anulación de causación, anulación de lote, rechazo y anulación de solicitud, anulación FIFO de pago) con contador de caracteres mínimos.
+     - Barra de selección masiva (`Seleccionar todas`) con chips de resumen en tiempo real al consolidar solicitudes de pago.
+     - Tabla de previsualización de imputación FIFO en vivo antes de registrar abonos parciales o totales.
+     - Confirmación explícita en dos pasos al cerrar solicitudes de pago.
+  5. **`frontend/src/components/PettyCashAndReportsPanel.tsx`** (Mejoras UX #1 y #5): Liquidación, rechazo y anulación inline directamente en cada fila de vales (con cálculo en vivo de vuelto a retornar) y confirmación en dos pasos para el cierre mensual con arrastre y el cierre definitivo de caja chica.
+  6. **Suites de Flujos Completos del Sistema (`frontend/src/utils/system-flows.spec.ts` y `backend/src/common/system-flows/full-system-flows.spec.ts`):**
+     - **Frontend E2E (3 flujos):** Ciclo completo financiero (asignación sin traslapes, cortes válidos, consolidación masiva y simulación FIFO parcial/total), ciclo de caja chica y matriz RBAC/tablas/confirmaciones.
+     - **Backend E2E (3 flujos):** Integración real entre los servicios NestJS (`ProjectsService`, `PaymentGroupsService`, `BeneficiariesService`, `AssignmentsService`, `AccrualsService`, `PaymentRequestsService`, `PaymentsService`, `AnnulmentsService`, `PettyCashService`, `AuditService`) sobre un doble relacional transaccional en memoria validando el ciclo financiero completo, la reversión transaccional FIFO y el arrastre mensual de caja chica.
+* **Verificación técnica:**
+  - **Frontend (Vitest):** `11/11` suites / `78/78` pruebas pasando en verde.
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso (`60` módulos transformados, `0` errores).
+  - **Backend (Jest):** `32/32` suites / `231/231` pruebas pasando en verde (`npm --prefix backend test -- --runInBand`).
+
+---
+
+### Interacción #23 — Auditoría Integral y Cierre Sistemático de Carencias Técnicas y Documentales
+* **Fecha:** Noviembre 2026
+* **Herramientas / Modelos:** Antigravity
+* **Indicación (Prompt) del Usuario:**
+  > *"Haz un analisis y auditoria completa del sistema basado en los requerimientos de los docs, dime las carencias del sistema actual y si cumple con los objetivos planteados"* → *"Aplica todas las correcciones sistematicamente ajustando en consecuencia todos los .md"*
+* **Archivos Creados / Modificados y Reglas Aplicadas:**
+  1. **Parámetros globales dinámicos y transacción atómica en pagos (`RN-CAJA-03`, `RN-PAG-02`):**
+     - `backend/src/modules/petty-cash/dto/petty-cash.dto.ts`, `petty-cash.service.ts` y `petty-cash.service.spec.ts`: Conexión dinámica al parámetro `PETTY_CASH_REQUIRE_ATTACHMENT` al rendir vales de caja chica.
+     - `backend/src/modules/payments/payments.service.ts` y `payments.service.spec.ts`: Lectura de solicitud y asignación FIFO íntegramente dentro de `prisma.$transaction`, y soporte dinámico del parámetro `PAYMENT_REQUEST_SCOPE` (`REQUEST_ITEMS` / `PROJECT_ACCRUALS`).
+  2. **Inmutabilidad SQL y filtrado de auditoría (`RN-GLOB-03`, `RN-AUD-03`):**
+     - `database/03_audit_triggers.sql`: Función `fn_block_financial_deletion()` y triggers `BEFORE DELETE` (`trg_immutable_delete_*`) sobre todas las tablas financieras para impedir eliminaciones físicas directas en PostgreSQL.
+     - `frontend/src/components/UsersAndAuditWorkspace.tsx`: Filtros dedicados `Acciones de negocio (con autor)` vs. `Triggers SQL (INSERT/UPDATE/DELETE)` en la bitácora.
+  3. **Modularización Frontend (`FE-01`, `FE-02`):**
+     - Nuevos subcomponentes `frontend/src/components/FifoSimulationPreviewTable.tsx` y `frontend/src/components/AssignmentAvailabilityBanner.tsx` extraídos de `FinancialEnginePanel.tsx` y `CatalogsAndAssignmentsWorkspace.tsx`.
+  4. **Consultas clave `RN-AUD-01` / `RN-AUD-02` en `/resumen` para todos los roles:**
+     - `backend/src/modules/reports/domain/pdf-document.builder.ts` (+ `spec.ts`), `reports.service.ts` (+ `spec.ts`) y `reports.controller.ts`: Inclusión de `paymentHistory` en `getExecutiveSummaryAndDebts` y nuevo endpoint `GET /api/reports/summary/pdf` (`formatExecutiveSummaryLines`, `generateExecutiveSummaryPdf`).
+     - `frontend/src/context/WorkspaceContext.tsx` y `frontend/src/pages/ResumenPage.tsx`: Sección **"Historial de pagos ejecutados (RN-AUD-01)"** visible incluso para `ADMIN` y botón para descargar el PDF del estado de cuenta.
+  5. **Edición de usuarios por `ADMIN` (`RN-SEG-02`):**
+     - `backend/src/modules/users/dto/create-user.dto.ts` (`UpdateUserDto`), `users.service.ts` (`updateUser`), `users.controller.ts` (`PATCH /api/users/:id`) y `users.service.spec.ts`, integrados en `UsersAndAuditWorkspace.tsx`.
+  6. **Sincronización documental:** Actualización coherente de `README.md`, `docs/ESTANDARES_DESARROLLO_CLEAN_CODE.md`, `docs/INFORME_ESTADO_Y_PENDIENTES.md`, `docs/QA_VISTAS_Y_PRUEBAS.md` y `docs/BITACORA_IA.md`.
+* **Verificación técnica:**
+  - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde; `tsc -b && vite build` exitoso (`62` módulos, `0` estilos inline).
+  - **Backend (Jest + Build):** `32/32` suites / `238/238` tests en verde; `nest build` exitoso.
+  - **Triggers SQL, Docker y Smoke Test:** Triggers `BEFORE DELETE` aplicados en PostgreSQL, contenedores reconstruidos (`frontend`, `backend`) y `scripts/api-smoke-test.mjs` ejecutado en vivo.
+
+### Interacción #24 — Cierre de Detalles Finos de Inmutabilidad SQL, Paginación PDF, Límite Dinámico de Uploads y Tipado Estricto
+* **Prompt / Solicitud del Usuario:** Aprobación (`"Sí"`) para aplicar los 5 ajustes finales de cierre detectados en la auditoría integral del MVP.
+* **Respuesta / Acción Realizada:**
+  1. **Inmutabilidad de montos base en PostgreSQL (`RN-GLOB-03`):** En `database/03_audit_triggers.sql`, se agregó `fn_block_financial_amount_mutation()` (parametrizada por columna vía `TG_ARGV[0]` usando `to_jsonb(OLD)`/`to_jsonb(NEW)` para evitar resolución estática de columnas entre tablas) y los 6 triggers `BEFORE UPDATE` (`trg_immutable_amount_*`) sobre `accruals`, `payments`, `payment_allocations`, `payment_requests`, `payment_request_items` y `petty_cash_vouchers` para impedir alteraciones de montos base manteniendo libres las columnas operativas (`paid_amount`, `balance_due`, `status`, liquidación/desembolso).
+  2. **Paginación multipágina en exportación PDF (`RN-AUD-01`):** En `backend/src/modules/reports/domain/pdf-document.builder.ts`, se refactorizó `buildSimplePdfBuffer` con `MAX_LINES_PER_PAGE = 42` y el helper `buildPageContentStream` para emitir páginas consecutivas (`/Count N`, subtítulo `Pagina i de N`), junto con su prueba unitaria AAA en `pdf-document.builder.spec.ts`.
+  3. **Validación dinámica de tamaño máximo de adjuntos (`MAX_UPLOAD_SIZE_MB`):** En `backend/src/modules/uploads/uploads.controller.ts`, se inyectó `@Optional() prisma?: PrismaService` para leer el parámetro `MAX_UPLOAD_SIZE_MB` desde `system_parameters` durante `upload()`, eliminar el archivo físico temporal y lanzar `BadRequestException` si excede el umbral configurado.
+  4. **Eliminación total de `: any` (`CC-01`):** En `backend/src/common/system-flows/full-system-flows.spec.ts`, se reemplazaron todas las anotaciones `: any` del repositorio en memoria por tipos estrictos (`RowRecord`, `FilterOperator`, `QueryArgs`, `BatchCreateArgs`, `updateRowById`).
+  5. **Sincronización de `DESIGN.md`:** Se actualizó la fila de **Vista 1** (`/resumen`) en `DESIGN.md` para reflejar los dos folios implementados (saldos por beneficiario con exportación PDF e historial de pagos ejecutados `RN-AUD-01`).
+* **Verificación técnica:**
+  - **Limpieza estática (`CC-01` / `FE-01`):** `0` ocurrencias de `: any` en archivos `.ts`/`.tsx` de `backend/src/` y `frontend/src/`, y `0` estilos inline (`style={{`) en `frontend/src/`.
+  - **Backend (Jest + Build):** `32/32` suites / `239/239` tests en verde (`jest --runInBand`); `nest build` exitoso.
+  - **Frontend (Vitest + Build):** `11/11` suites / `78/78` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos transformados).
+  - **Triggers SQL, Docker y Smoke Test:** Aplicado `database/03_audit_triggers.sql` en `scpa_postgres` (verificados 6 triggers `trg_immutable_amount_*` `BEFORE UPDATE` y bloqueo efectivo de modificación sobre `payment_requests.total_amount`), contenedor `scpa_backend` reconstruido y `node scripts/api-smoke-test.mjs` ejecutado en vivo con resultado `68 OK / 0 FAIL`.
+
+### Interacción #25 — Auditoría y Adecuación Integral de Unit Tests 1:1 (`TEST-01`) y Flujos E2E (`RN-*`)
+* **Prompt / Solicitud del Usuario:** `"Ahora audita todos los unitest y test, así como asegurate que los test de los flows esten correctamente adecuados los requerimientos y objetivos"`
+* **Respuesta / Acción Realizada:**
+  1. **Completitud 1:1 en Backend (`TEST-01`):**
+     - `backend/src/modules/payment-groups/payment-groups.service.spec.ts`: Añadido bloque `describe('removePeriod', ...)` (Happy Path con auditoría `DELETE_PAYMENT_GROUP_PERIOD`, `NotFoundException` si no existe o pertenece a otro grupo, `ConflictException` si tiene lotes asociados `RN-CAT-03`), más casos de error en `updatePaymentGroup` y `createPeriod`.
+     - `backend/src/modules/uploads/domain/upload-file.helper.spec.ts`: Completados 3 escenarios AAA por helper (`isAllowedUploadMimeType`, `buildStoredFileName`) y añadido bloque `describe('UploadsController.upload', ...)` probando `MAX_UPLOAD_SIZE_MB` dinámico, ausencia de `PrismaService` y rechazo por archivo faltante o exceso de tamaño (`RN-CAJA-03`).
+     - `backend/src/modules/parameters/parameters.service.spec.ts`: Completados 3 escenarios AAA por método (`findAll`, `create`, `update`, `remove`) incluyendo actualización parcial e invariantes `RN-SEG-02`.
+  2. **Completitud 1:1 en Frontend (`TEST-01`):**
+     - `frontend/src/utils/api-client.util.spec.ts`: Añadidos bloques AAA completos para `apiRequest` y `downloadAuthenticatedPdf`, además de completar los 3 escenarios en `buildAuthHeaders`, `extractApiErrorMessage` y `uploadAuthenticatedFile`.
+     - `frontend/src/utils/range-validity.util.spec.ts` y `ux-workflows.util.spec.ts`: Añadido `describe('toIsoDateSlice', ...)` y completados 3 escenarios AAA en `getNextSequentialYearMonth`, `getPayableBeneficiariesForRequest`, `validateInlineJustification`, `getDefaultVoucherSettlementDraft`, `summarizeAccrualSelection`, `analyzeBeneficiaryProjectAvailability`, `simulateFifoPaymentPreview` e `isConfirmationArmed`.
+  3. **Adecuación de Flujos E2E a Requerimientos (`RN-*`):**
+     - `backend/src/common/system-flows/full-system-flows.spec.ts`: Ampliado el repositorio en memoria tipado (cero `any`) para soportar `UsersService`, `ParametersService` y `ReportsService`, agregando **Flujo 4** (multiplicidad en 2 proyectos `RN-CAT-04`, rechazo con liberación de causación `RN-PAG-01` y liquidación tras cierre de proyecto `RN-CAT-02`) y **Flujo 5** (gobernanza `ADMIN`, parámetros dinámicos `PETTY_CASH_REQUIRE_ATTACHMENT=false` y `PAYMENT_REQUEST_SCOPE=PROJECT_ACCRUALS`, cuadre `RN-AUD-01` y los 3 PDFs oficiales + marca de agua `RN-AUD-02`).
+     - `frontend/src/utils/system-flows.spec.ts`: Verificación de recausación tras lote `ANULADO` en `Flujo 1` (`RN-CAUS-04`) y nuevo **Flujo 4** sobre ciclo de sesión, persistencia y guardas por URL/rol (`RN-SEG-02`).
+     - `scripts/api-smoke-test.mjs`: Ampliado de 68 a 72 verificaciones en vivo añadiendo rechazo con reutilización de causación (`RN-PAG-01`), edición `PATCH /api/users/:id`, validación de `paymentHistory` en `/api/reports/summary` y descarga `GET /api/reports/summary/pdf`.
+* **Verificación técnica:**
+  - **Limpieza estática (`CC-01` / `FE-01`):** `0` usos de `: any` en archivos `.ts`/`.tsx` de `backend/src/` y `frontend/src/`; `0` estilos inline (`style={{`).
+  - **Backend (Jest + Build):** `32/32` suites / `256/256` tests en verde (`jest --runInBand`); `nest build` exitoso.
+  - **Frontend (Vitest + Build):** `11/11` archivos / `104/104` tests en verde (`vitest run`); `tsc -b && vite build` exitoso (`62` módulos).
+  - **Smoke Test API en vivo:** `node scripts/api-smoke-test.mjs` finalizado con **`72 OK / 0 FAIL`**.
+
+### Interacción #26 — Creación del Glosario y Guía Explicativa del Modelo de Negocio (`docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md`)
+* **Prompt / Solicitud del Usuario:** `"Ahora crea un documento explicando todos los terminos del modelo de negocios, como causaciones, caja chica etc"`
+* **Respuesta / Acción Realizada:**
+  1. Se redactó `docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md` cubriendo en profundidad todos los conceptos del dominio financiero y operativo de SCPA — FACYT: invariantes `RN-GLOB`, separación Beneficiario vs. Usuario y roles `ADMIN`/`GENERADOR`/`RECEPTOR` (`RN-SEG`), proyectos/grupos/cortes/asignaciones (`RN-CAT`), causación vs. pago, prorrateo por días calendario reales con ejemplos numéricos (`RN-CAUS`), máquina de estados de solicitudes y algoritmo FIFO (`RN-PAG`), flujo completo de cajas chicas, saldo disponible, vueltos y arrastre mensual (`RN-CAJA`), anulaciones justificadas, parámetros globales reales, PDFs oficiales, auditoría append-only (`RN-AUD`) y diccionario cruzado Español ↔ Entidad ↔ Tabla ↔ Regla `RN-*`.
+  2. Se enlazó el documento en `README.md` (secciones `3. Estructura del Repositorio` y `8. Documentación Adicional para Evaluación`).
+* **Verificación técnica:** Documento verificado contra `docs/REGLAS_DE_NEGOCIO.md`, `backend/prisma/schema.prisma`, `database/02_seed_data.sql` y `database/03_audit_triggers.sql`.
+
+---
+
+### Interacción #27 — Estandarización de toda la tipografía del sistema a la familia Montserrat
 * **Fecha:** Noviembre 2026 · **Rama:** `dervis`
 * **Herramientas / Modelos:** Antigravity (Gemini 3.8 Flash)
 * **Indicación (Prompt) del Usuario:**
   > *"ok puedes poner toda la tipografia en monserrat"*
 * **Motivación y Arquitectura:**
-  Uniformar la identidad visual del sistema bajo una sola familia tipográfica geométrica, limpia y altamente legible (`Montserrat`), aplicando la tipografía tanto a los títulos de área documental (`--font-display`) como a los textos de trabajo diario, tablas, formularios y controles (`--font-ui`), preservando las propiedades contables tabulares (`tabular-nums` / `tnum`) para las cifras monetarias en USD.
+  Uniformar la identidad visual del sistema bajo una sola familia tipográfica geométrica, limpia y altamente legible (`Montserrat`), aplicando la tipografía tanto a los títulos de área documental (`--font-display`) como a los textos de trabajo diario, tablas, formularios, modales y controles (`--font-ui`), preservando las propiedades contables tabulares (`tabular-nums` / `tnum`) para las cifras monetarias en USD.
 * **Implementación:**
   1. **`frontend/index.html`**: Enlace a Google Fonts para `Montserrat` con pesos 300, 400, 500, 600, 700 y 800 (normales e itálicas).
   2. **`frontend/src/styles/design-system.css`**: Configuración unificada de los tokens `--font-display` y `--font-ui` a `'Montserrat', system-ui, -apple-system, 'Segoe UI', sans-serif`.
 * **Verificación técnica:**
-  - **Pruebas Frontend:** 7 suites / `41/41` pruebas pasando en verde con Vitest.
-  - **Compilación Frontend:** `tsc -b && vite build` exitoso sin errores en 1.6s. Hot-reload automático en Vite dev server.
+  - **Pruebas Frontend:** 11 archivos / `104/104` pruebas pasando en verde con Vitest.
+  - **Compilación Frontend:** `tsc -b && vite build` exitoso sin errores ni advertencias (`62` módulos transformados). Hot-reload automático en Vite dev server (`http://localhost:5173/`).
+

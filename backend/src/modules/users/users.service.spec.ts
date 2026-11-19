@@ -207,4 +207,71 @@ describe('UsersService (RN-SEG-02 Gestión de Usuarios por ADMIN)', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('updateUser', () => {
+    it('debe actualizar nombre, rol y contraseña de un usuario registrando auditoría (Happy Path)', async () => {
+      // Arrange
+      prismaMock.user.findUnique.mockResolvedValueOnce({
+        id: 'u-target',
+        fullName: 'Nombre Anterior',
+        role: UserRole.GENERADOR,
+      });
+      prismaMock.user.update.mockResolvedValueOnce({
+        id: 'u-target',
+        email: 'coord@uc.edu.ve',
+        fullName: 'Nombre Actualizado',
+        role: UserRole.RECEPTOR,
+        isActive: true,
+      });
+
+      // Act
+      const updated = await service.updateUser(
+        'u-target',
+        {
+          fullName: '  Nombre Actualizado ',
+          role: UserRole.RECEPTOR,
+          password: 'NewPassword2026!',
+        },
+        adminActor,
+      );
+
+      // Assert
+      expect(updated.fullName).toBe('Nombre Actualizado');
+      expect(updated.role).toBe(UserRole.RECEPTOR);
+      expect(auditMock.recordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'UPDATE_USER',
+          recordId: 'u-target',
+        }),
+      );
+    });
+
+    it('debe lanzar NotFoundException si el usuario a editar no existe (Edge Case)', async () => {
+      // Arrange
+      prismaMock.user.findUnique.mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        service.updateUser('inexistente', { fullName: 'Test' }, adminActor),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe impedir que el ADMIN degrade su propio rol en sesión (Violación RN-SEG-02)', async () => {
+      // Arrange
+      prismaMock.user.findUnique.mockResolvedValueOnce({
+        id: adminActor.id,
+        fullName: adminActor.fullName,
+        role: UserRole.ADMIN,
+      });
+
+      // Act & Assert
+      await expect(
+        service.updateUser(
+          adminActor.id,
+          { role: UserRole.GENERADOR },
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
 });

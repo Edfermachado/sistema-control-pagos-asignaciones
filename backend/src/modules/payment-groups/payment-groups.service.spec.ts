@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Periodicity, UserRole } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -201,6 +205,117 @@ describe('PaymentGroupsService (RN-CAT-03 Grupos de Pago)', () => {
           adminActor,
         ),
       ).rejects.toThrow(ConflictException);
+    });
+
+    it('debe lanzar NotFoundException o ConflictException al actualizar un grupo inexistente o con nombre duplicado (Violación RN-CAT-03)', async () => {
+      // Arrange (Grupo no existe)
+      prismaMock.paymentGroup.findUnique.mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        service.updatePaymentGroup('pg-no', { name: 'Nuevo' }, adminActor),
+      ).rejects.toThrow(NotFoundException);
+
+      // Arrange (Nombre duplicado)
+      prismaMock.paymentGroup.findUnique
+        .mockResolvedValueOnce({
+          id: 'pg-1',
+          name: 'Original',
+          periodicity: Periodicity.QUINCENAL,
+          cutoffRules: '15 y 30',
+          isActive: true,
+        })
+        .mockResolvedValueOnce({ id: 'pg-2', name: 'Duplicado' });
+
+      await expect(
+        service.updatePaymentGroup('pg-1', { name: 'Duplicado' }, adminActor),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('debe rechazar crear un período cuya fecha fin sea anterior a la fecha inicio (Violación RN-CAT-03)', async () => {
+      // Arrange
+      prismaMock.paymentGroup.findUnique.mockResolvedValueOnce({ id: 'pg-1' });
+
+      // Act & Assert
+      await expect(
+        service.createPeriod(
+          'pg-1',
+          { periodStart: '2026-12-20', periodEnd: '2026-12-10' },
+          adminActor,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('removePeriod', () => {
+    it('debe eliminar un período sin lotes asociados y registrar auditoría (Happy Path)', async () => {
+      // Arrange
+      const period = {
+        id: 'per-1',
+        paymentGroupId: 'pg-1',
+        periodStart: new Date('2026-12-01T00:00:00Z'),
+        periodEnd: new Date('2026-12-15T00:00:00Z'),
+        label: 'Diciembre Q1',
+      };
+      prismaMock.paymentGroupPeriod.findUnique.mockResolvedValueOnce(period);
+      prismaMock.accrualBatch.findFirst.mockResolvedValueOnce(null);
+      prismaMock.paymentGroupPeriod.delete.mockResolvedValueOnce(period);
+
+      // Act
+      const result = await service.removePeriod('pg-1', 'per-1', adminActor);
+
+      // Assert
+      expect(result).toEqual({ deleted: true, id: 'per-1' });
+      expect(prismaMock.paymentGroupPeriod.delete).toHaveBeenCalledWith({
+        where: { id: 'per-1' },
+      });
+      expect(auditMock.recordLog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'DELETE_PAYMENT_GROUP_PERIOD',
+          recordId: 'per-1',
+          newValues: null,
+        }),
+      );
+    });
+
+    it('debe lanzar NotFoundException si el período no existe o pertenece a otro grupo (Edge Case)', async () => {
+      // Arrange (No existe)
+      prismaMock.paymentGroupPeriod.findUnique.mockResolvedValueOnce(null);
+
+      // Act & Assert
+      await expect(
+        service.removePeriod('pg-1', 'no-existe', adminActor),
+      ).rejects.toThrow(NotFoundException);
+
+      // Arrange (Otro grupo)
+      prismaMock.paymentGroupPeriod.findUnique.mockResolvedValueOnce({
+        id: 'per-2',
+        paymentGroupId: 'pg-otro',
+      });
+
+      await expect(
+        service.removePeriod('pg-1', 'per-2', adminActor),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('debe lanzar ConflictException si el período ya tiene un lote de causación asociado (Violación RN-CAT-03)', async () => {
+      // Arrange
+      prismaMock.paymentGroupPeriod.findUnique.mockResolvedValueOnce({
+        id: 'per-1',
+        paymentGroupId: 'pg-1',
+        periodStart: new Date('2026-11-01T00:00:00Z'),
+        periodEnd: new Date('2026-11-15T00:00:00Z'),
+        label: 'Nov Q1',
+      });
+      prismaMock.accrualBatch.findFirst.mockResolvedValueOnce({
+        id: 'batch-1',
+      });
+
+      // Act & Assert
+      await expect(
+        service.removePeriod('pg-1', 'per-1', adminActor),
+      ).rejects.toThrow(ConflictException);
+      expect(prismaMock.paymentGroupPeriod.delete).not.toHaveBeenCalled();
     });
   });
 

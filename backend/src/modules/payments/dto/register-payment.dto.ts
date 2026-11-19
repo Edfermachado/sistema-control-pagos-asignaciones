@@ -1,9 +1,9 @@
 import { IsDateString, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class RegisterPaymentDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código único del recibo es obligatorio.' })
-  receiptCode!: string;
+  receiptCode?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El ID de la solicitud de pago aprobada es obligatorio.' })

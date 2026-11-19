@@ -383,7 +383,7 @@ async function main() {
   const requestBytes = Buffer.from(await requestPdf.arrayBuffer());
   check('PDF de solicitud consolidada', requestPdf.ok && requestBytes.subarray(0, 4).toString() === '%PDF', `HTTP ${requestPdf.status}`);
 
-  // 7. Anulación de lote y solicitud
+  // 7. Rechazo con liberación de causación + Anulación de lote y solicitud
   const batch2Body = {
     code: `LOTE-SMK2-${stamp}`,
     projectId: project.id,
@@ -396,8 +396,35 @@ async function main() {
     token: generadorToken,
     body: batch2Body,
   });
-  check('generar segundo lote para anulación', batch2Res.status === 201, `HTTP ${batch2Res.status}`);
+  check('generar segundo lote para rechazo/anulación', batch2Res.status === 201, `HTTP ${batch2Res.status}`);
   const accrual2 = batch2Res.payload?.accruals?.[0];
+
+  const rejectedReqCreate = await request('/payment-requests', {
+    method: 'POST',
+    token: generadorToken,
+    body: {
+      code: `SOL-REJ-${stamp}`,
+      projectId: project.id,
+      accrualIds: [accrual2.id],
+    },
+  });
+  await request(`/payment-requests/${rejectedReqCreate.payload.id}/send`, {
+    method: 'PATCH',
+    token: generadorToken,
+  });
+  const rejectReqRes = await request(`/payment-requests/${rejectedReqCreate.payload.id}/review`, {
+    method: 'PATCH',
+    token: receptorToken,
+    body: {
+      decision: 'RECHAZADA',
+      rejectionReason: 'Revisión solicitada por ajuste de soporte',
+    },
+  });
+  check(
+    'RECEPTOR rechaza solicitud y libera causación (RN-PAG-01)',
+    rejectReqRes.ok && rejectReqRes.payload?.status === 'RECHAZADA',
+    `HTTP ${rejectReqRes.status}`,
+  );
 
   const request2Res = await request('/payment-requests', {
     method: 'POST',
@@ -408,7 +435,7 @@ async function main() {
       accrualIds: [accrual2.id],
     },
   });
-  check('crear solicitud para anulación', request2Res.status === 201, `HTTP ${request2Res.status}`);
+  check('reutilizar causación liberada en nueva solicitud (RN-PAG-01)', request2Res.status === 201, `HTTP ${request2Res.status}`);
 
   const send2 = await request(`/payment-requests/${request2Res.payload.id}/send`, {
     method: 'PATCH',
@@ -609,6 +636,17 @@ async function main() {
   });
   check('ADMIN crea usuario', userRes.status === 201, `HTTP ${userRes.status} ${JSON.stringify(userRes.payload)}`);
 
+  const updateUserRes = await request(`/users/${userRes.payload.id}`, {
+    method: 'PATCH',
+    token: adminToken,
+    body: { fullName: `Usuario Smoke Editado ${stamp}` },
+  });
+  check(
+    'ADMIN edita usuario (RN-SEG-02)',
+    updateUserRes.ok && String(updateUserRes.payload?.fullName).includes('Editado'),
+    `HTTP ${updateUserRes.status}`,
+  );
+
   const businessAudit = await request('/audit-logs?action=CREATE_PETTY_CASH&limit=10', {
     token: adminToken,
   });
@@ -621,6 +659,21 @@ async function main() {
 
   const summaryRes = await request('/reports/summary', { token: receptorToken });
   check('consulta clave de totales y deudas', summaryRes.ok && typeof summaryRes.payload?.totalAccruedUsd === 'string' && Array.isArray(summaryRes.payload?.beneficiaryBalances), `HTTP ${summaryRes.status}`);
+  check(
+    'consulta clave incluye historial de pagos ejecutados (RN-AUD-01)',
+    summaryRes.ok && Array.isArray(summaryRes.payload?.paymentHistory) && summaryRes.payload.paymentHistory.length > 0,
+    `count=${summaryRes.payload?.paymentHistory?.length ?? 'none'}`,
+  );
+
+  const summaryPdfRes = await fetch(`${API_URL}/reports/summary/pdf`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const summaryPdfBytes = Buffer.from(await summaryPdfRes.arrayBuffer());
+  check(
+    'PDF de Estado de Cuenta General (GET /reports/summary/pdf)',
+    summaryPdfRes.ok && summaryPdfBytes.subarray(0, 4).toString() === '%PDF',
+    `HTTP ${summaryPdfRes.status}`,
+  );
 
   // Resumen
   console.log(`\nResultado: ${passed} OK / ${failed} FAIL`);

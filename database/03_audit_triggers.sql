@@ -103,3 +103,91 @@ CREATE TRIGGER trg_audit_logs_immutable
 BEFORE UPDATE OR DELETE ON "audit_logs"
 FOR EACH ROW
 EXECUTE FUNCTION fn_block_audit_mutation();
+
+-- 4. Inmutabilidad Contable en BD (RN-GLOB-03): prohibir DELETE físico en tablas financieras
+CREATE OR REPLACE FUNCTION fn_block_financial_deletion()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'RN-GLOB-03: Prohibido eliminar físicamente registros financieros en %. Utilice Anulación Justificada.', TG_TABLE_NAME;
+END;
+$$;
+
+DO $$
+DECLARE
+    tbl TEXT;
+    immutable_tables TEXT[] := ARRAY[
+        'accrual_batches',
+        'accruals',
+        'payment_requests',
+        'payment_request_items',
+        'payments',
+        'payment_allocations',
+        'annulments',
+        'petty_cashes',
+        'petty_cash_periods',
+        'petty_cash_vouchers'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY immutable_tables LOOP
+        EXECUTE format(
+            'DROP TRIGGER IF EXISTS %I ON %I',
+            'trg_immutable_delete_' || tbl,
+            tbl
+        );
+        EXECUTE format(
+            'CREATE TRIGGER %I BEFORE DELETE ON %I FOR EACH ROW EXECUTE FUNCTION fn_block_financial_deletion()',
+            'trg_immutable_delete_' || tbl,
+            tbl
+        );
+    END LOOP;
+END;
+$$;
+
+-- 5. Inmutabilidad de montos base en BD (RN-GLOB-03): prohibir UPDATE directo sobre montos originales
+CREATE OR REPLACE FUNCTION fn_block_financial_amount_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_col TEXT := TG_ARGV[0];
+    v_old_val NUMERIC;
+    v_new_val NUMERIC;
+BEGIN
+    v_old_val := (to_jsonb(OLD) ->> v_col)::numeric;
+    v_new_val := (to_jsonb(NEW) ->> v_col)::numeric;
+    IF v_old_val IS DISTINCT FROM v_new_val THEN
+        RAISE EXCEPTION 'RN-GLOB-03: Prohibido modificar % en %.', v_col, TG_TABLE_NAME;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DO $$
+DECLARE
+    idx INT;
+    amount_protected_specs TEXT[][] := ARRAY[
+        ['accruals', 'prorated_amount'],
+        ['payments', 'amount'],
+        ['payment_allocations', 'allocated_amount'],
+        ['payment_requests', 'total_amount'],
+        ['payment_request_items', 'requested_amount'],
+        ['petty_cash_vouchers', 'requested_amount']
+    ];
+BEGIN
+    FOR idx IN 1 .. array_length(amount_protected_specs, 1) LOOP
+        EXECUTE format(
+            'DROP TRIGGER IF EXISTS %I ON %I',
+            'trg_immutable_amount_' || amount_protected_specs[idx][1],
+            amount_protected_specs[idx][1]
+        );
+        EXECUTE format(
+            'CREATE TRIGGER %I BEFORE UPDATE ON %I FOR EACH ROW EXECUTE FUNCTION fn_block_financial_amount_mutation(%L)',
+            'trg_immutable_amount_' || amount_protected_specs[idx][1],
+            amount_protected_specs[idx][1],
+            amount_protected_specs[idx][2]
+        );
+    END LOOP;
+END;
+$$;

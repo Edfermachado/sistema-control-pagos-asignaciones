@@ -60,6 +60,7 @@ export function UsersAndAuditWorkspace({
 }: UsersAndAuditProps): React.ReactElement {
   const isAdmin = activeRole === UserRole.ADMIN;
 
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [newEmail, setNewEmail] = useState('auditor.facyt@uc.edu.ve');
   const [newName, setNewName] = useState('Lic. Ricardo Gómez (FACYT)');
   const [newPassword, setNewPassword] = useState('PasswordUC2026!');
@@ -108,11 +109,13 @@ export function UsersAndAuditWorkspace({
   );
 
   // Auditoría filtrada y paginada
-  const filteredAuditByAction = filterTableByProperty(
-    auditLogs,
-    'action',
-    auditActionFilter,
-  );
+  const DB_TRIGGER_ACTIONS = ['INSERT', 'UPDATE', 'DELETE'];
+  const filteredAuditByAction =
+    auditActionFilter === 'BUSINESS_ONLY'
+      ? auditLogs.filter((log) => !DB_TRIGGER_ACTIONS.includes(log.action))
+      : auditActionFilter === 'DB_TRIGGERS'
+        ? auditLogs.filter((log) => DB_TRIGGER_ACTIONS.includes(log.action))
+        : filterTableByProperty(auditLogs, 'action', auditActionFilter);
   const filteredAuditLogs = searchTableItems(
     filteredAuditByAction,
     auditSearch,
@@ -180,24 +183,58 @@ export function UsersAndAuditWorkspace({
     }
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
+  const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await apiRequest('/users', {
-        method: 'POST',
-        token,
-        body: {
-          email: newEmail,
-          fullName: newName,
-          password: newPassword,
-          role: newRole,
-        },
-      });
-      onNotify('success', `Usuario '${newEmail}' creado con rol ${newRole}.`);
+      if (editingUserId) {
+        await apiRequest(`/users/${editingUserId}`, {
+          method: 'PATCH',
+          token,
+          body: {
+            fullName: newName,
+            role: newRole,
+            ...(newPassword.trim() ? { password: newPassword.trim() } : {}),
+          },
+        });
+        onNotify('success', `Usuario '${newEmail}' actualizado.`);
+        setEditingUserId(null);
+        setNewEmail('auditor.facyt@uc.edu.ve');
+        setNewName('Lic. Ricardo Gómez (FACYT)');
+        setNewPassword('PasswordUC2026!');
+        setNewRole(UserRole.GENERADOR);
+      } else {
+        await apiRequest('/users', {
+          method: 'POST',
+          token,
+          body: {
+            email: newEmail,
+            fullName: newName,
+            password: newPassword,
+            role: newRole,
+          },
+        });
+        onNotify('success', `Usuario '${newEmail}' creado con rol ${newRole}.`);
+      }
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
+  };
+
+  const startEditingUser = (user: LiveUser) => {
+    setEditingUserId(user.id);
+    setNewEmail(user.email);
+    setNewName(user.fullName);
+    setNewRole(user.role);
+    setNewPassword('');
+  };
+
+  const cancelEditingUser = () => {
+    setEditingUserId(null);
+    setNewEmail('auditor.facyt@uc.edu.ve');
+    setNewName('Lic. Ricardo Gómez (FACYT)');
+    setNewRole(UserRole.GENERADOR);
+    setNewPassword('PasswordUC2026!');
   };
 
   const handleToggleUserStatus = async (userId: string, isActive: boolean) => {
@@ -234,7 +271,7 @@ export function UsersAndAuditWorkspace({
             </div>
           </div>
           <div className="sheet__body">
-            <form className="form-grid" onSubmit={handleCreateUser}>
+            <form className="form-grid" onSubmit={handleSaveUser}>
               <div className="field">
                 <label className="field__label" htmlFor="user-email">
                   Correo institucional
@@ -246,6 +283,7 @@ export function UsersAndAuditWorkspace({
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                   placeholder="Correo institucional"
+                  disabled={Boolean(editingUserId)}
                   required
                 />
               </div>
@@ -281,7 +319,9 @@ export function UsersAndAuditWorkspace({
               </div>
               <div className="field">
                 <label className="field__label" htmlFor="user-password">
-                  Contraseña
+                  {editingUserId
+                    ? 'Nueva contraseña (opcional)'
+                    : 'Contraseña'}
                 </label>
                 <input
                   id="user-password"
@@ -289,13 +329,28 @@ export function UsersAndAuditWorkspace({
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Contraseña segura"
-                  required
+                  placeholder={
+                    editingUserId
+                      ? 'Dejar vacío para conservar la actual'
+                      : 'Contraseña segura'
+                  }
+                  required={!editingUserId}
                 />
               </div>
-              <button type="submit" className="btn">
-                + Crear Usuario
-              </button>
+              <div className="btn-group">
+                <button type="submit" className="btn">
+                  {editingUserId ? 'Actualizar Usuario' : '+ Crear Usuario'}
+                </button>
+                {editingUserId && (
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={cancelEditingUser}
+                  >
+                    Cancelar
+                  </button>
+                )}
+              </div>
             </form>
 
             <TableFilterBar
@@ -362,15 +417,24 @@ export function UsersAndAuditWorkspace({
                         </span>
                       </td>
                       <td>
-                        <button
-                          type="button"
-                          className="btn btn--ghost btn--sm"
-                          onClick={() =>
-                            handleToggleUserStatus(u.id, u.isActive)
-                          }
-                        >
-                          {u.isActive ? 'Desactivar' : 'Activar'}
-                        </button>
+                        <div className="btn-group">
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() => startEditingUser(u)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm"
+                            onClick={() =>
+                              handleToggleUserStatus(u.id, u.isActive)
+                            }
+                          >
+                            {u.isActive ? 'Desactivar' : 'Activar'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -538,6 +602,8 @@ export function UsersAndAuditWorkspace({
             filterValue={auditActionFilter}
             filterOptions={[
               { label: 'Todas las acciones', value: 'ALL' },
+              { label: 'Acciones de negocio (con autor)', value: 'BUSINESS_ONLY' },
+              { label: 'Triggers SQL (INSERT/UPDATE/DELETE)', value: 'DB_TRIGGERS' },
               { label: 'INSERT (Creación)', value: 'INSERT' },
               { label: 'UPDATE (Modificación)', value: 'UPDATE' },
               { label: 'DELETE (Eliminación)', value: 'DELETE' },

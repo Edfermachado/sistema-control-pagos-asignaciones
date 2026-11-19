@@ -9,7 +9,7 @@ import { AuthenticatedUser } from '../../common/decorators/current-user.decorato
 import { hashPassword } from '../../common/security/crypto.helper';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { CreateUserDto } from './dto/create-user.dto';
+import { CreateUserDto, UpdateUserDto } from './dto/create-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -130,6 +130,69 @@ export class UsersService {
       recordId: targetUserId,
       oldValues: { isActive: existing.isActive },
       newValues: { isActive: updated.isActive },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Actualiza nombre, rol o contraseña de un usuario del sistema (Exclusivo ADMIN / RN-SEG-02).
+   */
+  async updateUser(
+    targetUserId: string,
+    dto: UpdateUserDto,
+    actor: AuthenticatedUser,
+  ) {
+    const existing = await this.prisma.user.findUnique({
+      where: { id: targetUserId },
+    });
+
+    if (!existing) {
+      throw new NotFoundException(`El usuario con ID ${targetUserId} no existe.`);
+    }
+
+    if (
+      targetUserId === actor.id &&
+      dto.role !== undefined &&
+      dto.role !== UserRole.ADMIN
+    ) {
+      throw new BadRequestException(
+        '[RN-SEG-02] El Administrador no puede degradar su propio rol en sesión.',
+      );
+    }
+
+    const updated = await this.prisma.user.update({
+      where: { id: targetUserId },
+      data: {
+        ...(dto.fullName !== undefined ? { fullName: dto.fullName.trim() } : {}),
+        ...(dto.role !== undefined ? { role: dto.role } : {}),
+        ...(dto.password ? { passwordHash: hashPassword(dto.password) } : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        role: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
+
+    await this.auditService.recordLog({
+      userId: actor.id,
+      userRole: actor.role,
+      action: 'UPDATE_USER',
+      tableName: 'users',
+      recordId: targetUserId,
+      oldValues: {
+        fullName: existing.fullName,
+        role: existing.role,
+      },
+      newValues: {
+        fullName: updated.fullName,
+        role: updated.role,
+        passwordChanged: Boolean(dto.password),
+      },
     });
 
     return updated;

@@ -145,6 +145,44 @@ Reglas semánticas fijas:
   (desplazamiento horizontal con encabezados pegados a su columna).
 - ≤ 600 px: formularios a una columna, botones a ancho completo cuando formen un grupo.
 
+### Rutas y navegación (una vista por URL)
+
+Cada espacio de trabajo tiene su propia ruta y el navegador es la fuente de verdad de la navegación:
+
+| Ruta | Espacio | Roles con acceso |
+|---|---|---|
+| `/login` | Portal de acceso | público |
+| `/resumen` | Resumen y deudas (1) | ADMIN, GENERADOR, RECEPTOR |
+| `/catalogos` | Catálogos y asignaciones (2) | ADMIN, GENERADOR, RECEPTOR |
+| `/causacion` | Causación y pagos (3) | GENERADOR, RECEPTOR |
+| `/cajas-chicas` | Cajas chicas (4) | GENERADOR, RECEPTOR |
+| `/auditoria` | Usuarios y auditoría (5) | ADMIN, RECEPTOR |
+
+Reglas:
+- La raíz `/` redirige al primer espacio permitido del rol o al portal si no hay sesión.
+- Una ruta prohibida para el rol **no se muestra vacía**: redirige al primer espacio permitido y
+  explica el motivo citando `RN-SEG-02`. El riel nunca ofrece una ruta que el rol no puede abrir.
+- Cualquier ruta desconocida muestra una pantalla propia con dos salidas (resumen y acceso).
+- La sesión se guarda en `sessionStorage` (ámbito de pestaña): recargar mantiene la vista y la
+  sesión; cerrar la pestaña la elimina. El `logout` limpia el almacenamiento y vuelve a `/login`.
+- Al entrar sin sesión a una ruta protegida, el portal recuerda el destino y vuelve a él tras
+  autenticarse.
+- Mientras se restaura la sesión se muestra un estado de carga (`.app-boot`), nunca la pantalla de
+  acceso a medio pintar.
+
+### Acciones destructivas y justificaciones
+
+Las operaciones que una regla de negocio obliga a justificar (anular pago, causación, lote, solicitud
+o vale; rechazar solicitud o vale) siguen una sola pauta en todas las vistas:
+
+- El campo de motivo **nunca viene precargado**: lo escribe quien decide.
+- El botón que ejecuta la acción permanece **inhabilitado** hasta que el motivo alcanza el mínimo que
+  exige la regla (10 caracteres para anular, 5 para rechazar), y su `title` explica por qué.
+- El campo se **vacía al terminar** la operación, para que la justificación de una acción no quede
+  disponible para la siguiente.
+- El resultado se comunica por el aviso de la vista citando la regla aplicada, y el registro queda en
+  la bitácora de auditoría con el texto escrito.
+
 ---
 
 ## 7. Componentes y clases canónicas
@@ -196,7 +234,7 @@ una variante, se extiende la hoja de estilos con un token existente.
 
 | Vista | Regla propia |
 |---|---|
-| **1. Resumen y deudas** | Abre con `.ledger` (tres cifras + lateral). Debajo, un único folio con el estado de cuenta por beneficiario y el filtro de proyecto en la cabecera del folio. Nada más. |
+| **1. Resumen y deudas** | Abre con `.ledger` (tres cifras + lateral). Debajo, el folio de estado de cuenta por beneficiario (con filtro por proyecto y exportación a PDF) y el folio de historial de pagos ejecutados (`RN-AUD-01`). |
 | **2. Catálogos y asignaciones** | Cuatro bloques (proyectos, grupos de pago y cortes, beneficiarios, asignaciones) en sub-pestañas `.subtabs` o en folios consecutivos; cada uno con su tabla y su formulario en `.form-grid` arriba del registro. Los formularios son parte del folio, no modales flotantes. |
 | **3. Causación, solicitudes y pagos** | Orden lógico del flujo: lote de causación → solicitud → revisión → pago FIFO → anulación. Cada paso es un folio con su código de norma en `.sheet__hint`. Las cifras de saldo usan `.num`; los estados, badges. |
 | **4. Cajas chicas y reportes** | Una caja = un folio; sus períodos y vales, en tablas dentro del mismo folio. El saldo disponible de la caja es la cifra dominante, en `.figure__value`. |
@@ -213,3 +251,5 @@ Una vista está terminada cuando:
 4. `impeccable detect` no reporta anti-patrones nuevos.
 5. Ningún estilo inline introduce color, radio, sombra o tipografía fuera de los tokens.
 6. Las reglas de negocio, los endpoints y el RBAC no cambiaron.
+7. Su ruta se puede abrir directamente, recargar y compartir; un rol sin permiso es redirigido con
+   explicación y el botón Atrás del navegador devuelve a la vista anterior.

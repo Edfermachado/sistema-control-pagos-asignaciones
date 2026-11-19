@@ -8,6 +8,7 @@ import {
   ProjectStatus,
 } from '../../common/constants/domain.enums';
 import { AuthenticatedUser } from '../../common/decorators/current-user.decorator';
+import { buildSystemDocumentCode } from '../../common/domain/document-code.generator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { assertValidProjectDateRange } from './domain/project-validity.helper';
@@ -25,13 +26,17 @@ export class ProjectsService {
 
   /**
    * Crea un proyecto validando área (Física/Química/Biología), ámbito y vigencia (RN-CAT-01).
+   * Si no se indica código, el sistema lo genera automáticamente según área y año.
    */
   async createProject(dto: CreateProjectDto, actor: AuthenticatedUser) {
-    const cleanCode = dto.code.trim().toUpperCase();
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
 
     assertValidProjectDateRange(startDate, endDate);
+
+    const cleanCode = dto.code?.trim()
+      ? dto.code.trim().toUpperCase()
+      : await this.generateNextProjectCode(dto.area, startDate.getUTCFullYear());
 
     const existing = await this.prisma.project.findUnique({
       where: { code: cleanCode },
@@ -176,5 +181,32 @@ export class ProjectsService {
     });
 
     return updated;
+  }
+
+  private async generateNextProjectCode(
+    area: ProjectArea,
+    year: number,
+  ): Promise<string> {
+    const areaPrefix = area.slice(0, 3).toUpperCase();
+    let seq =
+      (typeof this.prisma.project.count === 'function'
+        ? await this.prisma.project.count()
+        : 0) + 1;
+
+    while (true) {
+      const candidate = buildSystemDocumentCode({
+        prefix: areaPrefix,
+        contextCode: String(year),
+        sequence: seq,
+        padLength: 2,
+      });
+      const existing = await this.prisma.project.findUnique({
+        where: { code: candidate },
+      });
+      if (!existing) {
+        return candidate;
+      }
+      seq += 1;
+    }
   }
 }

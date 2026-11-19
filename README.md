@@ -38,7 +38,7 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 
 | Capa | Tecnología | Propósito |
 | :--- | :--- | :--- |
-| **Cliente (Frontend)** | **React 18 + Vite + TypeScript** + estilos inline | Single Page Application (SPA) con control de acceso por rol y visualización reactiva. |
+| **Cliente (Frontend)** | **React 18 + Vite + TypeScript** + sistema de diseño CSS (`DESIGN.md`, cero estilos inline) | Single Page Application (SPA) con control de acceso por rol, rutas por vista y visualización reactiva. |
 | **Servidor (Backend API)** | **NestJS (Node.js + TypeScript)** | Arquitectura modular en capas (`Controllers` $\rightarrow$ `Services` $\rightarrow$ `Repositories/Prisma`). |
 | **Base de Datos** | **PostgreSQL 16 + Prisma ORM** | Integridad referencial, transacciones ACID, tipos decimales exactos (`NUMERIC`) y `JSONB` para auditoría. |
 | **Infraestructura** | **Docker & Docker Compose** | Entorno reproducible simulando producción en un solo comando. |
@@ -53,6 +53,7 @@ El sistema implementa una arquitectura **Cliente-Servidor Desacoplada** con sepa
 ├── frontend/                 # Cliente Web SPA en React + Vite + TypeScript
 ├── database/                 # Scripts DDL de creación SQL y carga inicial (Seeds)
 ├── docs/
+│   ├── GLOSARIO_Y_MODELO_DE_NEGOCIO.md # Glosario de términos financieros, ejemplos y modelo de negocio
 │   ├── DECISIONES_TECNICAS_DEFENSA.md  # Justificación arquitectónica y guía para la defensa
 │   ├── INFORME_ESTADO_Y_PENDIENTES.md  # Auditoría, validaciones y trabajo pendiente
 │   └── BITACORA_IA.md                  # Registro de prompts y uso de IA (Entregable #5)
@@ -119,14 +120,14 @@ cp backend/.env.example backend/.env
 npm --prefix backend install
 npm --prefix backend run prisma:generate
 
-# 2. Ejecutar las 30 suites de Pruebas Unitarias 1:1 en Backend (225 tests con patrón AAA)
+# 2. Ejecutar las 32 suites de Pruebas en Backend (256 tests unitarios y de flujos completos E2E con patrón AAA)
 npm --prefix backend test -- --runInBand
 
 # 3. Poblar datos iniciales de prueba completos (catálogos, asignaciones,
 #    causaciones, solicitud, pago FIFO y caja chica con arrastre)
 npm --prefix backend run prisma:seed
 
-# 4. Instalar dependencias y ejecutar las 5 suites de Pruebas Unitarias en Frontend (27 tests en Vitest)
+# 4. Instalar dependencias y ejecutar las 11 suites de Pruebas en Frontend (104 tests en Vitest, incl. flujos E2E)
 npm --prefix frontend install
 npm --prefix frontend test
 
@@ -154,7 +155,7 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
 ## 7. Resumen de Endpoints REST Principales (`/api`)
 
 * **Salud y Autenticación:** `GET /api/health`, `POST /api/auth/login`, `GET /api/auth/me`
-* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`, `GET/POST /api/parameters`, `PATCH/DELETE /api/parameters/:id`
+* **Administración y Auditoría (`ADMIN`):** `GET/POST /api/users`, `PATCH /api/users/:id`, `PATCH /api/users/:id/status`, `GET /api/audit-logs`, `GET/POST /api/parameters`, `PATCH/DELETE /api/parameters/:id`
 * **Catálogos y Asignaciones (`ADMIN` / `GENERADOR`):** `GET/POST /api/projects`, `PATCH /api/projects/:id`, `PATCH /api/projects/:id/status`, `GET/POST /api/payment-groups`, `PATCH /api/payment-groups/:id`, `GET/POST /api/payment-groups/:id/periods`, `DELETE /api/payment-groups/:id/periods/:periodId`, `GET/POST /api/beneficiaries`, `PATCH /api/beneficiaries/:id`, `GET/POST /api/assignments`, `PATCH /api/assignments/:id/deactivate`
 * **Motor Financiero (`GENERADOR` / `RECEPTOR`):**
   * `POST /api/accruals/batches/preview`, `POST /api/accruals/batches`, `GET /api/accruals/batches`, `GET /api/accruals/beneficiary/:beneficiaryId/pending`
@@ -165,12 +166,13 @@ El script SQL (`database/02_seed_data.sql`) y el sembrador de Prisma (`backend/p
   * `POST /api/petty-cashes`, `POST /api/petty-cashes/:pettyCashId/periods`, `PATCH /api/petty-cashes/periods/:periodId/approve`, `PATCH /api/petty-cashes/periods/:periodId/close`, `PATCH /api/petty-cashes/:pettyCashId/close`
   * `POST /api/petty-cashes/periods/:periodId/vouchers`, `PATCH /api/petty-cashes/vouchers/:voucherId/approve`, `PATCH /api/petty-cashes/vouchers/:voucherId/reject`, `PATCH /api/petty-cashes/vouchers/:voucherId/disburse`, `PATCH /api/petty-cashes/vouchers/:voucherId/settle`
   * `POST /api/uploads` (comprobantes PDF/PNG/JPEG, hasta 5 MB)
-  * `GET /api/reports/summary`, `GET /api/reports/payments/:paymentId/pdf`, `GET /api/reports/payment-requests/:paymentRequestId/pdf`
+  * `GET /api/reports/summary`, `GET /api/reports/summary/pdf`, `GET /api/reports/payments/:paymentId/pdf`, `GET /api/reports/payment-requests/:paymentRequestId/pdf`
 
 ---
 
 ## 8. Documentación Adicional para Evaluación
 
+* 📖 [Glosario y Guía del Modelo de Negocio (`GLOSARIO_Y_MODELO_DE_NEGOCIO.md`)](./docs/GLOSARIO_Y_MODELO_DE_NEGOCIO.md) — definición pedagógica de causaciones, prorrateo, FIFO, cajas chicas, anulaciones y diccionario tabla-regla.
 * 🎨 [Identidad visual y sistema de diseño (`DESIGN.md`)](./DESIGN.md) — tokens, tipografía, prohibiciones anti-*AI slop* y criterios de aceptación de interfaz.
 * 📋 [Informe de Estado, Validación y Pendientes](./docs/INFORME_ESTADO_Y_PENDIENTES.md)
 * 📘 [Especificación de Reglas de Negocio e Invariantes (`RN-*`)](./docs/REGLAS_DE_NEGOCIO.md)

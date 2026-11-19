@@ -3,6 +3,7 @@ import { PaymentStatus } from '../../../common/constants/domain.enums';
 import {
   buildSimplePdfBuffer,
   formatConsolidatedRequestLines,
+  formatExecutiveSummaryLines,
   formatIndividualPaymentReceiptLines,
   sanitizePdfText,
 } from './pdf-document.builder';
@@ -69,6 +70,28 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
 
       // Assert
       expect(buffer.toString('utf8')).toContain('DOCUMENTO VACIO');
+    });
+
+    it('debe dividir automáticamente en múltiples páginas cuando bodyLines supera 42 líneas (Edge Case)', () => {
+      // Arrange
+      const manyLines = Array.from(
+        { length: 90 },
+        (_, i) => `Linea ${i + 1}: Registro de detalle`,
+      );
+
+      // Act
+      const buffer = buildSimplePdfBuffer(
+        'REPORTE EXTENSO',
+        'Todos los proyectos',
+        manyLines,
+      );
+      const textContent = buffer.toString('utf8');
+
+      // Assert
+      expect(textContent).toContain('/Count 3');
+      expect(textContent).toContain('(Pagina 1 de 3)');
+      expect(textContent).toContain('(Pagina 3 de 3)');
+      expect(textContent).toContain('Linea 90: Registro de detalle');
     });
 
     it('debe lanzar BadRequestException si el título del PDF está vacío (Violación RN-AUD-02)', () => {
@@ -162,6 +185,41 @@ describe('pdf-document.builder (RN-AUD-02 Generación de PDFs para Recibos y Sol
       expect(lines.join('\n')).toContain('Dr. Mendoza (V-18456789)');
       expect(lines.join('\n')).toContain('FIRMA DEL GENERADOR');
       expect(lines.join('\n')).toContain('FIRMA DEL APROBADOR');
+    });
+
+    it('debe formatear el estado de cuenta general e historial de pagos ejecutados (RN-AUD-01)', () => {
+      // Arrange
+      const lines = formatExecutiveSummaryLines({
+        projectScopeLabel: 'Todos los proyectos',
+        totalAccruedUsd: '900.00',
+        totalPaidUsd: '600.00',
+        totalPendingDebtUsd: '300.00',
+        beneficiaryBalances: [
+          {
+            beneficiaryName: 'Dr. Alejandro Mendoza',
+            beneficiaryDni: 'V-18456789',
+            totalAccruedUsd: '900.00',
+            totalPaidUsd: '600.00',
+            totalDebtDueUsd: '300.00',
+            oldestUnpaidPeriodStart: '2026-10-16',
+          },
+        ],
+        paymentHistory: [
+          {
+            receiptCode: 'REC-2026-001',
+            paymentDate: '2026-11-05',
+            beneficiaryName: 'Dr. Alejandro Mendoza',
+            projectCode: 'FIS-2026-01',
+            amountUsd: '600.00',
+            status: 'VALIDO',
+          },
+        ],
+      });
+
+      // Assert
+      expect(lines.join('\n')).toContain('Total Causado: $900.00 USD');
+      expect(lines.join('\n')).toContain('Desde 2026-10-16');
+      expect(lines.join('\n')).toContain('REC-2026-001');
     });
   });
 });

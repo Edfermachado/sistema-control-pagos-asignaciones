@@ -3,6 +3,7 @@ import {
   IsEmail,
   IsEnum,
   IsNotEmpty,
+  IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
@@ -26,6 +27,25 @@ export class CreateUserDto {
       '[RN-SEG-02] El rol debe ser estrictamente ADMIN, GENERADOR o RECEPTOR.',
   })
   role!: UserRole;
+}
+
+export class UpdateUserDto {
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty({ message: 'El nombre completo no puede estar vacío.' })
+  fullName?: string;
+
+  @IsOptional()
+  @IsEnum(UserRole, {
+    message:
+      '[RN-SEG-02] El rol debe ser estrictamente ADMIN, GENERADOR o RECEPTOR.',
+  })
+  role?: UserRole;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(MIN_PASSWORD_LENGTH)
+  password?: string;
 }
 
 export class UpdateUserStatusDto {

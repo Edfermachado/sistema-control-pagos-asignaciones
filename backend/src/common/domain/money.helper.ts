@@ -2,12 +2,13 @@ import { BadRequestException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import {
   DECIMAL_PLACES,
+  MAX_USD_AMOUNT,
   MIN_ANNULMENT_REASON_LENGTH,
 } from '../constants/domain.enums';
 
 /**
  * Convierte un valor numérico o cadena en una instancia de Decimal redondeada a 2 decimales.
- * Cumple RN-GLOB-01 y RN-GLOB-02 (Precisión Decimal Exacta en USD).
+ * Cumple RN-GLOB-01 y RN-GLOB-02 (Precisión Decimal Exacta en USD y tope NUMERIC(12, 2)).
  */
 export function toUsdDecimal(value: string | number | Decimal): Decimal {
   if (value === null || value === undefined || value === '') {
@@ -31,7 +32,18 @@ export function toUsdDecimal(value: string | number | Decimal): Decimal {
     );
   }
 
-  return decimalValue.toDecimalPlaces(DECIMAL_PLACES, Decimal.ROUND_HALF_UP);
+  const rounded = decimalValue.toDecimalPlaces(
+    DECIMAL_PLACES,
+    Decimal.ROUND_HALF_UP,
+  );
+
+  if (rounded.abs().gt(MAX_USD_AMOUNT)) {
+    throw new BadRequestException(
+      `[RN-GLOB-02] El monto en USD supera el límite máximo permitido por precisión contable ($${MAX_USD_AMOUNT} USD).`,
+    );
+  }
+
+  return rounded;
 }
 
 /**

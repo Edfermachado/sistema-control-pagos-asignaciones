@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   AccrualStatus,
   PaymentRequestStatus,
+  ProjectStatus,
   UserRole,
 } from '../types/domain.types';
 import {
@@ -10,11 +11,29 @@ import {
 } from '../utils/api-client.util';
 import { formatUsdCurrency } from '../utils/currency.util';
 import {
+  doDateRangesIntersect,
+  filterValidCutoffPeriodsForProject,
+  getPayableBeneficiariesForRequest,
+  toIsoDateSlice,
+} from '../utils/range-validity.util';
+import {
+  isConfirmationArmed,
+  simulateFifoPaymentPreview,
+  summarizeAccrualSelection,
+  toggleAllEligibleAccruals,
+  validateInlineJustification,
+} from '../utils/ux-workflows.util';
+import {
+  LiveAssignment,
   LiveBeneficiary,
   LivePaymentGroup,
   LivePaymentGroupPeriod,
   LiveProject,
 } from './CatalogsAndAssignmentsWorkspace';
+import { FifoSimulationPreviewTable } from './FifoSimulationPreviewTable';
+
+const JUSTIFICATION_HINT =
+  'Escriba el motivo (mínimo 10 caracteres) para habilitar esta acción justificada (RN-PAG-01/03)';
 
 export interface LiveAccrual {
   id: string;
@@ -104,6 +123,7 @@ interface FinancialProps {
   projects: LiveProject[];
   paymentGroups: LivePaymentGroup[];
   beneficiaries: LiveBeneficiary[];
+  assignments?: LiveAssignment[];
   accruals: LiveAccrual[];
   accrualBatches: LiveAccrualBatch[];
   paymentRequests: LivePaymentRequest[];
@@ -163,6 +183,7 @@ export function FinancialEnginePanel({
   projects,
   paymentGroups,
   beneficiaries,
+  assignments = [],
   accruals,
   accrualBatches,
   paymentRequests,
@@ -173,18 +194,54 @@ export function FinancialEnginePanel({
   const isGenerador = activeRole === UserRole.GENERADOR;
   const isReceptor = activeRole === UserRole.RECEPTOR;
 
-  // 1. Estado Lote de Causación
-  const [batchCode, setBatchCode] = useState('LOTE-QUI-2026-11A');
+  // 1. Estado Lote de Causación (código autogenerado por el sistema)
   const [batchProjectId, setBatchProjectId] = useState('');
   const [batchGroupId, setBatchGroupId] = useState('');
-  const [periodStart, setPeriodStart] = useState('2026-02-01');
-  const [periodEnd, setPeriodEnd] = useState('2026-02-15');
+  const [periodStart, setPeriodStart] = useState('2026-11-01');
+  const [periodEnd, setPeriodEnd] = useState('2026-11-15');
   const [batchPeriods, setBatchPeriods] = useState<LivePaymentGroupPeriod[]>([]);
   const [batchPeriodId, setBatchPeriodId] = useState('');
   const [previewResult, setPreviewResult] =
     useState<BatchPreviewResponse | null>(null);
 
-  const effectiveBatchGroupId = batchGroupId || paymentGroups[0]?.id || '';
+  // Solo proyectos activos (y con asignaciones activas cuando están disponibles)
+  const activeProjectsForBatch = projects.filter(
+    (p) =>
+      p.status === ProjectStatus.ACTIVO &&
+      (assignments.length === 0 ||
+        assignments.some(
+          (a) =>
+            a.projectId === p.id &&
+            a.isActive &&
+            a.beneficiary?.isActive !== false,
+        )),
+  );
+  const effectiveBatchProject =
+    activeProjectsForBatch.find((p) => p.id === batchProjectId) ??
+    activeProjectsForBatch[0] ??
+    projects.find((p) => p.status === ProjectStatus.ACTIVO) ??
+    projects[0];
+
+  // Solo grupos de pago activos que tengan asignaciones en el proyecto seleccionado
+  const activePaymentGroupsForProject = paymentGroups.filter(
+    (pg) =>
+      pg.isActive &&
+      (assignments.length === 0 ||
+        !effectiveBatchProject ||
+        assignments.some(
+          (a) =>
+            a.projectId === effectiveBatchProject.id &&
+            a.paymentGroupId === pg.id &&
+            a.isActive &&
+            a.beneficiary?.isActive !== false,
+        )),
+  );
+  const effectiveBatchGroupId =
+    activePaymentGroupsForProject.find((pg) => pg.id === batchGroupId)?.id ??
+    activePaymentGroupsForProject[0]?.id ??
+    paymentGroups.find((pg) => pg.isActive)?.id ??
+    paymentGroups[0]?.id ??
+    '';
 
   useEffect(() => {
     const loadBatchPeriods = async () => {
@@ -206,26 +263,75 @@ export function FinancialEnginePanel({
     void loadBatchPeriods();
   }, [effectiveBatchGroupId, token]);
 
-  // 2. Estado Nueva Solicitud de Pago
-  const [reqCode, setReqCode] = useState('SOL-2026-0009');
+  // Filtra solo los períodos de corte válidos dentro de la vigencia activa del proyecto y aún no causados
+  const validBatchPeriods = filterValidCutoffPeriodsForProject({
+    periods: batchPeriods,
+    project: effectiveBatchProject,
+    paymentGroupId: effectiveBatchGroupId,
+    assignments,
+    existingBatches: accrualBatches,
+  });
+
+  useEffect(() => {
+    if (validBatchPeriods.length === 0) {
+      return;
+    }
+    const currentSelected = validBatchPeriods.find(
+      (per) => per.id === batchPeriodId,
+    );
+    const chosen = currentSelected ?? validBatchPeriods[0];
+    if (chosen) {
+      const startIso = toIsoDateSlice(chosen.periodStart);
+      const endIso = toIsoDateSlice(chosen.periodEnd);
+      if (batchPeriodId !== chosen.id) {
+        setBatchPeriodId(chosen.id);
+      }
+      if (periodStart !== startIso) {
+        setPeriodStart(startIso);
+      }
+      if (periodEnd !== endIso) {
+        setPeriodEnd(endIso);
+      }
+    }
+  }, [validBatchPeriods, batchPeriodId, periodStart, periodEnd]);
+
+  // 2. Estado Nueva Solicitud de Pago (código autogenerado por el sistema)
   const [reqProjectId, setReqProjectId] = useState('');
   const [reqAccrualIds, setReqAccrualIds] = useState<string[]>([]);
 
-  // 3. Estado Ejecución de Pago FIFO
-  const [payReceiptCode, setPayReceiptCode] = useState('REC-2026-0009');
+  // 3. Estado Ejecución de Pago FIFO (código de recibo autogenerado por el sistema)
   const [payRequestId, setPayRequestId] = useState('');
   const [payBeneficiaryId, setPayBeneficiaryId] = useState('');
   const [payAmount, setPayAmount] = useState('300.00');
   const [payReference, setPayReference] = useState('ZELLE-FACYT-9981');
-  const [payDate, setPayDate] = useState('2026-02-20');
+  const [payDate, setPayDate] = useState('2026-11-10');
 
-  // 4. Motivo para Anulaciones Justificadas Inmutables y Rechazos
-  const [annulReason, setAnnulReason] = useState(
-    'Corrección contable autorizada por Gerencia Administrativa FACYT (RN-PAG-03)',
-  );
-  const [reqRejectionReason, setReqRejectionReason] = useState(
-    'Observación presupuestaria de Gerencia (RN-PAG-01)',
-  );
+  // 4. Motivos y acciones inline por fila / confirmación en dos pasos (UX #1 y UX #5, RN-PAG-01/03).
+  type InlineFinancialActionType =
+    | 'ANNUL_ACCRUAL'
+    | 'ANNUL_BATCH'
+    | 'REJECT_REQUEST'
+    | 'ANNUL_REQUEST'
+    | 'ANNUL_PAYMENT';
+
+  const [inlineRowAction, setInlineRowAction] = useState<{
+    type: InlineFinancialActionType;
+    targetId: string;
+    reason: string;
+  } | null>(null);
+  const [armedConfirmKey, setArmedConfirmKey] = useState<string | null>(null);
+
+  const openInlineRowAction = (
+    type: InlineFinancialActionType,
+    targetId: string,
+  ) => {
+    setArmedConfirmKey(null);
+    setInlineRowAction({
+      type,
+      targetId,
+      reason: '',
+    });
+  };
 
   const activeRequestAccrualIds = new Set(
     paymentRequests
@@ -240,23 +346,95 @@ export function FinancialEnginePanel({
       .flatMap((r) => (r.items ?? []).map((item) => item.accrualId)),
   );
 
-  const hasPendingBalance = (accrual: LiveAccrual): boolean =>
-    (accrual.status === AccrualStatus.PENDIENTE ||
-      accrual.status === AccrualStatus.PARCIAL) &&
-    Number(accrual.balanceDue) > 0 &&
-    !activeRequestAccrualIds.has(accrual.id);
+  const isAccrualEligibleForRequest = (accrual: LiveAccrual): boolean => {
+    if (
+      (accrual.status !== AccrualStatus.PENDIENTE &&
+        accrual.status !== AccrualStatus.PARCIAL) ||
+      Number(accrual.balanceDue) <= 0 ||
+      activeRequestAccrualIds.has(accrual.id)
+    ) {
+      return false;
+    }
+    const proj = projects.find((p) => p.id === accrual.projectId);
+    if (!proj) {
+      return true;
+    }
+    return doDateRangesIntersect(
+      accrual.periodStart,
+      accrual.periodEnd,
+      proj.startDate,
+      proj.endDate,
+    );
+  };
 
-  const firstProjectWithPendingAccruals = projects.find((p) =>
-    accruals.some((a) => a.projectId === p.id && hasPendingBalance(a)),
+  // Solo proyectos que poseen causaciones con saldo pendiente dentro de sus rangos válidos
+  const projectsWithEligibleAccruals = projects.filter((p) =>
+    accruals.some(
+      (a) => a.projectId === p.id && isAccrualEligibleForRequest(a),
+    ),
   );
   const effectiveReqProjectId =
-    reqProjectId || firstProjectWithPendingAccruals?.id || projects[0]?.id || '';
+    projectsWithEligibleAccruals.find((p) => p.id === reqProjectId)?.id ??
+    projectsWithEligibleAccruals[0]?.id ??
+    projects[0]?.id ??
+    '';
   const eligibleRequestAccruals = accruals.filter(
-    (a) => a.projectId === effectiveReqProjectId && hasPendingBalance(a),
+    (a) =>
+      a.projectId === effectiveReqProjectId && isAccrualEligibleForRequest(a),
   );
-  const selectedRequestedTotal = eligibleRequestAccruals
-    .filter((a) => reqAccrualIds.includes(a.id))
-    .reduce((total, a) => total + Number(a.balanceDue), 0);
+  const accrualSelectionSummary = summarizeAccrualSelection(
+    eligibleRequestAccruals,
+    reqAccrualIds,
+  );
+  const selectedRequestedTotal = accrualSelectionSummary.totalSelectedUsd;
+
+  // Solicitudes con saldo pendiente real para pagos FIFO y beneficiarios incluidos en la solicitud
+  const payableRequests = paymentRequests.filter(
+    (r) =>
+      (r.status === PaymentRequestStatus.APROBADA ||
+        r.status === PaymentRequestStatus.ENTREGADA) &&
+      Number(r.totalAmount) - Number(r.paidAmount) > 0,
+  );
+  const selectedPayableRequest =
+    payableRequests.find((r) => r.id === payRequestId) ?? payableRequests[0];
+  const payableBeneficiaryEntries = getPayableBeneficiariesForRequest(
+    selectedPayableRequest,
+    beneficiaries,
+  );
+  const selectedPayableBeneficiaryEntry =
+    payableBeneficiaryEntries.find(
+      (entry) => entry.beneficiary.id === payBeneficiaryId,
+    ) ?? payableBeneficiaryEntries[0];
+  const maxPayableUsd = selectedPayableBeneficiaryEntry
+    ? selectedPayableBeneficiaryEntry.pendingInRequestUsd
+    : selectedPayableRequest
+      ? Math.max(
+          0,
+          Number(selectedPayableRequest.totalAmount) -
+            Number(selectedPayableRequest.paidAmount),
+        )
+      : 9999999999.99;
+
+  const fifoPreview = simulateFifoPaymentPreview({
+    paymentAmount: payAmount,
+    requestItems: selectedPayableRequest?.items,
+    allAccruals: accruals,
+    beneficiaryId: selectedPayableBeneficiaryEntry?.beneficiary.id ?? '',
+  });
+
+  useEffect(() => {
+    if (!selectedPayableBeneficiaryEntry) {
+      return;
+    }
+    if (payBeneficiaryId !== selectedPayableBeneficiaryEntry.beneficiary.id) {
+      setPayBeneficiaryId(selectedPayableBeneficiaryEntry.beneficiary.id);
+    }
+    if (Number(payAmount) > selectedPayableBeneficiaryEntry.pendingInRequestUsd) {
+      setPayAmount(
+        selectedPayableBeneficiaryEntry.pendingInRequestUsd.toFixed(2),
+      );
+    }
+  }, [selectedPayableBeneficiaryEntry, payBeneficiaryId, payAmount]);
 
   const toggleRequestAccrual = (accrualId: string) => {
     setReqAccrualIds((current) =>
@@ -267,8 +445,8 @@ export function FinancialEnginePanel({
   };
 
   const handlePreviewBatch = async () => {
-    const targetProject = batchProjectId || projects[0]?.id;
-    const targetGroup = batchGroupId || paymentGroups[0]?.id;
+    const targetProject = effectiveBatchProject?.id;
+    const targetGroup = effectiveBatchGroupId;
     if (!targetProject || !targetGroup) {
       onNotify('error', 'Seleccione proyecto y grupo de pago.');
       return;
@@ -280,7 +458,6 @@ export function FinancialEnginePanel({
           method: 'POST',
           token,
           body: {
-            code: batchCode,
             projectId: targetProject,
             paymentGroupId: targetGroup,
             periodStart,
@@ -300,28 +477,30 @@ export function FinancialEnginePanel({
 
   const handleGenerateBatch = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetProject = batchProjectId || projects[0]?.id;
-    const targetGroup = batchGroupId || paymentGroups[0]?.id;
+    const targetProject = effectiveBatchProject?.id;
+    const targetGroup = effectiveBatchGroupId;
     if (!targetProject || !targetGroup) {
       onNotify('error', 'Seleccione proyecto y grupo de pago.');
       return;
     }
     try {
-      await apiRequest('/accruals/batches', {
-        method: 'POST',
-        token,
-        body: {
-          code: batchCode,
-          projectId: targetProject,
-          paymentGroupId: targetGroup,
-          periodStart,
-          periodEnd,
+      const created = await apiRequest<{ batch?: { code?: string } }>(
+        '/accruals/batches',
+        {
+          method: 'POST',
+          token,
+          body: {
+            projectId: targetProject,
+            paymentGroupId: targetGroup,
+            periodStart,
+            periodEnd,
+          },
         },
-      });
+      );
       setPreviewResult(null);
       onNotify(
         'success',
-        `Lote '${batchCode}' causado y persistido con prorrateo exacto (RN-CAUS-01).`,
+        `Lote '${created?.batch?.code ?? 'GENERADO'}' causado y persistido con prorrateo exacto (RN-CAUS-01).`,
       );
       await onRefresh();
     } catch (err) {
@@ -344,18 +523,20 @@ export function FinancialEnginePanel({
       return;
     }
     try {
-      await apiRequest('/payment-requests', {
-        method: 'POST',
-        token,
-        body: {
-          code: reqCode,
-          projectId: targetProject,
-          accrualIds: reqAccrualIds,
+      const created = await apiRequest<LivePaymentRequest>(
+        '/payment-requests',
+        {
+          method: 'POST',
+          token,
+          body: {
+            projectId: targetProject,
+            accrualIds: reqAccrualIds,
+          },
         },
-      });
+      );
       onNotify(
         'success',
-        `Solicitud '${reqCode}' creada por $${selectedRequestedTotal.toFixed(2)} USD.`,
+        `Solicitud '${created?.code ?? 'GENERADA'}' creada por $${selectedRequestedTotal.toFixed(2)} USD.`,
       );
       setReqAccrualIds([]);
       await onRefresh();
@@ -380,11 +561,10 @@ export function FinancialEnginePanel({
   const handleReviewRequest = async (
     id: string,
     decision: 'APROBADA' | 'RECHAZADA',
+    overrideReason = '',
   ) => {
-    if (
-      decision === 'RECHAZADA' &&
-      (!reqRejectionReason || reqRejectionReason.trim().length < 5)
-    ) {
+    const effectiveReason = overrideReason.trim();
+    if (decision === 'RECHAZADA' && effectiveReason.length < 5) {
       onNotify(
         'error',
         'Ingrese un motivo de rechazo de al menos 5 caracteres (RN-PAG-01).',
@@ -399,9 +579,9 @@ export function FinancialEnginePanel({
           decision === 'APROBADA'
             ? { decision: 'APROBADA' }
             : {
-                decision: 'RECHAZADA',
-                rejectionReason: reqRejectionReason.trim(),
-              },
+              decision: 'RECHAZADA',
+              rejectionReason: effectiveReason,
+            },
       });
       onNotify(
         'success',
@@ -409,6 +589,7 @@ export function FinancialEnginePanel({
           ? 'Solicitud APROBADA por Gerencia.'
           : 'Solicitud RECHAZADA con motivo registrado.',
       );
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
@@ -421,6 +602,7 @@ export function FinancialEnginePanel({
         method: 'PATCH',
         token,
       });
+      setArmedConfirmKey(null);
       onNotify('success', 'Solicitud CERRADA formalmente.');
       await onRefresh();
     } catch (err) {
@@ -430,13 +612,11 @@ export function FinancialEnginePanel({
 
   const handleExecuteFifoPayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    const approvedRequests = paymentRequests.filter(
-      (r) =>
-        r.status === PaymentRequestStatus.APROBADA ||
-        r.status === PaymentRequestStatus.ENTREGADA,
-    );
-    const targetRequest = payRequestId || approvedRequests[0]?.id;
-    const targetBeneficiary = payBeneficiaryId || beneficiaries[0]?.id;
+    const targetRequest = selectedPayableRequest?.id;
+    const targetBeneficiary =
+      selectedPayableBeneficiaryEntry?.beneficiary.id ??
+      payBeneficiaryId ??
+      beneficiaries[0]?.id;
 
     if (!targetRequest || !targetBeneficiary) {
       onNotify(
@@ -447,21 +627,23 @@ export function FinancialEnginePanel({
     }
 
     try {
-      await apiRequest('/payments', {
-        method: 'POST',
-        token,
-        body: {
-          receiptCode: payReceiptCode,
-          paymentRequestId: targetRequest,
-          beneficiaryId: targetBeneficiary,
-          amount: payAmount,
-          paymentDate: payDate,
-          reference: payReference,
+      const created = await apiRequest<{ payment?: { receiptCode?: string } }>(
+        '/payments',
+        {
+          method: 'POST',
+          token,
+          body: {
+            paymentRequestId: targetRequest,
+            beneficiaryId: targetBeneficiary,
+            amount: payAmount,
+            paymentDate: payDate,
+            reference: payReference,
+          },
         },
-      });
+      );
       onNotify(
         'success',
-        `Pago '${payReceiptCode}' por $${payAmount} USD aplicado automáticamente por orden de antigüedad FIFO (RN-PAG-02).`,
+        `Pago '${created?.payment?.receiptCode ?? 'GENERADO'}' por $${payAmount} USD aplicado automáticamente por orden de antigüedad FIFO (RN-PAG-02).`,
       );
       await onRefresh();
     } catch (err) {
@@ -469,8 +651,12 @@ export function FinancialEnginePanel({
     }
   };
 
-  const handleAnnulPayment = async (paymentId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulPayment = async (
+    paymentId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-PAG-03).',
@@ -481,20 +667,25 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/payments/${paymentId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify(
         'success',
         'Pago anulado transaccionalmente. La deuda retornó a las causaciones originales (RN-PAG-03).',
       );
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulAccrual = async (accrualId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulAccrual = async (
+    accrualId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-PAG-03).',
@@ -505,17 +696,22 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/accruals/${accrualId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Causación anulada con justificación en bitácora.');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulBatch = async (batchId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulBatch = async (
+    batchId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
@@ -526,17 +722,22 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/accrual-batches/${batchId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Lote de causación anulado con justificación.');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
   };
 
-  const handleAnnulRequest = async (requestId: string) => {
-    if (!annulReason || annulReason.trim().length < 10) {
+  const handleAnnulRequest = async (
+    requestId: string,
+    overrideReason = '',
+  ) => {
+    const effectiveReason = overrideReason.trim();
+    if (effectiveReason.length < 10) {
       onNotify(
         'error',
         'Ingrese un motivo de anulación de al menos 10 caracteres (RN-GLOB-04).',
@@ -547,13 +748,70 @@ export function FinancialEnginePanel({
       await apiRequest(`/annulments/payment-requests/${requestId}`, {
         method: 'POST',
         token,
-        body: { reason: annulReason },
+        body: { reason: effectiveReason },
       });
       onNotify('success', 'Solicitud de pago anulada con justificación.');
+      setInlineRowAction(null);
       await onRefresh();
     } catch (err) {
       onNotify('error', (err as Error).message);
     }
+  };
+
+  const renderInlineJustificationBox = (params: {
+    type: InlineFinancialActionType;
+    targetId: string;
+    minLength: number;
+    confirmLabel: string;
+    placeholder: string;
+    onConfirm: (reason: string) => void;
+  }) => {
+    if (
+      !inlineRowAction ||
+      inlineRowAction.type !== params.type ||
+      inlineRowAction.targetId !== params.targetId
+    ) {
+      return null;
+    }
+    const validation = validateInlineJustification(
+      inlineRowAction.reason,
+      params.minLength,
+    );
+    return (
+      <div className="inline-action-box">
+        <input
+          className="input"
+          value={inlineRowAction.reason}
+          onChange={(e) =>
+            setInlineRowAction({ ...inlineRowAction, reason: e.target.value })
+          }
+          placeholder={params.placeholder}
+          aria-label={params.confirmLabel}
+        />
+        <span className="inline-action-box__hint">
+          {validation.valid
+            ? 'Motivo válido. Confirme esta operación irreversible.'
+            : `Faltan ${validation.remainingChars} caracteres (mín. ${params.minLength}).`}
+        </span>
+        <div className="btn-group">
+          <button
+            type="button"
+            className="btn btn--danger btn--sm"
+            disabled={!validation.valid}
+            onClick={() => params.onConfirm(validation.trimmed)}
+          >
+            {params.confirmLabel}
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm"
+            onClick={() => setInlineRowAction(null)}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    );
   };
 
   const handleDownloadPdf = async (path: string, filename: string) => {
@@ -592,49 +850,64 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="batch-code">
-                      Código de lote
+                      Código de lote (sistema)
                     </label>
                     <input
                       id="batch-code"
                       className="input"
-                      value={batchCode}
-                      onChange={(e) => setBatchCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-project">
-                      Proyecto
+                      Proyecto activo (vigencia)
                     </label>
                     <select
                       id="batch-project"
                       className="select"
-                      value={batchProjectId}
-                      onChange={(e) => setBatchProjectId(e.target.value)}
+                      value={effectiveBatchProject?.id ?? ''}
+                      onChange={(e) => {
+                        setBatchProjectId(e.target.value);
+                        setBatchGroupId('');
+                        setBatchPeriodId('');
+                        setPreviewResult(null);
+                      }}
                     >
-                      <option value="">Seleccione un proyecto</option>
-                      {projects.map((p) => (
+                      {activeProjectsForBatch.length === 0 && (
+                        <option value="">
+                          Sin proyectos activos con asignaciones
+                        </option>
+                      )}
+                      {activeProjectsForBatch.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.code} - {p.name}
+                          {p.code} - {p.name} ({toIsoDateSlice(p.startDate)} →{' '}
+                          {toIsoDateSlice(p.endDate)})
                         </option>
                       ))}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-group">
-                      Grupo de pago
+                      Grupo de pago con asignaciones
                     </label>
                     <select
                       id="batch-group"
                       className="select"
-                      value={batchGroupId}
+                      value={effectiveBatchGroupId}
                       onChange={(e) => {
                         setBatchGroupId(e.target.value);
                         setBatchPeriodId('');
+                        setPreviewResult(null);
                       }}
                     >
-                      <option value="">Seleccione un grupo de pago</option>
-                      {paymentGroups.map((pg) => (
+                      {activePaymentGroupsForProject.length === 0 && (
+                        <option value="">
+                          Sin grupos asignados en este proyecto
+                        </option>
+                      )}
+                      {activePaymentGroupsForProject.map((pg) => (
                         <option key={pg.id} value={pg.id}>
                           {pg.name} ({pg.periodicity})
                         </option>
@@ -643,30 +916,34 @@ export function FinancialEnginePanel({
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="batch-period">
-                      Fecha de corte
+                      Período válido disponible ({validBatchPeriods.length})
                     </label>
                     <select
                       id="batch-period"
                       className="select"
                       value={batchPeriodId}
                       onChange={(e) => {
-                        const selected = batchPeriods.find(
+                        const selected = validBatchPeriods.find(
                           (period) => period.id === e.target.value,
                         );
                         setBatchPeriodId(e.target.value);
+                        setPreviewResult(null);
                         if (selected) {
-                          setPeriodStart(
-                            String(selected.periodStart).slice(0, 10),
-                          );
-                          setPeriodEnd(String(selected.periodEnd).slice(0, 10));
+                          setPeriodStart(toIsoDateSlice(selected.periodStart));
+                          setPeriodEnd(toIsoDateSlice(selected.periodEnd));
                         }
                       }}
                     >
-                      <option value="">Seleccione un corte configurado</option>
-                      {batchPeriods.map((period) => (
+                      {validBatchPeriods.length === 0 && (
+                        <option value="">
+                          Sin períodos disponibles por causar en este rango
+                        </option>
+                      )}
+                      {validBatchPeriods.map((period) => (
                         <option key={period.id} value={period.id}>
-                          {String(period.periodStart).slice(0, 10)} al{' '}
-                          {String(period.periodEnd).slice(0, 10)}
+                          {toIsoDateSlice(period.periodStart)} al{' '}
+                          {toIsoDateSlice(period.periodEnd)}
+                          {period.label ? ` — ${period.label}` : ''}
                         </option>
                       ))}
                     </select>
@@ -679,8 +956,19 @@ export function FinancialEnginePanel({
                       id="period-start"
                       className="input"
                       type="date"
+                      min={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.startDate)
+                          : undefined
+                      }
+                      max={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.endDate)
+                          : undefined
+                      }
                       value={periodStart}
                       onChange={(e) => setPeriodStart(e.target.value)}
+                      readOnly={batchPeriods.length > 0}
                       required
                     />
                   </div>
@@ -692,8 +980,20 @@ export function FinancialEnginePanel({
                       id="period-end"
                       className="input"
                       type="date"
+                      min={
+                        periodStart ||
+                        (effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.startDate)
+                          : undefined)
+                      }
+                      max={
+                        effectiveBatchProject
+                          ? toIsoDateSlice(effectiveBatchProject.endDate)
+                          : undefined
+                      }
                       value={periodEnd}
                       onChange={(e) => setPeriodEnd(e.target.value)}
+                      readOnly={batchPeriods.length > 0}
                       required
                     />
                   </div>
@@ -822,13 +1122,28 @@ export function FinancialEnginePanel({
                           {isGenerador &&
                             row.status === AccrualStatus.PENDIENTE &&
                             Number(row.paidAmount) === 0 && (
-                              <button
-                                type="button"
-                                className="btn btn--danger btn--sm"
-                                onClick={() => handleAnnulAccrual(row.id)}
-                              >
-                                Anular causación
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn--danger btn--sm"
+                                  onClick={() =>
+                                    openInlineRowAction('ANNUL_ACCRUAL', row.id)
+                                  }
+                                  title={JUSTIFICATION_HINT}
+                                >
+                                  Anular causación
+                                </button>
+                                {renderInlineJustificationBox({
+                                  type: 'ANNUL_ACCRUAL',
+                                  targetId: row.id,
+                                  minLength: 10,
+                                  confirmLabel: 'Confirmar anulación',
+                                  placeholder:
+                                    'Motivo de anulación de esta causación...',
+                                  onConfirm: (reason) =>
+                                    void handleAnnulAccrual(row.id, reason),
+                                })}
+                              </>
                             )}
                         </td>
                       )}
@@ -900,13 +1215,28 @@ export function FinancialEnginePanel({
                           !(batch.accruals ?? []).some(
                             (accrual) => Number(accrual.paidAmount) > 0,
                           ) && (
-                            <button
-                              type="button"
-                              className="btn btn--danger btn--sm"
-                              onClick={() => handleAnnulBatch(batch.id)}
-                            >
-                              Anular lote
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                className="btn btn--danger btn--sm"
+                                onClick={() =>
+                                  openInlineRowAction('ANNUL_BATCH', batch.id)
+                                }
+                                title={JUSTIFICATION_HINT}
+                              >
+                                Anular lote
+                              </button>
+                              {renderInlineJustificationBox({
+                                type: 'ANNUL_BATCH',
+                                targetId: batch.id,
+                                minLength: 10,
+                                confirmLabel: 'Confirmar anulación de lote',
+                                placeholder:
+                                  'Motivo de anulación de este lote...',
+                                onConfirm: (reason) =>
+                                  void handleAnnulBatch(batch.id, reason),
+                              })}
+                            </>
                           )}
                       </td>
                     )}
@@ -944,19 +1274,19 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="req-code">
-                      Código de solicitud
+                      Código de solicitud (sistema)
                     </label>
                     <input
                       id="req-code"
                       className="input"
-                      value={reqCode}
-                      onChange={(e) => setReqCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="req-project">
-                      Proyecto
+                      Proyecto con causaciones disponibles
                     </label>
                     <select
                       id="req-project"
@@ -967,11 +1297,28 @@ export function FinancialEnginePanel({
                         setReqAccrualIds([]);
                       }}
                     >
-                      {projects.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.code} - {p.name}
+                      {projectsWithEligibleAccruals.length === 0 && (
+                        <option value="">
+                          Sin proyectos con causaciones libres para consolidar
                         </option>
-                      ))}
+                      )}
+                      {projectsWithEligibleAccruals.map((p) => {
+                        const projEligible = accruals.filter(
+                          (a) =>
+                            a.projectId === p.id &&
+                            isAccrualEligibleForRequest(a),
+                        );
+                        const projSum = projEligible.reduce(
+                          (sum, a) => sum + Number(a.balanceDue),
+                          0,
+                        );
+                        return (
+                          <option key={p.id} value={p.id}>
+                            {p.code} - {p.name} ({projEligible.length} disp. ·{' '}
+                            {formatUsdCurrency(projSum)})
+                          </option>
+                        );
+                      })}
                     </select>
                   </div>
                 </div>
@@ -980,10 +1327,47 @@ export function FinancialEnginePanel({
                     Causaciones con saldo pendiente del proyecto
                   </span>
                   <div className="subsheet">
-                    <p className="sheet__hint">
-                      Seleccionadas:{' '}
-                      {formatUsdCurrency(selectedRequestedTotal)} USD.
-                    </p>
+                    <div className="selection-toolbar">
+                      <div className="selection-toolbar__chips">
+                        <span className="chip">
+                          Seleccionadas:{' '}
+                          <strong>
+                            {accrualSelectionSummary.selectedCount} de{' '}
+                            {accrualSelectionSummary.totalEligibleCount}
+                          </strong>
+                        </span>
+                        <span className="chip">
+                          Beneficiarios:{' '}
+                          <strong>
+                            {accrualSelectionSummary.uniqueBeneficiariesCount}
+                          </strong>
+                        </span>
+                        <span className="chip">
+                          Total a solicitar:{' '}
+                          <strong>
+                            {formatUsdCurrency(selectedRequestedTotal)} USD
+                          </strong>
+                        </span>
+                      </div>
+                      {eligibleRequestAccruals.length > 0 && (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--sm"
+                          onClick={() =>
+                            setReqAccrualIds((current) =>
+                              toggleAllEligibleAccruals(
+                                eligibleRequestAccruals,
+                                current,
+                              ),
+                            )
+                          }
+                        >
+                          {accrualSelectionSummary.allSelected
+                            ? 'Limpiar selección'
+                            : `Seleccionar todas (${accrualSelectionSummary.totalEligibleCount})`}
+                        </button>
+                      )}
+                    </div>
                     {eligibleRequestAccruals.length === 0 ? (
                       <p className="muted">
                         Este proyecto no tiene causaciones con saldo pendiente.
@@ -1019,21 +1403,6 @@ export function FinancialEnginePanel({
                   </button>
                 </div>
               </form>
-            )}
-
-            {isReceptor && (
-              <div className="field">
-                <label className="field__label" htmlFor="req-reject-reason">
-                  Motivo de rechazo de solicitud (RN-PAG-01)
-                </label>
-                <input
-                  id="req-reject-reason"
-                  className="input"
-                  value={reqRejectionReason}
-                  onChange={(e) => setReqRejectionReason(e.target.value)}
-                  placeholder="Especifique el motivo en caso de rechazar una solicitud enviada"
-                />
-              </div>
             )}
 
             <div className="table-scroll">
@@ -1111,8 +1480,12 @@ export function FinancialEnginePanel({
                                   type="button"
                                   className="btn btn--danger btn--sm"
                                   onClick={() =>
-                                    handleReviewRequest(req.id, 'RECHAZADA')
+                                    openInlineRowAction(
+                                      'REJECT_REQUEST',
+                                      req.id,
+                                    )
                                   }
+                                  title={JUSTIFICATION_HINT}
                                 >
                                   Rechazar
                                 </button>
@@ -1120,15 +1493,38 @@ export function FinancialEnginePanel({
                             )}
                           {isReceptor &&
                             req.status === PaymentRequestStatus.ENTREGADA &&
-                            Number(req.paidAmount) >= Number(req.totalAmount) && (
+                            Number(req.paidAmount) >= Number(req.totalAmount) &&
+                            (isConfirmationArmed(
+                              armedConfirmKey,
+                              `CLOSE_REQ:${req.id}`,
+                            ) ? (
+                              <>
+                                <button
+                                  type="button"
+                                  className="btn btn--sm"
+                                  onClick={() => handleCloseRequest(req.id)}
+                                >
+                                  ¿Confirmar cierre?
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn--ghost btn--sm"
+                                  onClick={() => setArmedConfirmKey(null)}
+                                >
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
                               <button
                                 type="button"
                                 className="btn btn--ghost btn--sm"
-                                onClick={() => handleCloseRequest(req.id)}
+                                onClick={() =>
+                                  setArmedConfirmKey(`CLOSE_REQ:${req.id}`)
+                                }
                               >
                                 Cerrar solicitud
                               </button>
-                            )}
+                            ))}
                           {isGenerador &&
                             Number(req.paidAmount) === 0 &&
                             req.status !== PaymentRequestStatus.CERRADA &&
@@ -1137,7 +1533,10 @@ export function FinancialEnginePanel({
                               <button
                                 type="button"
                                 className="btn btn--danger btn--sm"
-                                onClick={() => handleAnnulRequest(req.id)}
+                                onClick={() =>
+                                  openInlineRowAction('ANNUL_REQUEST', req.id)
+                                }
+                                title={JUSTIFICATION_HINT}
                               >
                                 Anular solicitud
                               </button>
@@ -1155,6 +1554,30 @@ export function FinancialEnginePanel({
                             PDF consolidado
                           </button>
                         </div>
+                        {renderInlineJustificationBox({
+                          type: 'REJECT_REQUEST',
+                          targetId: req.id,
+                          minLength: 5,
+                          confirmLabel: 'Confirmar rechazo',
+                          placeholder:
+                            'Motivo de rechazo de esta solicitud...',
+                          onConfirm: (reason) =>
+                            void handleReviewRequest(
+                              req.id,
+                              'RECHAZADA',
+                              reason,
+                            ),
+                        })}
+                        {renderInlineJustificationBox({
+                          type: 'ANNUL_REQUEST',
+                          targetId: req.id,
+                          minLength: 10,
+                          confirmLabel: 'Confirmar anulación de solicitud',
+                          placeholder:
+                            'Motivo de anulación de esta solicitud...',
+                          onConfirm: (reason) =>
+                            void handleAnnulRequest(req.id, reason),
+                        })}
                       </td>
                     </tr>
                   ))}
@@ -1185,71 +1608,95 @@ export function FinancialEnginePanel({
                 <div className="form-grid">
                   <div className="field">
                     <label className="field__label" htmlFor="pay-receipt">
-                      Código de recibo
+                      Código de recibo (sistema)
                     </label>
                     <input
                       id="pay-receipt"
                       className="input"
-                      value={payReceiptCode}
-                      onChange={(e) => setPayReceiptCode(e.target.value)}
-                      required
+                      value="Autogenerado por el sistema"
+                      readOnly
+                      disabled
                     />
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-request">
-                      Solicitud aprobada
+                      Solicitud aprobada con saldo pendiente
                     </label>
                     <select
                       id="pay-request"
                       className="select"
-                      value={payRequestId}
-                      onChange={(e) => setPayRequestId(e.target.value)}
+                      value={selectedPayableRequest?.id ?? ''}
+                      onChange={(e) => {
+                        setPayRequestId(e.target.value);
+                        setPayBeneficiaryId('');
+                      }}
                     >
-                      <option value="">
-                        Seleccione una solicitud aprobada
-                      </option>
-                      {paymentRequests
-                        .filter(
-                          (r) =>
-                            r.status === PaymentRequestStatus.APROBADA ||
-                            r.status === PaymentRequestStatus.ENTREGADA,
-                        )
-                        .map((r) => (
+                      {payableRequests.length === 0 && (
+                        <option value="">
+                          Sin solicitudes aprobadas con saldo por pagar
+                        </option>
+                      )}
+                      {payableRequests.map((r) => {
+                        const pending = Math.max(
+                          0,
+                          Number(r.totalAmount) - Number(r.paidAmount),
+                        );
+                        return (
                           <option key={r.id} value={r.id}>
-                            {r.code} (Total:{' '}
-                            {formatUsdCurrency(Number(r.totalAmount))}, Pagado:{' '}
-                            {formatUsdCurrency(Number(r.paidAmount))})
+                            {r.code} — Pendiente: {formatUsdCurrency(pending)}{' '}
+                            (Total: {formatUsdCurrency(Number(r.totalAmount))})
                           </option>
-                        ))}
+                        );
+                      })}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-beneficiary">
-                      Beneficiario
+                      Beneficiario incluido en la solicitud
                     </label>
                     <select
                       id="pay-beneficiary"
                       className="select"
-                      value={payBeneficiaryId}
-                      onChange={(e) => setPayBeneficiaryId(e.target.value)}
+                      value={
+                        selectedPayableBeneficiaryEntry?.beneficiary.id ?? ''
+                      }
+                      onChange={(e) => {
+                        const nextBenId = e.target.value;
+                        setPayBeneficiaryId(nextBenId);
+                        const match = payableBeneficiaryEntries.find(
+                          (entry) => entry.beneficiary.id === nextBenId,
+                        );
+                        if (match) {
+                          setPayAmount(match.pendingInRequestUsd.toFixed(2));
+                        }
+                      }}
                     >
-                      <option value="">Seleccione un beneficiario</option>
-                      {beneficiaries.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.fullName} ({b.dni})
+                      {payableBeneficiaryEntries.length === 0 && (
+                        <option value="">
+                          Sin beneficiarios con deuda en esta solicitud
                         </option>
-                      ))}
+                      )}
+                      {payableBeneficiaryEntries.map(
+                        ({ beneficiary: b, pendingInRequestUsd }) => (
+                          <option key={b.id} value={b.id}>
+                            {b.fullName} ({b.dni}) — Deuda en solicitud:{' '}
+                            {formatUsdCurrency(pendingInRequestUsd)}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </div>
                   <div className="field">
                     <label className="field__label" htmlFor="pay-amount">
-                      Monto a entregar (USD)
+                      Monto a entregar (Máx: {formatUsdCurrency(maxPayableUsd)})
                     </label>
                     <input
                       id="pay-amount"
                       className="input"
                       type="number"
                       step="0.01"
+                      min="0.01"
+                      max={maxPayableUsd.toFixed(2)}
                       value={payAmount}
                       onChange={(e) => setPayAmount(e.target.value)}
                       required
@@ -1280,25 +1727,24 @@ export function FinancialEnginePanel({
                     />
                   </div>
                 </div>
+                {selectedPayableRequest && (
+                  <FifoSimulationPreviewTable preview={fifoPreview} />
+                )}
                 <div className="btn-group">
-                  <button type="submit" className="btn">
+                  <button
+                    type="submit"
+                    className="btn"
+                    disabled={
+                      Boolean(selectedPayableRequest) &&
+                      fifoPreview.steps.length > 0 &&
+                      !fifoPreview.isValidAmount
+                    }
+                  >
                     Registrar pago
                   </button>
                 </div>
               </form>
             )}
-
-            <div className="field">
-              <label className="field__label" htmlFor="annul-reason">
-                Motivo para anulación justificada (RN-PAG-03)
-              </label>
-              <input
-                id="annul-reason"
-                className="input"
-                value={annulReason}
-                onChange={(e) => setAnnulReason(e.target.value)}
-              />
-            </div>
 
             <div className="table-scroll">
               <table className="table">
@@ -1365,12 +1811,25 @@ export function FinancialEnginePanel({
                             <button
                               type="button"
                               className="btn btn--danger btn--sm"
-                              onClick={() => handleAnnulPayment(p.id)}
+                              onClick={() =>
+                                openInlineRowAction('ANNUL_PAYMENT', p.id)
+                              }
+                              title={JUSTIFICATION_HINT}
                             >
                               Anular con reversión FIFO
                             </button>
                           )}
                         </div>
+                        {renderInlineJustificationBox({
+                          type: 'ANNUL_PAYMENT',
+                          targetId: p.id,
+                          minLength: 10,
+                          confirmLabel: 'Confirmar reversión FIFO',
+                          placeholder:
+                            'Motivo de anulación de este pago...',
+                          onConfirm: (reason) =>
+                            void handleAnnulPayment(p.id, reason),
+                        })}
                       </td>
                     </tr>
                   ))}

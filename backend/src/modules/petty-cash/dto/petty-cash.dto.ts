@@ -7,9 +7,9 @@ import {
 import { MIN_REJECTION_REASON_LENGTH } from '../../../common/constants/domain.enums';
 
 export class CreatePettyCashDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código de la caja chica es obligatorio.' })
-  code!: string;
+  code?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El nombre de la caja chica es obligatorio.' })
@@ -33,9 +33,9 @@ export class OpenPettyCashPeriodDto {
 }
 
 export class RequestVoucherDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'El código único del vale es obligatorio.' })
-  code!: string;
+  code?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'El nombre del responsable que recibe el vale es obligatorio.' })
@@ -57,12 +57,9 @@ export class SettleVoucherDto {
   @IsNotEmpty({ message: 'La referencia de factura o comprobante es obligatoria.' })
   invoiceReference!: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({
-    message:
-      '[RN-CAJA-03] El archivo del comprobante es obligatorio para rendir el vale.',
-  })
-  attachmentUrl!: string;
+  attachmentUrl?: string;
 }
 
 export class RejectVoucherDto {

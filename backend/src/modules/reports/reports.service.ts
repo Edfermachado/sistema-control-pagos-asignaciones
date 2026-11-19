@@ -10,6 +10,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import {
   buildSimplePdfBuffer,
   formatConsolidatedRequestLines,
+  formatExecutiveSummaryLines,
   formatIndividualPaymentReceiptLines,
 } from './domain/pdf-document.builder';
 
@@ -24,11 +25,25 @@ export interface BeneficiaryDebtSummary {
   pendingAccrualsCount?: number;
 }
 
+export interface PaymentHistorySummaryItem {
+  id: string;
+  receiptCode: string;
+  paymentDate: string;
+  amountUsd: string;
+  status: PaymentStatus;
+  reference: string | null;
+  beneficiaryName: string;
+  beneficiaryDni: string;
+  projectCode: string;
+  requestCode: string;
+}
+
 export interface ExecutiveReportSummary {
   totalAccruedUsd: string;
   totalPaidUsd: string;
   totalPendingDebtUsd: string;
   beneficiaryBalances: BeneficiaryDebtSummary[];
+  paymentHistory: PaymentHistorySummaryItem[];
 }
 
 @Injectable()
@@ -122,11 +137,76 @@ export class ReportsService {
       pendingAccrualsCount: data.pendingAccrualsCount,
     }));
 
+    const payments =
+      (await this.prisma.payment?.findMany?.({
+        where: projectId ? { paymentRequest: { projectId } } : {},
+        include: {
+          beneficiary: true,
+          paymentRequest: { include: { project: true } },
+        },
+        orderBy: [{ paymentDate: 'desc' }, { createdAt: 'desc' }],
+      })) ?? [];
+
+    const paymentHistory: PaymentHistorySummaryItem[] = payments.map((p) => ({
+      id: p.id,
+      receiptCode: p.receiptCode,
+      paymentDate:
+        p.paymentDate instanceof Date
+          ? p.paymentDate.toISOString().slice(0, 10)
+          : String(p.paymentDate).slice(0, 10),
+      amountUsd: toUsdDecimal(p.amount.toString()).toFixed(2),
+      status: p.status,
+      reference: p.reference ?? null,
+      beneficiaryName: p.beneficiary?.fullName ?? p.beneficiaryId,
+      beneficiaryDni: p.beneficiary?.dni ?? '',
+      projectCode: p.paymentRequest?.project?.code ?? '',
+      requestCode: p.paymentRequest?.code ?? '',
+    }));
+
     return {
       totalAccruedUsd: totalAccrued.toFixed(2),
       totalPaidUsd: totalPaid.toFixed(2),
       totalPendingDebtUsd: totalDebt.toFixed(2),
       beneficiaryBalances,
+      paymentHistory,
+    };
+  }
+
+  /**
+   * Genera el PDF del Estado de Cuenta General y Pagos Ejecutados (RN-AUD-01 / RN-AUD-02).
+   */
+  async generateExecutiveSummaryPdf(
+    projectId?: string,
+  ): Promise<{ filename: string; buffer: Buffer }> {
+    const summary = await this.getExecutiveSummaryAndDebts(projectId);
+    const project = projectId
+      ? await this.prisma.project?.findUnique?.({ where: { id: projectId } })
+      : null;
+
+    const projectScopeLabel = project
+      ? `${project.code} - ${project.name}`
+      : 'Todos los proyectos activos e historicos';
+
+    const lines = formatExecutiveSummaryLines({
+      projectScopeLabel,
+      totalAccruedUsd: summary.totalAccruedUsd,
+      totalPaidUsd: summary.totalPaidUsd,
+      totalPendingDebtUsd: summary.totalPendingDebtUsd,
+      beneficiaryBalances: summary.beneficiaryBalances,
+      paymentHistory: summary.paymentHistory,
+    });
+
+    const buffer = buildSimplePdfBuffer(
+      'ESTADO DE CUENTA GENERAL Y PAGOS (USD)',
+      projectScopeLabel,
+      lines,
+    );
+
+    return {
+      filename: project
+        ? `estado_cuenta_${project.code}.pdf`
+        : 'estado_cuenta_general.pdf',
+      buffer,
     };
   }
 
